@@ -120,7 +120,7 @@
  int slicot_transpose_inplace(void *matrix, int rows, int cols, size_t elem_size);
 
 /* Helper function to set a matrix to identity */
- static void set_identity(int n, double* mat, int ld, int row_major);
+ void set_identity(int n, double* mat, int ld, int row_major);
  
  #ifdef __cplusplus
  }
