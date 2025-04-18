@@ -179,7 +179,7 @@ if (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Intel" OR CMAKE_Fortran_COMPILER_ID MATCHES "IntelLLVM")
     # Intel Fortran compiler flags
     # String handling for Intel - ensures string lengths at end of argument list
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -assume noestring_param_xlate")
+    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -nomixed-str-len-arg")
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Flang")
     # Flang compiler flags
     set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fcase-lower -fno-underscoring")
