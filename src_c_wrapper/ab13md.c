@@ -109,7 +109,7 @@ int slicot_ab13md(char fact, int n, const slicot_complex_double* z, int ldz,
 
     // Get the required workspace sizes from query results
     ldwork = (int)dwork_query;
-    lzwork = (int)creal(*((const _Dcomplex*)&zwork_query)); // Cast slicot_complex_double to _Dcomplex
+    lzwork = (int)SLICOT_COMPLEX_REAL(zwork_query); // Use macro to get real part
 
     // Check against minimum documented sizes
     int min_ldwork = 1;

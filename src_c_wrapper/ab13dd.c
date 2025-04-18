@@ -146,7 +146,7 @@
  
      // Get the required workspace sizes from query results
      ldwork = (int)dwork_query;
-     lcwork = (int)creal(cwork_query); // Use creal to extract the real part of cwork_query and cast to int
+     lcwork = (int)SLICOT_COMPLEX_REAL(cwork_query); // Use macro to get real part
  
      // Check against minimum documented sizes
      int min_ldwork = 1; // Placeholder - formula is very complex

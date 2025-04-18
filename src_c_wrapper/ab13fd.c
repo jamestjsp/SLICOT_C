@@ -88,7 +88,7 @@ int slicot_ab13fd(int n, const double* a, int lda,
 
     // Get the required workspace sizes from query results
     ldwork = (int)dwork_query;
-    lcwork = (int)cwork_query.real; // Fortran returns size in real part
+    lcwork = (int)SLICOT_COMPLEX_REAL(cwork_query); // Use macro to get real part
 
     // Check against minimum documented sizes
     int min_ldwork = MAX(1, 3 * n * (n + 2));

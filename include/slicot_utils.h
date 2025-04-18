@@ -36,6 +36,14 @@
  typedef float complex slicot_complex_float;
  #endif
  
+ /* Macro to get the real part of slicot_complex_double */
+ #ifdef __STDC_NO_COMPLEX__
+ #define SLICOT_COMPLEX_REAL(z) ((z).real)
+ #else
+ #include <complex.h> // Ensure creal is available
+ #define SLICOT_COMPLEX_REAL(z) (creal(z))
+ #endif
+ 
  /* Error Codes */
  /**
   * @brief Error code for memory allocation failure within SLICOT wrappers.
@@ -119,4 +127,3 @@
  #endif
  
  #endif /* SLICOT_UTILS_H */
- 

@@ -10,6 +10,8 @@
 #ifndef AB13MD_H
 #define AB13MD_H
 
+#include "slicot_utils.h" // Include definition for slicot_complex_double
+
 #ifdef __cplusplus
 extern "C" {
 #endif
