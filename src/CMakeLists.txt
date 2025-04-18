@@ -6,7 +6,7 @@ file(GLOB SLICOT_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.f")
 # Exclude example drivers if any accidentally placed here (unlikely)
 # list(FILTER SLICOT_SOURCES EXCLUDE REGEX "^T.*\\.f$")
 
-# Create the slicot library (without lpkaux objects initially)
+# Create the slicot library with Fortran sources only
 add_library(slicot ${SLICOT_SOURCES})
 
 # Set library properties
@@ -36,6 +36,16 @@ target_link_libraries(slicot
         ${BLAS_LIBRARIES}
 )
 
+# Link C wrapper objects if enabled
+if(SLICOT_BUILD_C_WRAPPERS)
+    if(TARGET slicot_c_wrapper_obj)
+        message(STATUS "Linking slicot library with C wrapper objects from slicot_c_wrapper_obj.")
+        target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:slicot_c_wrapper_obj>)
+    else()
+        message(WARNING "SLICOT_BUILD_C_WRAPPERS is ON but target slicot_c_wrapper_obj does not exist. Check CMake logic in src_c_wrapper/CMakeLists.txt.")
+    endif()
+endif()
+
 # Conditionally link auxiliary objects if requested by the user option
 if(SLICOT_LINK_AUX_WRAPPERS)
     # Check if the lpkaux target exists (it should if src_aux was added)
@@ -54,6 +64,13 @@ install(TARGETS slicot
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Libraries
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT RuntimeLibraries) # For DLLs on Windows
 
-# Install headers if any (Example - adapt if needed)
-# install(FILES ${SLICOT_HEADERS} # Assuming SLICOT_HEADERS variable lists .h files
-#         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/slicot COMPONENT Headers)
+# Install C wrapper headers from include/ if enabled
+if(SLICOT_BUILD_C_WRAPPERS)
+    # Glob all headers from the main include directory
+    file(GLOB C_WRAPPER_HEADERS "${CMAKE_SOURCE_DIR}/include/*.h")
+
+    # Install the headers into include/slicot
+    install(FILES ${C_WRAPPER_HEADERS}
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/slicot
+            COMPONENT Headers)
+endif()

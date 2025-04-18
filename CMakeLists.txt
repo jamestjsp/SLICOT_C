@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.15)
 
+# ---
+# NOTE: The SLICOT C wrapper generator always places Fortran CHARACTER string length arguments at the end of the argument list.
+# This is portable for all compilers except Intel Fortran (ifort/ifx), which by default passes string lengths immediately after each string.
+# The CMake configuration below sets the Intel Fortran flag -assume noestring_param_xlate to ensure string lengths are passed at the end,
+# making the wrappers portable across compilers. Do not change this unless you know what you are doing.
+# ---
+
 # Project definition
-project(SLICOT VERSION 5.9.0 LANGUAGES Fortran)
+project(SLICOT VERSION 5.9.0 LANGUAGES Fortran C)
 
 # Options
 option(SLICOT_BUILD_SHARED_LIBS "Build shared libraries" ON) # Default to shared for DLLs
@@ -9,6 +16,7 @@ option(SLICOT_BUILD_EXAMPLES "Build the SLICOT example programs and tests" OFF)
 option(SLICOT_USE_ILP64 "Build with 64-bit integers (ILP64)" OFF) # Add ILP64 option
 option(SLICOT_LINK_AUX_WRAPPERS "Link auxiliary LAPACK wrappers (for incomplete LAPACK)" ON) # Add option for aux wrappers
 option(SLICOT_USE_VCPKG "Use vcpkg for BLAS and LAPACK dependencies" OFF) # Option to use vcpkg
+option(SLICOT_BUILD_C_WRAPPERS "Build C wrapper library for SLICOT" ON) # Option to build C wrappers
 
 # Setup build properties
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -162,7 +170,21 @@ endif()
 
 # Compilation settings
 if (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+    # Add flags for GNU Fortran compiler
     set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fallow-argument-mismatch")
+    # Ensure lowercase symbols with trailing underscore
+    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fno-underscoring -fno-second-underscore")
+    # Override with explicit lowercase and single underscore
+    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fcase-lower -fsecond-underscore")
+elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Intel" OR CMAKE_Fortran_COMPILER_ID MATCHES "IntelLLVM")
+    # Intel Fortran compiler flags
+    # String handling for Intel - ensures string lengths at end of argument list
+    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -assume noestring_param_xlate")
+elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Flang")
+    # Flang compiler flags
+    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fcase-lower -fno-underscoring")
+    # Re-add single trailing underscore
+    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fsecond-underscore")
 endif()
 
 # Add subdirectories
@@ -173,6 +195,14 @@ else()
   message(STATUS "Auxiliary wrappers not requested.")
 endif()
 add_subdirectory(src)
+
+# Add C wrapper subdirectory if requested
+if(SLICOT_BUILD_C_WRAPPERS)
+    message(STATUS "C wrappers requested, adding src_c_wrapper.")
+    add_subdirectory(src_c_wrapper)
+else()
+    message(STATUS "C wrappers not requested.")
+endif()
 
 # Only build examples if requested
 if(SLICOT_BUILD_EXAMPLES)

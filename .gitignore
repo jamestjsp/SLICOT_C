@@ -5,3 +5,9 @@ build/
 /build/
 /vcpkg_installed/
 CMakeUserPresets.json
+
+# ignore python cache files
+__pycache__/
+
+# ignore python env
+env/
