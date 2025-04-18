@@ -57,6 +57,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_ab08nz(char equil, int n, int m, int p,
                    slicot_complex_double* a, int lda,
                    slicot_complex_double* b, int ldb,

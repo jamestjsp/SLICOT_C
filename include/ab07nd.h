@@ -11,6 +11,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -48,6 +50,7 @@
   * = M+1: D is numerically singular (RCOND < EPS). Computation completed.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab07nd(int n, int m,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

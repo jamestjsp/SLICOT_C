@@ -10,6 +10,10 @@
 #ifndef AB13FD_H
 #define AB13FD_H
 
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,6 +43,7 @@ extern "C" {
  * = 2: QR or SVD algorithm failed to converge.
  * Memory allocation errors may also be returned.
  */
+SLICOT_C_WRAPPER_API
 int slicot_ab13fd(int n, const double* a, int lda,
                   double* beta, double* omega, double tol,
                   int row_major);

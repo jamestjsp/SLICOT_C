@@ -45,6 +45,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_tf01md(int n, int m, int p, int ny,
                    const double* a, int lda, const double* b, int ldb,
                    const double* c, int ldc, const double* d, int ldd,

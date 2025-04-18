@@ -12,6 +12,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -68,6 +70,7 @@
   * = 6: (fact='N') DGEES failed to converge.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_sb03od(char dico, char fact, char trans, int n, int m,
                    double* a, int lda, double* q, int ldq,
                    double* b, int ldb, double* scale,

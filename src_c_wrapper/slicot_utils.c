@@ -24,6 +24,7 @@
  * @param cols Number of columns in the matrix.
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+SLICOT_C_WRAPPER_API
 void slicot_transpose_to_fortran(const void *src, void *dest, int rows, int cols, size_t elem_size)
 {
     // Use char pointers for byte-level arithmetic
@@ -64,6 +65,7 @@ void slicot_transpose_to_fortran(const void *src, void *dest, int rows, int cols
  * @param cols Number of columns in the matrix.
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+SLICOT_C_WRAPPER_API
 void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size_t elem_size)
 {
     // Use char pointers for byte-level arithmetic
@@ -104,6 +106,7 @@ void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size
  * @param elem_size Size (in bytes) of a single matrix element.
  * @return Returns 0 on success, -1 on error (if rows != cols or memory allocation fails).
  */
+SLICOT_C_WRAPPER_API
 int slicot_transpose_inplace(void *matrix, int rows, int cols, size_t elem_size)
 {
     // Use char pointer for byte-level arithmetic
@@ -147,6 +150,7 @@ int slicot_transpose_inplace(void *matrix, int rows, int cols, size_t elem_size)
 }
 
 /* Helper function to set a matrix to identity */
+SLICOT_C_WRAPPER_API
 void set_identity(int n, double *mat, int ld, int row_major)
 {
     if (!mat)
@@ -193,6 +197,7 @@ void set_identity(int n, double *mat, int ld, int row_major)
  * @param ld Leading dimension of both src and dest.
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+SLICOT_C_WRAPPER_API
 void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, int ld, size_t elem_size)
 {
     const char *src_ptr = (const char *)src;
@@ -253,6 +258,7 @@ void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, i
  * @param uplo Specifies which triangle of src is stored ('U' or 'L').
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+SLICOT_C_WRAPPER_API
 void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, char uplo, size_t elem_size)
 {
     // Use char pointers for byte-level arithmetic
@@ -328,6 +334,7 @@ void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, c
  * @param uplo Specifies which triangle of src to copy to dest ('U' or 'L').
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+SLICOT_C_WRAPPER_API
 void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size)
 {
     // Use char pointers for byte-level arithmetic

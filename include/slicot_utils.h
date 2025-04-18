@@ -13,6 +13,8 @@
  #include <stdlib.h> // For size_t, malloc (used in CHECK_ALLOC context)
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -84,6 +86,45 @@
  #define MIN(a,b) (((a) < (b)) ? (a) : (b))
  #endif
  
+#ifndef SLICOT_C_WRAPPER_API // Prevent multiple definitions
+
+  // Check if building a static library.
+  // SLICOT_STATIC should be defined by the build system (e.g., CMake)
+  // when BUILD_SHARED_LIBS is OFF.
+  #ifdef SLICOT_STATIC
+    #define SLICOT_C_WRAPPER_API
+
+  // Building or using a shared library
+  #else
+    // Check if on Windows
+    #ifdef _WIN32
+      // Check if building the DLL.
+      // SLICOT_C_WRAPPER_EXPORTS should be defined by the build system (e.g., CMake)
+      // when building the shared library (BUILD_SHARED_LIBS is ON).
+      #ifdef SLICOT_C_WRAPPER_EXPORTS
+        #define SLICOT_C_WRAPPER_API __declspec(dllexport)
+      // Using the DLL
+      #else
+        #define SLICOT_C_WRAPPER_API __declspec(dllimport)
+      #endif // SLICOT_C_WRAPPER_EXPORTS
+
+    // Non-Windows platforms (Linux, macOS, etc.)
+    #else
+      // Use GCC/Clang visibility attributes if available for better symbol handling
+      #if defined(__GNUC__) && (__GNUC__ >= 4)
+        #define SLICOT_C_WRAPPER_API __attribute__ ((visibility ("default")))
+      #else
+        #define SLICOT_C_WRAPPER_API // Default: empty definition
+      #endif // __GNUC__
+
+    #endif // _WIN32
+
+  #endif // SLICOT_STATIC
+
+#endif // SLICOT_C_WRAPPER_API
+
+
+
  /* Function Declarations for Transpose Utilities */
  
  /**
@@ -95,6 +136,7 @@
   * @param cols Number of columns in the matrix.
   * @param elem_size Size (in bytes) of a single matrix element.
   */
+  SLICOT_C_WRAPPER_API
  void slicot_transpose_to_fortran(const void *src, void *dest, int rows, int cols, size_t elem_size);
  
  /**
@@ -106,6 +148,7 @@
   * @param cols Number of columns in the matrix.
   * @param elem_size Size (in bytes) of a single matrix element.
   */
+ SLICOT_C_WRAPPER_API
  void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size_t elem_size);
  
  /**
@@ -117,9 +160,25 @@
   * @param elem_size Size (in bytes) of a single matrix element.
   * @return Returns 0 on success, -1 on error (if rows != cols or memory allocation fails).
   */
+ SLICOT_C_WRAPPER_API
  int slicot_transpose_inplace(void *matrix, int rows, int cols, size_t elem_size);
 
-/* Helper function to set a matrix to identity */
+/**
+  * @brief Sets a square matrix to the identity matrix.
+  *
+  * This function sets the diagonal elements of the matrix to 1.0 and all
+  * off-diagonal elements to 0.0. The matrix is assumed to be stored in either
+  * row-major or column-major order, as specified by the 'row_major' parameter.
+  *
+  * @param n Order of the square matrix.
+  * @param mat Pointer to the matrix (assumed to be allocated with sufficient size).
+  * @param ld Leading dimension of the matrix (number of rows for column-major,
+  *          number of columns for row-major).
+  * @param row_major Integer flag indicating storage order:
+  * = 0: Column-major (Fortran style).
+  * = 1: Row-major (C style).
+  */
+  SLICOT_C_WRAPPER_API
  void set_identity(int n, double* mat, int ld, int row_major);
  
 /**
@@ -138,6 +197,7 @@
  * @param ld Leading dimension of both src and dest.
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+  SLICOT_C_WRAPPER_API
 void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, int ld, size_t elem_size);
 
 /**
@@ -150,6 +210,7 @@ void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, i
  * @param uplo Specifies which triangle of src is stored ('U' or 'L').
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+SLICOT_C_WRAPPER_API
 void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, char uplo, size_t elem_size);
 
 /**
@@ -162,6 +223,7 @@ void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, c
  * @param uplo Specifies which triangle of src to copy to dest ('U' or 'L').
  * @param elem_size Size (in bytes) of a single matrix element.
  */
+SLICOT_C_WRAPPER_API
 void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size);
 
  #ifdef __cplusplus

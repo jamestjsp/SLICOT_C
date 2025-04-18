@@ -12,6 +12,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -76,6 +78,7 @@
   * = 5: System for X is singular to working precision.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_sb02md(char dico, char hinv, char uplo, char scal, char sort,
                    int n, double* a, int lda, const double* g, int ldg,
                    double* q, int ldq, double* rcond,

@@ -12,6 +12,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -95,6 +97,7 @@
   * = 6: Singular matrix encountered during solution for X.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_sb02od(char dico, char jobb, char fact, char uplo, char jobl, char sort,
                    int n, int m, int p,
                    const double* a, int lda, const double* b, int ldb,

@@ -9,7 +9,11 @@
 
  #ifndef AB01OD_H
  #define AB01OD_H
+
+ #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -83,6 +87,7 @@
   * < 0: if info = -i, the i-th argument had an illegal value.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab01od(char stages, char jobu, char jobv,
                    int n, int m,
                    double* a, int lda,

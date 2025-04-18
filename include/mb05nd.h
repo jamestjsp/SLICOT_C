@@ -9,6 +9,10 @@
 #ifndef MB05ND_H
 #define MB05ND_H
 
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,6 +46,7 @@ extern "C" {
  * = N+1: delta * norm(A) may be too large (potential overflow).
  * Memory allocation errors may also be returned.
  */
+SLICOT_C_WRAPPER_API
 int slicot_mb05nd(int n, double delta, const double* a, int lda,
                   double* ex, int ldex, double* exint, int ldexin,
                   double tol, int row_major);

@@ -12,6 +12,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -70,6 +72,7 @@
   * = N+1: Equation is singular or nearly singular; perturbed values used.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_sb03md(char dico, char job, char fact, char trana, int n,
                    double* a, int lda, double* u, int ldu,
                    double* c, int ldc, double* scale, double* sep, double* ferr,

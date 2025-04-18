@@ -52,6 +52,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_ab01od(char stages, char jobu, char jobv,
                    int n, int m,
                    double* a, int lda,

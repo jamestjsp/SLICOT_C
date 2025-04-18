@@ -32,6 +32,7 @@
      int equil_len /* Hidden length argument for equil */);
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_ab08md(char equil, int n, int m, int p,
                    double* a, int lda,
                    double* b, int ldb,

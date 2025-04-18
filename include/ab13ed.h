@@ -10,6 +10,10 @@
  #ifndef AB13ED_H
  #define AB13ED_H
 
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
  
  #ifdef __cplusplus
  extern "C" {
@@ -39,6 +43,7 @@
   * = 1: QR algorithm failed to converge.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab13ed(int n, const double* a, int lda,
                    double* low, double* high, double tol,
                    int row_major);

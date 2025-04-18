@@ -16,6 +16,11 @@ set_target_properties(slicot PROPERTIES
     POSITION_INDEPENDENT_CODE ON  # Important for shared libraries
     OUTPUT_NAME "slicot") # Keep the base name simple
 
+# Export symbols on Windows when building shared library
+if(WIN32 AND BUILD_SHARED_LIBS)
+  set_target_properties(slicot PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
 # Add include directories if needed (e.g., if there were .h files)
 # target_include_directories(slicot PUBLIC
 #     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> # Needed if headers are in src

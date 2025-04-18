@@ -10,6 +10,10 @@
 #ifndef MB03VY_H
 #define MB03VY_H
 
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,6 +48,7 @@ extern "C" {
  * < 0: if info = -i, the i-th argument had an illegal value.
  * Memory allocation errors may also be returned by the wrapper.
  */
+SLICOT_C_WRAPPER_API
 int slicot_mb03vy(int n, int p, int ilo, int ihi,
                   double* a, int lda1, int lda2,
                   const double* tau, int ldtau,

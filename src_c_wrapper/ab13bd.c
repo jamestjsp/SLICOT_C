@@ -46,6 +46,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  double slicot_ab13bd(char dico, char jobn, int n, int m, int p,
                       double* a, int lda, double* b, int ldb,
                       double* c, int ldc, double* d, int ldd,

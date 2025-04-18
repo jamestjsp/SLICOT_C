@@ -42,6 +42,7 @@ extern void F77_FUNC(mb05md, MB05MD)(
 
 
 /* C wrapper function definition */
+SLICOT_C_WRAPPER_API
 int slicot_mb05md(char balanc, int n, double delta,
                   double* a, int lda,
                   double* v, int ldv,

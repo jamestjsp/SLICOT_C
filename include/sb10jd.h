@@ -12,6 +12,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -53,6 +55,7 @@
   * = 1: SVD algorithm failed to converge.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_sb10jd(int n, int m, int np,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

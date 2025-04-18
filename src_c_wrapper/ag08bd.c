@@ -59,6 +59,7 @@ extern void F77_FUNC(ag08bd, AG08BD)(
 
 
 /* C wrapper function definition */
+SLICOT_C_WRAPPER_API
 int slicot_ag08bd(char equil, int l, int n, int m, int p,
                   double* a, int lda, double* e, int lde,
                   double* b, int ldb, double* c, int ldc,

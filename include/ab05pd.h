@@ -10,6 +10,10 @@
  #ifndef AB05PD_H
  #define AB05PD_H
  
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -65,6 +69,7 @@
   * < 0: if info = -i, the i-th argument had an illegal value.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab05pd(char over,
                    int n1, int m, int p, int n2, double alpha,
                    const double* a1, int lda1, const double* b1, int ldb1,

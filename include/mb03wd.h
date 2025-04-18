@@ -10,6 +10,10 @@
 #ifndef MB03WD_H
 #define MB03WD_H
 
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -62,6 +66,7 @@ extern "C" {
  * > 0: if info = i, QR algorithm failed to compute eigenvalues i+1:ihi.
  * Memory allocation errors may also be returned by the wrapper (though unlikely here).
  */
+SLICOT_C_WRAPPER_API
 int slicot_mb03wd(char job, char compz, int n, int p, int ilo, int ihi,
                   int iloz, int ihiz,
                   double* h, int ldh1, int ldh2,

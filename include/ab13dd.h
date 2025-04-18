@@ -9,6 +9,10 @@
  #ifndef AB13DD_H
  #define AB13DD_H
  
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -69,6 +73,7 @@
   * = 4: Algorithm did not converge within tolerance/iterations. Increase TOL.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab13dd(char dico, char jobe, char equil, char jobd,
                    int n, int m, int p, double* fpeak,
                    const double* a, int lda, const double* e, int lde,

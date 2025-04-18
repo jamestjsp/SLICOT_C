@@ -42,6 +42,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_sb10jd(int n, int m, int np,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

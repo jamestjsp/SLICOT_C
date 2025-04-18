@@ -13,6 +13,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -70,6 +72,7 @@
   * = 3: Hankel singular value computation failed.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab09ad(char dico, char job, char equil, char ordsel,
                    int n, int m, int p, int* nr,
                    double* a, int lda,

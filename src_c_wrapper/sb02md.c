@@ -57,6 +57,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_sb02md(char dico, char hinv, char uplo, char scal, char sort,
                    int n, double* a, int lda, const double* g, int ldg,
                    double* q, int ldq, double* rcond,

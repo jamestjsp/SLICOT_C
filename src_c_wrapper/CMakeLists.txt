@@ -6,6 +6,15 @@ file(GLOB C_WRAPPER_SOURCES "*.c")
 # Create an object library for the C wrappers
 add_library(slicot_c_wrapper_obj OBJECT ${C_WRAPPER_SOURCES})
 
+# Define macros for export/import or static build based on SLICOT_BUILD_SHARED_LIBS
+if(SLICOT_BUILD_SHARED_LIBS)
+    # Define SLICOT_C_WRAPPER_EXPORTS when building the shared library
+    target_compile_definitions(slicot_c_wrapper_obj PRIVATE SLICOT_C_WRAPPER_EXPORTS)
+else()
+    # Define SLICOT_STATIC when building a static library
+    target_compile_definitions(slicot_c_wrapper_obj PRIVATE SLICOT_STATIC)
+endif()
+
 # Set target properties if needed, e.g., include directories
 target_include_directories(slicot_c_wrapper_obj PUBLIC
     $<INSTALL_INTERFACE:include>

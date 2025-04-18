@@ -11,6 +11,10 @@
  #ifndef AB04MD_H
  #define AB04MD_H
  
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -61,6 +65,7 @@
   * = 2: if the matrix (BETA*I - A) is singular (TYPE='C').
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab04md(char type, int n, int m, int p,
                    double alpha, double beta,
                    double* a, int lda,

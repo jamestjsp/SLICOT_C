@@ -46,6 +46,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_tb01pd(char job, char equil, int n, int m, int p,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, int* nr, double tol,

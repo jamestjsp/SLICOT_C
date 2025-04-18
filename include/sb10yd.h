@@ -58,6 +58,7 @@
   * = 6: Continuous -> discrete transformation failed.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_sb10yd(int discfl, int flag, int lendat,
                    const double* rfrdat, const double* ifrdat, const double* omega,
                    int* n, double* a, int lda, double* b, double* c, double* d,

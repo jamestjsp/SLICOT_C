@@ -10,7 +10,9 @@
 #ifndef AB13MD_H
 #define AB13MD_H
 
-#include "slicot_utils.h" // Include definition for slicot_complex_double
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,6 +56,7 @@ extern "C" {
  * = 6: Error computing eigenvalues or singular values.
  * Memory allocation errors may also be returned.
  */
+SLICOT_C_WRAPPER_API
 int slicot_ab13md(char fact, int n, const slicot_complex_double* z, int ldz,
                   int m, const int* nblock, const int* itype,
                   double* x, double* bound, double* d, double* g,

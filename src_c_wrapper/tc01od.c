@@ -41,6 +41,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_tc01od(char leri, int m, int p, int indlim,
                    double* pcoeff, int ldpco1, int ldpco2,
                    double* qcoeff, int ldqco1, int ldqco2,

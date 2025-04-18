@@ -11,6 +11,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -44,6 +46,7 @@
   * = 2: Stability inconclusive (zeros potentially very close to boundary). NZ not determined.
   * Memory allocation errors may also be returned by the wrapper.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_mc01td(char dico, int* dp, const double* p,
                    int* stable, int* nz, int* iwarn);
  

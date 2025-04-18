@@ -11,6 +11,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -67,6 +69,7 @@
   * @return              The computed H2 or L2 norm if info = 0, otherwise typically 0.0.
   * Check info for success status.
   */
+ SLICOT_C_WRAPPER_API
  double slicot_ab13bd(char dico, char jobn, int n, int m, int p,
                       double* a, int lda, double* b, int ldb,
                       double* c, int ldc, double* d, int ldd,

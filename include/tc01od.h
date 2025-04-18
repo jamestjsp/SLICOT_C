@@ -12,6 +12,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -45,6 +47,7 @@
   * < 0: if info = -i, the i-th argument had an illegal value
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_tc01od(char leri, int m, int p, int indlim,
                    double* pcoeff, int ldpco1, int ldpco2,
                    double* qcoeff, int ldqco1, int ldqco2,

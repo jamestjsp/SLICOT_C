@@ -10,6 +10,10 @@
  #ifndef AB05QD_H
  #define AB05QD_H
  
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -68,6 +72,7 @@
   * < 0: if info = -i, the i-th argument had an illegal value.
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab05qd(char over,
                    int n1, int m1, int p1, int n2, int m2, int p2,
                    const double* a1, int lda1, const double* b1, int ldb1,

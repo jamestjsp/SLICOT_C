@@ -10,6 +10,10 @@
 #ifndef MB02ED_H
 #define MB02ED_H
 
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,6 +55,7 @@ extern "C" {
  * = 1: Reduction algorithm failed; T is not numerically positive definite.
  * Memory allocation errors may also be returned.
  */
+SLICOT_C_WRAPPER_API
 int slicot_mb02ed(char typet, int k, int n, int nrhs,
                   double* t, int ldt, double* b, int ldb,
                   int row_major);

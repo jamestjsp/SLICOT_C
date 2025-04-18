@@ -12,6 +12,8 @@
  
  #include <stddef.h> // For size_t
  
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -71,6 +73,7 @@
   * = 2: singular matrix encountered during P(s) computation
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_tb03ad(char leri, char equil, int n, int m, int p,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

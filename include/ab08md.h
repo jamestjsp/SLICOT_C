@@ -10,6 +10,10 @@
  #ifndef AB08MD_H
  #define AB08MD_H
  
+ #include <stddef.h> // For size_t
+ 
+ #include "slicot_utils.h" 
+
  #ifdef __cplusplus
  extern "C" {
  #endif
@@ -65,6 +69,7 @@
   * Common SLICOT errors related to memory allocation might also be returned
   * (e.g., SLICOT_MEMORY_ERROR from slicot_utils.h).
   */
+ SLICOT_C_WRAPPER_API
  int slicot_ab08md(char equil, int n, int m, int p,
                    double* a, int lda,
                    double* b, int ldb,

@@ -34,6 +34,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_mc01td(char dico, int* dp, const double* p,
                    int* stable, int* nz, int* iwarn)
  {

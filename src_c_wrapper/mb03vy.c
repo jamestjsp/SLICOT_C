@@ -38,6 +38,7 @@ extern void F77_FUNC(mb03vy, MB03VY)(
 
 
 /* C wrapper function definition */
+SLICOT_C_WRAPPER_API
 int slicot_mb03vy(int n, int p, int ilo, int ihi,
                   double* a, int lda1, int lda2,
                   const double* tau, int ldtau,

@@ -40,6 +40,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_tb01id(char job, int n, int m, int p, double* maxred,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* scale,

@@ -64,6 +64,7 @@
   * = 2: freq is too near an eigenvalue, or matrix is ill-conditioned (RCOND too small)
   * Memory allocation errors may also be returned.
   */
+ SLICOT_C_WRAPPER_API
  int slicot_tb05ad(char baleig, char inita, int n, int m, int p,
                    slicot_complex_double freq,
                    double* a, int lda, double* b, int ldb,

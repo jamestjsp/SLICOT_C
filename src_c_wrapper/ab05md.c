@@ -65,6 +65,7 @@
  
  
  /* C wrapper function definition */
+ SLICOT_C_WRAPPER_API
  int slicot_ab05md(char uplo, char over,
                    int n1, int m1, int p1, int n2, int p2,
                    const double* a1, int lda1, const double* b1, int ldb1,
