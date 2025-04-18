@@ -10,6 +10,7 @@
 #include "slicot_utils.h"
 #include <string.h> // For memcpy
 #include <stdlib.h> // For malloc, free
+#include <ctype.h> // Fot toupper
 
 /**
  * @brief Transpose a matrix from C (row-major) to Fortran (column-major) order.
@@ -170,6 +171,198 @@ void set_identity(int n, double *mat, int ld, int row_major)
             if (i < n)
             { // Check row index is within bounds
                 mat[i + (size_t)i * ld] = 1.0;
+            }
+        }
+    }
+}
+
+
+/**
+ * @brief Copies the relevant triangle of a symmetric matrix to a full matrix.
+ *
+ * Used primarily for column-major wrappers where the Fortran routine might
+ * access the unspecified triangle if the original storage is passed directly.
+ * Copies the specified triangle (upper or lower) from src to dest,
+ * filling the other triangle by symmetry. Assumes column-major storage
+ * for both source and destination.
+ *
+ * @param src Pointer to the source symmetric matrix (column-major).
+ * @param dest Pointer to the destination full matrix (column-major).
+ * @param n Order of the square matrix.
+ * @param uplo Specifies which triangle of src is stored ('U' or 'L').
+ * @param ld Leading dimension of both src and dest.
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, int ld, size_t elem_size)
+{
+    const char *src_ptr = (const char *)src;
+    char *dest_ptr = (char *)dest;
+    int i, j;
+    char uplo_upper = toupper(uplo);
+
+    if (!src || !dest || n <= 0 || ld < n || elem_size <= 0) {
+        return; // Invalid input
+    }
+
+    if (uplo_upper == 'U') {
+        // Copy upper triangle and fill lower by symmetry
+        for (j = 0; j < n; ++j) { // Column index
+            for (i = 0; i <= j; ++i) { // Row index (up to diagonal)
+                size_t src_offset = (i + (size_t)j * ld) * elem_size;
+                size_t dest_offset_ij = (i + (size_t)j * ld) * elem_size;
+                size_t dest_offset_ji = (j + (size_t)i * ld) * elem_size; // Symmetric position
+
+                // Copy src[i][j] to dest[i][j]
+                memcpy(dest_ptr + dest_offset_ij, src_ptr + src_offset, elem_size);
+                // Copy src[i][j] to dest[j][i] (if not diagonal)
+                if (i != j) {
+                    memcpy(dest_ptr + dest_offset_ji, src_ptr + src_offset, elem_size);
+                }
+            }
+        }
+    } else { // Assume 'L'
+        // Copy lower triangle and fill upper by symmetry
+        for (j = 0; j < n; ++j) { // Column index
+            for (i = j; i < n; ++i) { // Row index (from diagonal down)
+                size_t src_offset = (i + (size_t)j * ld) * elem_size;
+                size_t dest_offset_ij = (i + (size_t)j * ld) * elem_size;
+                size_t dest_offset_ji = (j + (size_t)i * ld) * elem_size; // Symmetric position
+
+                // Copy src[i][j] to dest[i][j]
+                memcpy(dest_ptr + dest_offset_ij, src_ptr + src_offset, elem_size);
+                // Copy src[i][j] to dest[j][i] (if not diagonal)
+                if (i != j) {
+                    memcpy(dest_ptr + dest_offset_ji, src_ptr + src_offset, elem_size);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief Transpose a symmetric matrix from C (row-major, triangular storage)
+ * to a full Fortran (column-major) matrix.
+ *
+ * Copies elements from the specified triangle (upper or lower) of the source
+ * (row-major) matrix to the destination (column-major) matrix, filling
+ * the other triangle by symmetry.
+ *
+ * @param src Pointer to the source matrix (row-major, stores upper or lower triangle).
+ * @param dest Pointer to the destination matrix (column-major, will be filled fully).
+ * @param n Order of the square matrix.
+ * @param uplo Specifies which triangle of src is stored ('U' or 'L').
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, char uplo, size_t elem_size)
+{
+    // Use char pointers for byte-level arithmetic
+    const char *src_ptr = (const char *)src;
+    char *dest_ptr = (char *)dest;
+    int i, j; // Row and column indices
+    char uplo_upper = toupper(uplo);
+
+    // Check for invalid inputs (optional, but good practice)
+    if (!src || !dest || n <= 0 || elem_size <= 0)
+    {
+        return; // Or handle error appropriately
+    }
+
+    if (uplo_upper == 'U') {
+        // Source stores upper triangle (row-major)
+        for (i = 0; i < n; i++) { // Iterate through rows
+            for (j = i; j < n; j++) { // Iterate through columns (from diagonal right)
+                // Source index (row-major): element at [i][j] is at offset (i * n + j)
+                // Note: Assumes the source buffer has space for n*n elements, even if only triangle is used.
+                // If source is packed, this offset calculation needs change. Assuming non-packed source.
+                size_t src_offset = ((size_t)i * n + j) * elem_size;
+
+                // Destination index (column-major): element at [i][j] is at offset (i + j * n)
+                size_t dest_offset_ij = (i + (size_t)j * n) * elem_size;
+                // Destination index for symmetric part [j][i]: offset (j + i * n)
+                size_t dest_offset_ji = (j + (size_t)i * n) * elem_size;
+
+                // Copy the element from src[i][j] to dest[i][j]
+                memcpy(dest_ptr + dest_offset_ij, src_ptr + src_offset, elem_size);
+
+                // Copy the element from src[i][j] to dest[j][i] (if not diagonal)
+                if (i != j) {
+                    memcpy(dest_ptr + dest_offset_ji, src_ptr + src_offset, elem_size);
+                }
+            }
+        }
+    } else { // Assume 'L'
+        // Source stores lower triangle (row-major)
+        for (i = 0; i < n; i++) { // Iterate through rows
+            for (j = 0; j <= i; j++) { // Iterate through columns (up to diagonal)
+                // Source index (row-major): element at [i][j] is at offset (i * n + j)
+                size_t src_offset = ((size_t)i * n + j) * elem_size;
+
+                // Destination index (column-major): element at [i][j] is at offset (i + j * n)
+                size_t dest_offset_ij = (i + (size_t)j * n) * elem_size;
+                // Destination index for symmetric part [j][i]: offset (j + i * n)
+                size_t dest_offset_ji = (j + (size_t)i * n) * elem_size;
+
+                // Copy the element from src[i][j] to dest[i][j]
+                memcpy(dest_ptr + dest_offset_ij, src_ptr + src_offset, elem_size);
+
+                // Copy the element from src[i][j] to dest[j][i] (if not diagonal)
+                if (i != j) {
+                    memcpy(dest_ptr + dest_offset_ji, src_ptr + src_offset, elem_size);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief Transpose a symmetric matrix from Fortran (column-major, full storage)
+ * to C (row-major, potentially triangular storage - copies only specified triangle).
+ *
+ * Copies elements from the specified triangle (upper or lower) of the source
+ * (column-major, assumed full) matrix to the destination (row-major) matrix.
+ * This is useful when the C code only needs to store one triangle of the result.
+ *
+ * @param src Pointer to the source matrix (column-major, assumed fully populated).
+ * @param dest Pointer to the destination matrix (row-major, will store only upper or lower triangle).
+ * @param n Order of the square matrix.
+ * @param uplo Specifies which triangle of src to copy to dest ('U' or 'L').
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size)
+{
+    // Use char pointers for byte-level arithmetic
+    const char *src_ptr = (const char *)src;
+    char *dest_ptr = (char *)dest;
+    int i, j; // Row and column indices
+    char uplo_upper = toupper(uplo);
+
+    // Check for invalid inputs
+    if (!src || !dest || n <= 0 || elem_size <= 0) {
+        return;
+    }
+
+    if (uplo_upper == 'U') {
+        // Copy upper triangle from Fortran (col-major) to C (row-major)
+        for (i = 0; i < n; i++) { // Row index
+            for (j = i; j < n; j++) { // Column index (from diagonal right)
+                // Source index (col-major): element at [i][j] is at offset (i + j * n)
+                size_t src_offset = (i + (size_t)j * n) * elem_size;
+                // Destination index (row-major): element at [i][j] is at offset (i * n + j)
+                size_t dest_offset = ((size_t)i * n + j) * elem_size;
+                // Copy the element
+                memcpy(dest_ptr + dest_offset, src_ptr + src_offset, elem_size);
+            }
+        }
+    } else { // Assume 'L'
+        // Copy lower triangle from Fortran (col-major) to C (row-major)
+        for (i = 0; i < n; i++) { // Row index
+            for (j = 0; j <= i; j++) { // Column index (up to diagonal)
+                // Source index (col-major): element at [i][j] is at offset (i + j * n)
+                size_t src_offset = (i + (size_t)j * n) * elem_size;
+                // Destination index (row-major): element at [i][j] is at offset (i * n + j)
+                size_t dest_offset = ((size_t)i * n + j) * elem_size;
+                // Copy the element
+                memcpy(dest_ptr + dest_offset, src_ptr + src_offset, elem_size);
             }
         }
     }

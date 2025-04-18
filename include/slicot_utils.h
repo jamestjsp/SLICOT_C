@@ -122,6 +122,48 @@
 /* Helper function to set a matrix to identity */
  void set_identity(int n, double* mat, int ld, int row_major);
  
+/**
+ * @brief Copies the relevant triangle of a symmetric matrix to a full matrix.
+ *
+ * Used primarily for column-major wrappers where the Fortran routine might
+ * access the unspecified triangle if the original storage is passed directly.
+ * Copies the specified triangle (upper or lower) from src to dest,
+ * filling the other triangle by symmetry. Assumes column-major storage
+ * for both source and destination.
+ *
+ * @param src Pointer to the source symmetric matrix (column-major).
+ * @param dest Pointer to the destination full matrix (column-major).
+ * @param n Order of the square matrix.
+ * @param uplo Specifies which triangle of src is stored ('U' or 'L').
+ * @param ld Leading dimension of both src and dest.
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, int ld, size_t elem_size);
+
+/**
+ * @brief Transpose a symmetric matrix from C (row-major, triangular storage)
+ * to a full Fortran (column-major) matrix.
+ *
+ * @param src Pointer to the source matrix (row-major, stores upper or lower triangle).
+ * @param dest Pointer to the destination matrix (column-major, will be filled fully).
+ * @param n Order of the square matrix.
+ * @param uplo Specifies which triangle of src is stored ('U' or 'L').
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, char uplo, size_t elem_size);
+
+/**
+ * @brief Transpose a symmetric matrix from Fortran (column-major, full storage)
+ * to C (row-major, potentially triangular storage - copies only specified triangle).
+ *
+ * @param src Pointer to the source matrix (column-major, assumed fully populated).
+ * @param dest Pointer to the destination matrix (row-major, will store only upper or lower triangle).
+ * @param n Order of the square matrix.
+ * @param uplo Specifies which triangle of src to copy to dest ('U' or 'L').
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size);
+
  #ifdef __cplusplus
  }
  #endif
