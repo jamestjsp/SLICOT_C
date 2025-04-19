@@ -7,9 +7,15 @@ file(GLOB C_WRAPPER_SOURCES "*.c")
 add_library(slicot_c_wrapper_obj OBJECT ${C_WRAPPER_SOURCES})
 
 # Define macros for export/import or static build based on SLICOT_BUILD_SHARED_LIBS
+# Also set WINDOWS_EXPORT_ALL_SYMBOLS for shared Windows builds
 if(SLICOT_BUILD_SHARED_LIBS)
     # Define SLICOT_C_WRAPPER_EXPORTS when building the shared library
     target_compile_definitions(slicot_c_wrapper_obj PRIVATE SLICOT_C_WRAPPER_EXPORTS)
+    # Automatically export symbols from object files for Windows shared builds
+    if(WIN32)
+        set_target_properties(slicot_c_wrapper_obj PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+        message(STATUS "Setting WINDOWS_EXPORT_ALL_SYMBOLS for slicot_c_wrapper_obj.")
+    endif()
 else()
     # Define SLICOT_STATIC when building a static library
     target_compile_definitions(slicot_c_wrapper_obj PRIVATE SLICOT_STATIC)
