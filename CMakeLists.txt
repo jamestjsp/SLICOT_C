@@ -207,6 +207,31 @@ else()
     message(STATUS "C wrappers not requested.")
 endif()
 
+# Link object libraries after they have been defined
+if(TARGET slicot) # Ensure the main target exists
+    # Link C wrapper objects if enabled and target exists
+    if(SLICOT_BUILD_C_WRAPPERS)
+        if(TARGET slicot_c_wrapper_obj)
+            message(STATUS "Linking slicot library with C wrapper objects from slicot_c_wrapper_obj.")
+            target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:slicot_c_wrapper_obj>)
+        else()
+            message(WARNING "SLICOT_BUILD_C_WRAPPERS is ON but target slicot_c_wrapper_obj was not created. Check src_c_wrapper/CMakeLists.txt.")
+        endif()
+    endif()
+
+    # Link auxiliary objects if enabled and target exists
+    if(SLICOT_LINK_AUX_WRAPPERS)
+        if(TARGET lpkaux)
+            message(STATUS "Linking slicot library with auxiliary wrappers from lpkaux.")
+            target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:lpkaux>)
+        else()
+            message(WARNING "SLICOT_LINK_AUX_WRAPPERS is ON but target lpkaux was not created. Check src_aux/CMakeLists.txt.")
+        endif()
+    endif()
+else()
+    message(WARNING "Main slicot target not found. Linking of object libraries skipped.")
+endif()
+
 # Only build examples if requested
 if(SLICOT_BUILD_EXAMPLES)
     add_subdirectory(examples)

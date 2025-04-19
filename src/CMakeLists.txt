@@ -27,40 +27,12 @@ endif()
 #     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> # Where headers will be installed
 # )
 
-# Special flag for gfortran to handle function name mangling differences vs other compilers
-if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    target_compile_options(slicot PRIVATE -fallow-argument-mismatch)
-    # Add case-insensitive name mangling if needed (usually not required with modern gfortran)
-    # target_compile_options(slicot PRIVATE -fno-underscoring)
-endif()
-
 # Link with BLAS and LAPACK
 target_link_libraries(slicot
     PUBLIC
         ${LAPACK_LIBRARIES}
         ${BLAS_LIBRARIES}
 )
-
-# Link C wrapper objects if enabled
-if(SLICOT_BUILD_C_WRAPPERS)
-    if(TARGET slicot_c_wrapper_obj)
-        message(STATUS "Linking slicot library with C wrapper objects from slicot_c_wrapper_obj.")
-        target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:slicot_c_wrapper_obj>)
-    else()
-        message(WARNING "SLICOT_BUILD_C_WRAPPERS is ON but target slicot_c_wrapper_obj does not exist. Check CMake logic in src_c_wrapper/CMakeLists.txt.")
-    endif()
-endif()
-
-# Conditionally link auxiliary objects if requested by the user option
-if(SLICOT_LINK_AUX_WRAPPERS)
-    # Check if the lpkaux target exists (it should if src_aux was added)
-    if(TARGET lpkaux)
-        message(STATUS "Linking slicot library with auxiliary wrappers from lpkaux.")
-        target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:lpkaux>)
-    else()
-        message(WARNING "SLICOT_LINK_AUX_WRAPPERS is ON but target lpkaux does not exist. Check CMake logic in the root CMakeLists.txt.")
-    endif()
-endif()
 
 # Install the library targets
 install(TARGETS slicot
