@@ -11,3 +11,6 @@ __pycache__/
 
 # ignore python env
 env/
+
+# ignore temp doc
+_doc/
