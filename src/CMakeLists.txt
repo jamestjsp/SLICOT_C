@@ -1,13 +1,10 @@
 # CMakeLists.txt for SLICOT main sources (src)
 include(GNUInstallDirs) # Ensure install paths are available
-
-# Get all Fortran source files in the directory
-file(GLOB SLICOT_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.f")
-# Exclude example drivers if any accidentally placed here (unlikely)
-# list(FILTER SLICOT_SOURCES EXCLUDE REGEX "^T.*\\.f$")
+include(${CMAKE_SOURCE_DIR}/cmake/slicot_sources.cmake) # Include the source list file
 
 # Create the slicot library with Fortran sources only
-add_library(slicot ${SLICOT_SOURCES})
+# Use the variable defined in slicot_sources.cmake
+add_library(slicot ${SLICOT_CORE_SOURCES})
 
 # Set library properties
 set_target_properties(slicot PROPERTIES

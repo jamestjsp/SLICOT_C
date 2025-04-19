@@ -3,8 +3,6 @@ include(GNUInstallDirs)
 enable_testing()
 
 # Find dependencies (already found in parent scope, but good practice)
-find_package(BLAS REQUIRED)
-find_package(LAPACK REQUIRED)
 # SLICOT library target 'slicot' is available from parent scope
 
 # Find all example source files (convention: T*.f)

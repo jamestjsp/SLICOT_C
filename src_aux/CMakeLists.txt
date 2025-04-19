@@ -1,10 +1,9 @@
 # CMakeLists.txt for SLICOT auxiliary routines (src_aux)
 include(GNUInstallDirs) # Ensure install paths are available
-
-# Get all Fortran source files in the directory
-file(GLOB SLICOT_AUX_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.f")
+include(${CMAKE_SOURCE_DIR}/cmake/slicot_sources.cmake) # Include the source list file
 
 # Create the auxiliary library as an OBJECT library
+# Use the variable defined in slicot_sources.cmake
 add_library(lpkaux OBJECT ${SLICOT_AUX_SOURCES})
 
 # Set library properties
@@ -18,7 +17,6 @@ set_target_properties(lpkaux PROPERTIES
 
 # Special flag for gfortran
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    target_compile_options(lpkaux INTERFACE -fallow-argument-mismatch) # Use INTERFACE for object libs
     # target_compile_options(lpkaux INTERFACE -fno-underscoring)
 endif()
 
