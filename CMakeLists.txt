@@ -172,10 +172,9 @@ endif()
 if (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     # Add flags for GNU Fortran compiler
     set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fallow-argument-mismatch")
-    # Ensure lowercase symbols with trailing underscore
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fno-underscoring -fno-second-underscore")
-    # Override with explicit lowercase and single underscore
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fcase-lower -fsecond-underscore")
+    # Ensure lowercase symbols with trailing underscore - gfortran default is usually lowercase with single underscore
+    # Control underscore behavior - ensure single underscore
+    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fno-second-underscore")
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Intel" OR CMAKE_Fortran_COMPILER_ID MATCHES "IntelLLVM")
     # Intel Fortran compiler flags
     # String handling for Intel - ensures string lengths at end of argument list
