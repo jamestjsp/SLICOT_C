@@ -116,5 +116,20 @@ set(SLICOT_AUX_SOURCES
     # ... add more source files as needed
 )
 
+# Main SLICOT Routines
+set(SLICOT_C_WRAPPER_SOURCES
+    ab01md.c   ab01nd.c   ab01od.c   ab04md.c   ab05md.c   ab05nd.c
+    ab05od.c   ab05pd.c   ab05qd.c   ab07nd.c   ab08md.c   ab08nd.c
+    ab08nz.c   ab09ad.c   ab09ax.c   ab09bd.c   ab09md.c   ab09nd.c
+    ab13bd.c   ab13dd.c   ab13ed.c   ab13fd.c   ab13md.c   ag08bd.c
+    mb02ed.c   mb03rd.c   mb03vd.c   mb03vy.c   mb03wd.c   mb05md.c
+    mb05nd.c   mc01td.c   sb01bd.c   sb02md.c   sb02mt.c   sb02od.c
+    sb03md.c   sb03od.c   sb04md.c   sb04qd.c   sb10ad.c   sb10dd.c
+    sb10fd.c   sb10hd.c   sb10jd.c   sb10yd.c   sg02ad.c   sg03ad.c
+    sg03bd.c   tb01id.c   tb01pd.c   tb03ad.c   tb04ad.c   tb05ad.c
+    tc01od.c   tc04ad.c   td04ad.c   tf01md.c   tf01rd.c   tg01ad.c
+    tg01fd.c   slicot_utils.c
+)
+
 # All SLICOT sources
 set(SLICOT_ALL_SOURCES ${SLICOT_CORE_SOURCES} ${SLICOT_AUX_SOURCES})

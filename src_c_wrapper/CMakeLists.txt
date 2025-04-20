@@ -1,10 +1,9 @@
 # CMakeLists.txt for SLICOT C Wrappers
 
-# Find all C source files in the current directory
-file(GLOB C_WRAPPER_SOURCES "*.c")
+include(${CMAKE_SOURCE_DIR}/cmake/slicot_sources.cmake) # Include the source list definition
 
 # Create an object library for the C wrappers
-add_library(slicot_c_wrapper_obj OBJECT ${C_WRAPPER_SOURCES})
+add_library(slicot_c_wrapper_obj OBJECT ${SLICOT_C_WRAPPER_SOURCES}) # Use the defined list
 
 # Define macros for export/import or static build based on SLICOT_BUILD_SHARED_LIBS
 # Also set WINDOWS_EXPORT_ALL_SYMBOLS for shared Windows builds
