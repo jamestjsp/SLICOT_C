@@ -13,14 +13,13 @@
  #include <stdlib.h> // For size_t, malloc (used in CHECK_ALLOC context)
  #include <stddef.h> // For size_t
  
- #include "slicot_utils.h" 
-
+ #include "slicot_utils.h"  /* Complex number support */
  #ifdef __cplusplus
- extern "C" {
- #endif
- 
- /* Complex number support */
- #ifdef __STDC_NO_COMPLEX__
+ /* Use C++ complex types when compiling with C++ */
+ #include <complex>
+ typedef std::complex<double> slicot_complex_double;
+ typedef std::complex<float> slicot_complex_float;
+ #elif defined(__STDC_NO_COMPLEX__)
  /* If complex numbers not supported in C99, define our own structure */
  typedef struct {
      double real;
@@ -36,6 +35,10 @@
  #include <complex.h>
  typedef double complex slicot_complex_double;
  typedef float complex slicot_complex_float;
+ #endif
+
+ #ifdef __cplusplus
+ extern "C" {
  #endif
  
  /* Macro to get the real part of slicot_complex_double */
