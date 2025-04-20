@@ -52,7 +52,8 @@ int slicot_ab01md(char jobz, int n,
 {
     /* Local variables */
     int info = 0;
-    int ldwork;
+    int ldwork = -1; /* Use -1 for workspace query */
+    double dwork_query;
     double* dwork = NULL;
     int jobz_len = 1; // Fortran expects 1-based length for strings
 
@@ -126,14 +127,26 @@ int slicot_ab01md(char jobz, int n,
     }
 
     /* --- Workspace allocation --- */
-    /* 
-     * Skip the workspace query and directly allocate the minimum required workspace.
-     * According to documentation, LDWORK >= MAX(1,N) is required.
-     */
-    ldwork = MAX(1, n);
-    
-    /* Allocate a bit more than the minimum for better performance */
-    ldwork = MAX(ldwork, n * 2);
+    /* Use workspace query to get optimal workspace size */
+    ldwork = -1; // Query mode
+    F77_FUNC(ab01md, AB01MD)(&jobz_upper, &n,
+                           a_ptr, &lda_f, 
+                           b, ncont, 
+                           z_ptr, &ldz_f, 
+                           tau, &tol, 
+                           &dwork_query, &ldwork, &info, 
+                           jobz_len);
+                           
+    if (info != 0) {
+        // Query failed, use the documented minimum size
+        ldwork = MAX(1, n);
+    } else {
+        // Get the required dwork size from query result
+        ldwork = (int)dwork_query;
+        // Check against minimum documented size
+        int min_ldwork = MAX(1, n);
+        ldwork = MAX(ldwork, min_ldwork);
+    }
     
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
     CHECK_ALLOC(dwork);
