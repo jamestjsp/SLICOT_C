@@ -1,0 +1,87 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+                {
+            "name": "(ctest) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            // Resolved by CMake Tools:
+            "cwd": "${cmake.testWorkingDirectory}",
+            "program": "${cmake.testProgram}",
+            "stopAtEntry": false,
+            "args": [
+                "${cmake.testArgs}"
+            ],
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(Windows) Launch CMake Target",
+            "type": "cppvsdbg", // Use cppvsdbg for MSVC debugger
+            "request": "launch",
+            // Resolved by CMake Tools:
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}", // Use workspaceFolder as CWD
+            "environment": [
+                {
+                    // Add the directory where the target was built to the PATH
+                    // Resolved by CMake Tools:
+                    "name": "PATH",
+                    "value": "${env:PATH};${command:cmake.getLaunchTargetDirectory}" // Use semicolon for Windows PATH
+                }
+                // Add other environment variables if needed
+            ],
+            "externalConsole": false, // Can be true if preferred
+            "visualizerFile": "${workspaceFolder}/.vscode/natvis/eigen.natvis", // Optional: Add Natvis for Eigen if used
+            "sourceFileMap": {
+                "/mnt/c/": "c:\\" // Example mapping if using WSL
+            }
+        },
+        {
+            "name": "(gdb) Launch CMake Target",
+            "type": "cppdbg", // Use cppdbg for GDB
+            "request": "launch",
+            // Resolved by CMake Tools:
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}", // Use workspaceFolder as CWD
+            "environment": [
+                {
+                    // Add the directory where the target was built to the PATH
+                    // Resolved by CMake Tools:
+                    "name": "PATH",
+                    "value": "${env:PATH}:${command:cmake.getLaunchTargetDirectory}" // Use colon for Linux/macOS/MinGW PATH
+                }
+                // Add other environment variables if needed
+            ],
+            "externalConsole": false, // Can be true if preferred
+            "MIMode": "gdb",
+            // Update miDebuggerPath if gdb is not in the system PATH
+            // "miDebuggerPath": "/path/to/your/gdb", 
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}
