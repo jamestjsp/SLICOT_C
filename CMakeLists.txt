@@ -8,11 +8,12 @@ cmake_minimum_required(VERSION 3.15)
 # ---
 
 # Project definition
-project(SLICOT VERSION 5.9.0 LANGUAGES Fortran C)
+project(SLICOT VERSION 5.9.0 LANGUAGES Fortran C CXX) # Add CXX language
 
 # Options
 option(SLICOT_BUILD_SHARED_LIBS "Build shared libraries" ON) # Default to shared for DLLs
 option(SLICOT_BUILD_EXAMPLES "Build the SLICOT example programs and tests" OFF)
+option(SLICOT_BUILD_TESTS "Build the SLICOT C wrapper tests using GoogleTest" ON) # Default to ON
 option(SLICOT_USE_ILP64 "Build with 64-bit integers (ILP64)" OFF) # Add ILP64 option
 option(SLICOT_LINK_AUX_WRAPPERS "Link auxiliary LAPACK wrappers (for incomplete LAPACK)" ON) # Add option for aux wrappers
 option(SLICOT_USE_VCPKG "Use vcpkg for BLAS and LAPACK dependencies" OFF) # Option to use vcpkg
@@ -56,6 +57,23 @@ endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(CTest)
+include(FetchContent) # Include FetchContent module
+
+# Enable testing globally
+enable_testing()
+
+# --- GoogleTest ---
+if(SLICOT_BUILD_TESTS)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip # Or specify a commit hash
+        # GIT_REPOSITORY https://github.com/google/googletest.git
+        # GIT_TAG release-1.14.0 # Or specify a commit hash
+    )
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif()
 
 # Find BLAS and LAPACK - BLA_VENDOR might be set by presets
 # Default to searching all vendors if not set
@@ -214,6 +232,11 @@ if(TARGET slicot) # Ensure the main target exists
         if(TARGET slicot_c_wrapper_obj)
             message(STATUS "Linking slicot library with C wrapper objects from slicot_c_wrapper_obj.")
             target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:slicot_c_wrapper_obj>)
+              # Properly propagate include directories from the C wrapper object library
+            target_include_directories(slicot PUBLIC 
+                $<INSTALL_INTERFACE:include>
+                $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>  # Use generator expressions for build/install paths
+            )
         else()
             message(WARNING "SLICOT_BUILD_C_WRAPPERS is ON but target slicot_c_wrapper_obj was not created. Check src_c_wrapper/CMakeLists.txt.")
         endif()
@@ -237,9 +260,14 @@ if(SLICOT_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-# Conditionally enable testing
-if(SLICOT_BUILD_EXAMPLES)
-    enable_testing()
+# Add tests subdirectory if requested
+if(SLICOT_BUILD_TESTS)
+    if(SLICOT_BUILD_C_WRAPPERS) # Only add tests if C wrappers are built
+        message(STATUS "Building C wrapper tests.")
+        add_subdirectory(tests)
+    else()
+        message(WARNING "SLICOT_BUILD_TESTS is ON, but SLICOT_BUILD_C_WRAPPERS is OFF. Skipping tests.")
+    endif()
 endif()
 
 # Install the export targets

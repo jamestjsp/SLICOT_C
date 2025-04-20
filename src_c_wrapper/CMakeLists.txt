@@ -5,6 +5,10 @@ include(${CMAKE_SOURCE_DIR}/cmake/slicot_sources.cmake) # Include the source lis
 # Create an object library for the C wrappers
 add_library(slicot_c_wrapper_obj OBJECT ${SLICOT_C_WRAPPER_SOURCES}) # Use the defined list
 
+# Make the object library part of the export set
+set_property(TARGET slicot_c_wrapper_obj PROPERTY EXPORT_NAME SLICOT::slicot_c_wrapper_obj)
+set_property(TARGET slicot_c_wrapper_obj PROPERTY POSITION_INDEPENDENT_CODE ON)
+
 # Define macros for export/import or static build based on SLICOT_BUILD_SHARED_LIBS
 # Also set WINDOWS_EXPORT_ALL_SYMBOLS for shared Windows builds
 if(SLICOT_BUILD_SHARED_LIBS)
