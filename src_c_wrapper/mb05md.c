@@ -5,10 +5,11 @@
  * This file provides a C wrapper implementation for the SLICOT routine MB05MD,
  * which computes the matrix exponential exp(A*delta) for a real
  * non-defective matrix A using eigenvalue decomposition.
+ * Refactored to align with ab01nd.c structure.
  */
 
 #include <stdlib.h>
-#include <ctype.h>
+#include <ctype.h>  // For toupper
 #include <stddef.h> // For size_t
 
 // Include the header file for this wrapper
@@ -64,6 +65,10 @@ int slicot_mb05md(char balanc, int n, double delta,
     /* Pointers for column-major copies if needed */
     double *a_cm = NULL, *v_cm = NULL, *y_cm = NULL;
 
+    /* Pointers to pass to Fortran */
+    double *a_ptr, *v_ptr, *y_ptr;
+    int lda_f, ldv_f, ldy_f;
+
     /* --- Input Parameter Validation --- */
 
     if (n < 0) { info = -2; goto cleanup; }
@@ -79,9 +84,9 @@ int slicot_mb05md(char balanc, int n, double delta,
         int min_lda_rm_cols = n;
         int min_ldv_rm_cols = n;
         int min_ldy_rm_cols = n;
-        if (lda < min_lda_rm_cols) { info = -5; goto cleanup; }
-        if (ldv < min_ldv_rm_cols) { info = -7; goto cleanup; }
-        if (ldy < min_ldy_rm_cols) { info = -9; goto cleanup; }
+        if (n > 0 && lda < min_lda_rm_cols) { info = -5; goto cleanup; }
+        if (n > 0 && ldv < min_ldv_rm_cols) { info = -7; goto cleanup; }
+        if (n > 0 && ldy < min_ldy_rm_cols) { info = -9; goto cleanup; }
     } else {
         // For column-major C, LDA is the number of rows (Fortran style)
         if (lda < min_lda_f) { info = -5; goto cleanup; }
@@ -98,8 +103,14 @@ int slicot_mb05md(char balanc, int n, double delta,
 
     // Allocate DWORK based on query
     ldwork = -1; // Query mode
-    F77_FUNC(mb05md, MB05MD)(&balanc_upper, &n, &delta, a, &lda, v, &ldv, y, &ldy,
-                             valr, vali, iwork, &dwork_query, &ldwork, &info,
+    // Use dummy LDs for query if dimensions are 0
+    int lda_q = row_major ? MAX(1, n) : lda;
+    int ldv_q = row_major ? MAX(1, n) : ldv;
+    int ldy_q = row_major ? MAX(1, n) : ldy;
+
+    F77_FUNC(mb05md, MB05MD)(&balanc_upper, &n, &delta,
+                             NULL, &lda_q, NULL, &ldv_q, NULL, &ldy_q, // NULL arrays
+                             NULL, NULL, iwork, &dwork_query, &ldwork, &info, // NULL valr, vali
                              balanc_len);
 
     if (info < 0) { goto cleanup; } // Query failed due to invalid argument
@@ -130,50 +141,49 @@ int slicot_mb05md(char balanc, int n, double delta,
         if (y_size > 0) { y_cm = (double*)malloc(y_size * elem_size); CHECK_ALLOC(y_cm); }
 
         /* Transpose C (row-major) input A to Fortran (column-major) copy */
-        if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
+        if (a_cm) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
 
         /* Fortran leading dimensions */
-        int lda_f = (a_rows > 0) ? a_rows : 1;
-        int ldv_f = (v_rows > 0) ? v_rows : 1;
-        int ldy_f = (y_rows > 0) ? y_rows : 1;
+        lda_f = MAX(1, a_rows);
+        ldv_f = MAX(1, v_rows);
+        ldy_f = MAX(1, y_rows);
 
-        /* Call the Fortran routine */
-        F77_FUNC(mb05md, MB05MD)(&balanc_upper, &n, &delta,
-                                 a_cm, &lda_f,           // Pass CM A (in/out)
-                                 v_cm, &ldv_f,           // Pass CM V (out)
-                                 y_cm, &ldy_f,           // Pass CM Y (out)
-                                 valr, vali, iwork, dwork, &ldwork, &info,
-                                 balanc_len);
-
-        /* Copy back results from column-major temps to original row-major arrays */
-        if (info == 0 || info == (n + 1) || info == (n + 2)) { // Copy back even on warnings/errors N+1, N+2
-            if (a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size); // Result exp(A*delta)
-            if (v_size > 0) slicot_transpose_to_c(v_cm, v, v_rows, v_cols, elem_size); // Eigenvectors
-            if (y_size > 0) slicot_transpose_to_c(y_cm, y, y_rows, y_cols, elem_size); // Intermediate Y
-            // VALR, VALI are filled directly.
-        }
-        /* Column-major copies will be freed in cleanup */
+        /* Set pointers for Fortran call */
+        a_ptr = a_cm; v_ptr = v_cm; y_ptr = y_cm;
 
     } else {
         /* --- Column-Major Case --- */
+        lda_f = lda; ldv_f = ldv; ldy_f = ldy;
+        a_ptr = a; v_ptr = v; y_ptr = y;
+    }
 
-        /* Call the Fortran routine directly with user-provided arrays */
-        F77_FUNC(mb05md, MB05MD)(&balanc_upper, &n, &delta,
-                                 a, &lda,                // Pass original A
-                                 v, &ldv,                // Pass original V
-                                 y, &ldy,                // Pass original Y
-                                 valr, vali, iwork, dwork, &ldwork, &info,
-                                 balanc_len);
-        // A, V, Y, VALR, VALI are modified in place.
+    /* Call the computational routine */
+    F77_FUNC(mb05md, MB05MD)(&balanc_upper, &n, &delta,
+                             a_ptr, &lda_f,           // Pass A ptr (in/out)
+                             v_ptr, &ldv_f,           // Pass V ptr (out)
+                             y_ptr, &ldy_f,           // Pass Y ptr (out)
+                             valr, vali, iwork, dwork, &ldwork, &info,
+                             balanc_len);
+
+    /* Copy back results from column-major temps to original row-major arrays */
+    if (row_major && (info == 0 || info == (n + 1) || info == (n + 2))) { // Copy back even on warnings/errors N+1, N+2
+        size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+        size_t v_rows = n; size_t v_cols = n; size_t v_size = v_rows * v_cols;
+        size_t y_rows = n; size_t y_cols = n; size_t y_size = y_rows * y_cols;
+
+        if (a_cm && a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size); // Result exp(A*delta)
+        if (v_cm && v_size > 0) slicot_transpose_to_c(v_cm, v, v_rows, v_cols, elem_size); // Eigenvectors
+        if (y_cm && y_size > 0) slicot_transpose_to_c(y_cm, y, y_rows, y_cols, elem_size); // Intermediate Y
+        // VALR, VALI are filled directly.
     }
 
 cleanup:
     /* --- Cleanup --- */
     free(dwork);
     free(iwork);
-    free(a_cm);
-    free(v_cm);
-    free(y_cm);
+    free(a_cm); // Safe if NULL
+    free(v_cm); // Safe if NULL
+    free(y_cm); // Safe if NULL
 
     return info;
 }

@@ -12,13 +12,13 @@
  #include <string.h> // For memcpy
  #include <stddef.h> // For size_t
  #include <complex.h> // For C99 complex types
- 
+
  // Include the header file for this wrapper
- #include "tb05ad.h"
+ // #include "tb05ad.h" // Assuming a header file exists
  // Include necessary SLICOT utility headers
  #include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR, slicot_complex_double, transpose routines
  #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
- 
+
  /*
   * Declare the external Fortran routine using the F77_FUNC macro.
   * Note the COMPLEX*16 arguments are mapped via slicot_complex_double.
@@ -53,8 +53,8 @@
      int baleig_len,         // Hidden length
      int inita_len           // Hidden length
  );
- 
- 
+
+
  /* C wrapper function definition */
  SLICOT_C_WRAPPER_API
  int slicot_tb05ad(char baleig, char inita, int n, int m, int p,
@@ -71,37 +71,40 @@
      int ldwork = -1; /* Use -1 for workspace query */
      int lzwork = -1; /* Use -1 for workspace query */
      double dwork_query;
-     slicot_complex_double zwork_query; /* Use standard complex type */
+     slicot_complex_double zwork_query; // Use standard complex type for query result
      double* dwork = NULL;
      int* iwork = NULL;
-     slicot_complex_double* zwork = NULL; /* Use standard complex type */
+     slicot_complex_double* zwork = NULL; // Use standard complex type
      int iwork_size = 0;
- 
+     int lzwork_calc = 0; // Calculated size
+
      const int baleig_len = 1, inita_len = 1;
- 
      char baleig_upper = toupper(baleig);
      char inita_upper = toupper(inita);
- 
+
      /* Pointers for column-major copies if needed */
      double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL;
-     slicot_complex_double *g_cm = NULL, *hinvb_cm = NULL; /* Use standard complex type */
- 
+     slicot_complex_double *g_cm = NULL, *hinvb_cm = NULL; // Use standard complex type
+     double *a_ptr, *b_ptr, *c_ptr;
+     slicot_complex_double *g_ptr, *hinvb_ptr;
+     int lda_f, ldb_f, ldc_f, ldg_f, ldhinv_f;
+
      /* --- Input Parameter Validation --- */
-     if (n < 0) { info = -3; goto cleanup; }
-     if (m < 0) { info = -4; goto cleanup; }
-     if (p < 0) { info = -5; goto cleanup; }
      if (baleig_upper != 'N' && baleig_upper != 'C' && baleig_upper != 'B' &&
          baleig_upper != 'E' && baleig_upper != 'A') { info = -1; goto cleanup; }
      if (inita_upper != 'G' && inita_upper != 'H') { info = -2; goto cleanup; }
-     // Further consistency checks (e.g., baleig='A' requires inita='G') could be added.
- 
+     if (n < 0) { info = -3; goto cleanup; }
+     if (m < 0) { info = -4; goto cleanup; }
+     if (p < 0) { info = -5; goto cleanup; }
+     // Further consistency checks could be added.
+
      // Check leading dimensions based on storage order
      int min_lda_f = MAX(1, n);
      int min_ldb_f = MAX(1, n);
      int min_ldc_f = MAX(1, p);
      int min_ldg_f = MAX(1, p);
      int min_ldhinv_f = MAX(1, n);
- 
+
      if (row_major) {
          // For row-major C, LD is the number of columns
          int min_lda_rm_cols = n;
@@ -122,43 +125,81 @@
          if (ldg < min_ldg_f) { info = -15; goto cleanup; }
          if (ldhinv < min_ldhinv_f) { info = -19; goto cleanup; }
      }
- 
+
+     /* --- Prepare arrays for column-major format if using row-major --- */
+     size_t elem_size_double = sizeof(double);
+     size_t elem_size_complex = sizeof(slicot_complex_double);
+     if (row_major) {
+         // Determine sizes for potential copies
+         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
+         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
+         size_t g_rows = p; size_t g_cols = m; size_t g_size = g_rows * g_cols;
+         size_t hinvb_rows = n; size_t hinvb_cols = m; size_t hinvb_size = hinvb_rows * hinvb_cols;
+
+         /* Allocate memory for column-major copies */
+         if (inita_upper == 'G') { // Only need copies if A, B, C are modified
+             if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size_double); CHECK_ALLOC(a_cm); }
+             if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size_double); CHECK_ALLOC(b_cm); }
+             if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size_double); CHECK_ALLOC(c_cm); }
+         }
+         // Outputs G and HINVB always need temp storage for copy-back
+         if (g_size > 0) { g_cm = (slicot_complex_double*)malloc(g_size * elem_size_complex); CHECK_ALLOC(g_cm); }
+         if (hinvb_size > 0) { hinvb_cm = (slicot_complex_double*)malloc(hinvb_size * elem_size_complex); CHECK_ALLOC(hinvb_cm); }
+
+         /* Transpose C inputs to Fortran copies (only if INITA='G') */
+         a_ptr = a; b_ptr = b; c_ptr = c; // Default to original pointers
+         if (inita_upper == 'G') {
+             if (a_cm) { slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size_double); a_ptr = a_cm; }
+             if (b_cm) { slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size_double); b_ptr = b_cm; }
+             if (c_cm) { slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size_double); c_ptr = c_cm; }
+         }
+
+         /* Fortran leading dimensions */
+         lda_f = (n > 0) ? n : 1;
+         ldb_f = (n > 0) ? n : 1;
+         ldc_f = (p > 0) ? p : 1;
+         ldg_f = (p > 0) ? p : 1;
+         ldhinv_f = (n > 0) ? n : 1;
+
+         /* Set output pointers */
+         g_ptr = g_cm;
+         hinvb_ptr = hinvb_cm;
+
+     } else {
+         /* Column-major case - use original arrays */
+         lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldg_f = ldg; ldhinv_f = ldhinv;
+         a_ptr = a; b_ptr = b; c_ptr = c;
+         g_ptr = g; hinvb_ptr = hinvb;
+     }
+
      /* --- Workspace Allocation --- */
- 
+
      // Allocate IWORK
      iwork_size = n; // Size is N
      if (iwork_size < 1) iwork_size = 1;
      iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
      CHECK_ALLOC(iwork);
- 
+
      // Perform workspace queries for DWORK and ZWORK
      ldwork = -1;
      lzwork = -1;
      slicot_complex_double freq_f = freq; // Assign C complex to standard complex type
- 
+
      F77_FUNC(tb05ad, TB05AD)(&baleig_upper, &inita_upper, &n, &m, &p, &freq_f,
-                              NULL, &lda, NULL, &ldb, NULL, &ldc, rcond,
-                              NULL, &ldg, evre, evim, NULL, &ldhinv,
+                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, rcond,
+                              g_ptr, &ldg_f, evre, evim, hinvb_ptr, &ldhinv_f,
                               iwork, &dwork_query, &ldwork, &zwork_query, &lzwork, &info,
                               baleig_len, inita_len);
- 
+
      if (info < 0 && info != -22 && info != -24) { info = info; goto cleanup; } // Query failed
      info = 0; // Reset info after query
- 
+
      // Get required sizes from query results
      ldwork = (int)dwork_query;
-     // Use cabs for complex magnitude if needed, but ZWORK query returns size in zwork_query.real
-     // The Fortran interface likely returns the size in the real part of the complex query variable.
-     // However, the standard way is to return it in DWORK(1) or similar.
-     // Let's rely on the documented minimum sizes if the query seems ambiguous.
-     // Fortran documentation for LZWORK query is often unclear in wrappers.
-     // Let's calculate minimums based on documentation.
-     if (baleig_upper == 'C' || baleig_upper == 'A') {
-         lzwork = MAX(1, n*n + 2*n);
-     } else {
-         lzwork = MAX(1, n*n);
-     }
- 
+     // Use the real part of the complex query variable for LZWORK size.
+     lzwork_calc = (int)creal(zwork_query);
+
      // Check DWORK minimum size based on documentation
      int min_ldwork = 1;
      if (inita_upper == 'G') {
@@ -170,106 +211,61 @@
      } else { // 'H'
          if (baleig_upper == 'C' || baleig_upper == 'A') {
              min_ldwork = MAX(1, 2 * n);
-         } else { // 'N', 'B', 'E' not applicable or min is 1
-             min_ldwork = 1;
-         }
+         } // else min is 1
      }
      ldwork = MAX(ldwork, min_ldwork);
- 
- 
+
+     // Check ZWORK minimum size based on documentation
+     int min_lzwork = 1;
+     if (baleig_upper == 'C' || baleig_upper == 'A') {
+         min_lzwork = MAX(1, n * n + 2 * n);
+     } else {
+         min_lzwork = MAX(1, n * n);
+     }
+     // Use the larger of the query result and the documented minimum
+     lzwork = MAX(lzwork_calc, min_lzwork);
+
+
      // Allocate DWORK and ZWORK
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork);
      zwork = (slicot_complex_double*)malloc((size_t)lzwork * sizeof(slicot_complex_double));
      CHECK_ALLOC(zwork);
- 
-     /* --- Prepare Arrays and Call Fortran Routine --- */
-     size_t elem_size_double = sizeof(double);
-     size_t elem_size_complex = sizeof(slicot_complex_double);
- 
-     // Determine sizes for potential copies
-     size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-     size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-     size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-     size_t g_rows = p; size_t g_cols = m; size_t g_size = g_rows * g_cols;
-     size_t hinvb_rows = n; size_t hinvb_cols = m; size_t hinvb_size = hinvb_rows * hinvb_cols;
- 
-     if (row_major) {
-         /* --- Row-Major Case --- */
- 
-         /* Allocate memory for column-major copies */
-         if (inita_upper == 'G') { // Only need copies if A, B, C are modified
-             if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size_double); CHECK_ALLOC(a_cm); }
-             if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size_double); CHECK_ALLOC(b_cm); }
-             if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size_double); CHECK_ALLOC(c_cm); }
+
+     /* --- Call the computational routine --- */
+     F77_FUNC(tb05ad, TB05AD)(&baleig_upper, &inita_upper, &n, &m, &p, &freq_f,
+                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, rcond,
+                              g_ptr, &ldg_f, evre, evim, hinvb_ptr, &ldhinv_f,
+                              iwork, dwork, &ldwork, zwork, &lzwork, &info,
+                              baleig_len, inita_len);
+
+     /* --- Copy results back to row-major format if needed --- */
+     if (row_major && (info == 0 || info == 1 || info == 2)) { // Copy back even on warnings/errors
+         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
+         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
+         size_t g_rows = p; size_t g_cols = m; size_t g_size = g_rows * g_cols;
+         size_t hinvb_rows = n; size_t hinvb_cols = m; size_t hinvb_size = hinvb_rows * hinvb_cols;
+
+         if (inita_upper == 'G') { // Copy back modified A, B, C
+              if (a_cm) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size_double);
+              if (b_cm) slicot_transpose_to_c(b_cm, b, b_rows, b_cols, elem_size_double);
+              if (c_cm) slicot_transpose_to_c(c_cm, c, c_rows, c_cols, elem_size_double);
          }
-         // Outputs G and HINVB always need temp storage for copy-back
-         if (g_size > 0) { g_cm = (slicot_complex_double*)malloc(g_size * elem_size_complex); CHECK_ALLOC(g_cm); }
-         if (hinvb_size > 0) { hinvb_cm = (slicot_complex_double*)malloc(hinvb_size * elem_size_complex); CHECK_ALLOC(hinvb_cm); }
- 
-         /* Transpose C inputs to Fortran copies (only if INITA='G') */
-         double* a_ptr = a;
-         double* b_ptr = b;
-         double* c_ptr = c;
-         if (inita_upper == 'G') {
-             if (a_size > 0) { slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size_double); a_ptr = a_cm; }
-             if (b_size > 0) { slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size_double); b_ptr = b_cm; }
-             if (c_size > 0) { slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size_double); c_ptr = c_cm; }
-         }
- 
-         /* Fortran leading dimensions */
-         int lda_f = (a_rows > 0) ? a_rows : 1;
-         int ldb_f = (b_rows > 0) ? b_rows : 1;
-         int ldc_f = (c_rows > 0) ? c_rows : 1;
-         int ldg_f = (g_rows > 0) ? g_rows : 1;
-         int ldhinv_f = (hinvb_rows > 0) ? hinvb_rows : 1;
- 
-         /* Call the Fortran routine */
-         F77_FUNC(tb05ad, TB05AD)(&baleig_upper, &inita_upper, &n, &m, &p, &freq_f,
-                                  a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, rcond,
-                                  g_cm, &ldg_f, evre, evim, hinvb_cm, &ldhinv_f,
-                                  iwork, dwork, &ldwork, zwork, &lzwork, &info,
-                                  baleig_len, inita_len);
- 
-         /* Copy back results from column-major temps to original row-major arrays */
-         if (info == 0 || info == 1 || info == 2) { // Copy back even on warnings/errors
-             if (inita_upper == 'G') { // Copy back modified A, B, C
-                  if (a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size_double);
-                  if (b_size > 0) slicot_transpose_to_c(b_cm, b, b_rows, b_cols, elem_size_double);
-                  if (c_size > 0) slicot_transpose_to_c(c_cm, c, c_rows, c_cols, elem_size_double);
-             }
-             // Copy back complex outputs G and HINVB
-             if (g_size > 0) slicot_transpose_to_c(g_cm, g, g_rows, g_cols, elem_size_complex);
-             if (hinvb_size > 0) slicot_transpose_to_c(hinvb_cm, hinvb, hinvb_rows, hinvb_cols, elem_size_complex);
-             // RCOND, EVRE, EVIM are modified directly
-         }
-         /* Temps freed in cleanup */
- 
-     } else {
-         /* --- Column-Major Case --- */
-         slicot_complex_double freq_f = freq; // Assign C complex to standard complex type
-         /* Call the Fortran routine directly with user-provided arrays */
-         F77_FUNC(tb05ad, TB05AD)(&baleig_upper, &inita_upper, &n, &m, &p, &freq_f,
-                                  a, &lda, b, &ldb, c, &ldc, rcond,
-                                  g, &ldg, /* Pass C complex* directly */
-                                  evre, evim,
-                                  hinvb, &ldhinv, /* Pass C complex* directly */
-                                  iwork, dwork, &ldwork, zwork, &lzwork, &info,
-                                  baleig_len, inita_len);
-         // A, B, C, RCOND, G, EVRE, EVIM, HINVB modified in place.
+         // Copy back complex outputs G and HINVB
+         if (g_cm) slicot_transpose_to_c(g_cm, g, g_rows, g_cols, elem_size_complex);
+         if (hinvb_cm) slicot_transpose_to_c(hinvb_cm, hinvb, hinvb_rows, hinvb_cols, elem_size_complex);
+         // RCOND, EVRE, EVIM are modified directly
      }
- 
+     // In column-major case, A, B, C, RCOND, G, EVRE, EVIM, HINVB modified in place.
+
   cleanup:
      /* --- Cleanup --- */
      free(dwork);
      free(iwork);
      free(zwork);
-     free(a_cm);
-     free(b_cm);
-     free(c_cm);
-     free(g_cm);
-     free(hinvb_cm);
- 
+     free(a_cm); free(b_cm); free(c_cm);
+     free(g_cm); free(hinvb_cm);
+
      return info;
  }
- 

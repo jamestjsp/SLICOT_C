@@ -5,17 +5,18 @@
  * This file provides a C wrapper implementation for the SLICOT routine AB13MD,
  * which computes an upper bound on the structured singular value for a
  * square complex matrix Z with a given block uncertainty structure.
+ * Refactored to align with ab01nd.c structure.
  */
 
 #include <stdlib.h>
-#include <ctype.h>
+#include <ctype.h>  // For toupper
 #include <stddef.h> // For size_t
 #include <complex.h> // For creal
 
 // Include the header file for this wrapper
 #include "ab13md.h"
 // Include necessary SLICOT utility headers
-#include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines, slicot_complex_double
+#include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines, slicot_complex_double, SLICOT_COMPLEX_REAL
 #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
 
 /*
@@ -69,6 +70,10 @@ int slicot_ab13md(char fact, int n, const slicot_complex_double* z, int ldz,
     /* Pointers for column-major copies if needed */
     slicot_complex_double *z_cm = NULL;
 
+    /* Pointers to pass to Fortran */
+    const slicot_complex_double *z_ptr;
+    int ldz_f;
+
     /* --- Input Parameter Validation --- */
 
     if (n < 0) { info = -2; goto cleanup; }
@@ -81,7 +86,7 @@ int slicot_ab13md(char fact, int n, const slicot_complex_double* z, int ldz,
     if (row_major) {
         // For row-major C, LDZ is the number of columns
         int min_ldz_rm_cols = n;
-        if (ldz < min_ldz_rm_cols) { info = -4; goto cleanup; }
+        if (n > 0 && ldz < min_ldz_rm_cols) { info = -4; goto cleanup; }
     } else {
         // For column-major C, LDZ is the number of rows (Fortran style)
         if (ldz < min_ldz_f) { info = -4; goto cleanup; }
@@ -99,7 +104,12 @@ int slicot_ab13md(char fact, int n, const slicot_complex_double* z, int ldz,
     // Query DWORK and ZWORK sizes
     ldwork = -1; // Query mode
     lzwork = -1; // Query mode
-    F77_FUNC(ab13md, AB13MD)(&fact_upper, &n, z, &ldz, &m, nblock, itype,
+    // Use dummy LDs for query if dimensions are 0
+    int ldz_q = row_major ? MAX(1, n) : ldz;
+
+    F77_FUNC(ab13md, AB13MD)(&fact_upper, &n,
+                             NULL, &ldz_q,          // NULL array for query
+                             &m, nblock, itype,
                              x, bound, d, g, iwork,
                              &dwork_query, &ldwork,
                              &zwork_query, &lzwork, &info,
@@ -145,35 +155,30 @@ int slicot_ab13md(char fact, int n, const slicot_complex_double* z, int ldz,
         if (z_size > 0) { z_cm = (slicot_complex_double*)malloc(z_size * elem_size); CHECK_ALLOC(z_cm); }
 
         /* Transpose C (row-major) input Z to Fortran (column-major) copy */
-        if (z_size > 0) slicot_transpose_to_fortran(z, z_cm, z_rows, z_cols, elem_size);
+        if (z_cm) slicot_transpose_to_fortran(z, z_cm, z_rows, z_cols, elem_size);
 
         /* Fortran leading dimension */
-        int ldz_f = (z_rows > 0) ? z_rows : 1;
+        ldz_f = MAX(1, z_rows);
 
-        /* Call the Fortran routine */
-        F77_FUNC(ab13md, AB13MD)(&fact_upper, &n,
-                                 z_cm, &ldz_f,          // Pass CM Z
-                                 &m, nblock, itype,
-                                 x, bound, d, g, iwork,
-                                 dwork, &ldwork, zwork, &lzwork, &info,
-                                 fact_len);
-
-        /* No copy-back needed for Z as it's input only */
-        /* X, BOUND, D, G are modified directly */
-        /* Temp array z_cm will be freed in cleanup */
+        /* Set pointers for Fortran call */
+        z_ptr = z_cm;
 
     } else {
         /* --- Column-Major Case --- */
-
-        /* Call the Fortran routine directly with user-provided arrays */
-        F77_FUNC(ab13md, AB13MD)(&fact_upper, &n,
-                                 z, &ldz,                // Pass original Z
-                                 &m, nblock, itype,
-                                 x, bound, d, g, iwork,
-                                 dwork, &ldwork, zwork, &lzwork, &info,
-                                 fact_len);
-        // X, BOUND, D, G are modified directly.
+        ldz_f = ldz;
+        z_ptr = z;
     }
+
+    /* Call the computational routine */
+    F77_FUNC(ab13md, AB13MD)(&fact_upper, &n,
+                             z_ptr, &ldz_f,          // Pass Z ptr
+                             &m, nblock, itype,
+                             x, bound, d, g, iwork,
+                             dwork, &ldwork, zwork, &lzwork, &info,
+                             fact_len);
+
+    /* No copy-back needed for Z as it's input only */
+    /* X, BOUND, D, G are modified directly */
 
 cleanup:
     /* --- Cleanup --- */

@@ -7,6 +7,8 @@
  * to periodic Hessenberg form H = H_1*...*H_p using orthogonal
  * similarity transformations.
  * NOTE: This wrapper assumes the 3D array 'a' is passed in column-major order.
+ * The 'row_major' flag is ignored for 'a'.
+ * Refactored to align with ab01nd.c structure.
  */
 
 #include <stdlib.h>
@@ -15,7 +17,7 @@
 // Include the header file for this wrapper
 #include "mb03vd.h"
 // Include necessary SLICOT utility headers
-#include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR
+#include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR
 #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
 
 /*
@@ -71,6 +73,11 @@ int slicot_mb03vd(int n, int p, int ilo, int ihi,
     // NOTE: Assuming 'a' is already in column-major (Fortran) layout.
     // No transposition is performed for the 3D array 'a'.
     // The 'row_major' flag is effectively ignored for 'a'.
+    // Similarly, TAU is assumed column-major (N-1 x P).
+
+    if (row_major) {
+        // Print a warning or log that row_major is ignored for 3D arrays?
+    }
 
     /* Call the Fortran routine directly */
     F77_FUNC(mb03vd, MB03VD)(&n, &p, &ilo, &ihi,
@@ -78,6 +85,8 @@ int slicot_mb03vd(int n, int p, int ilo, int ihi,
                              tau, &ldtau,
                              dwork, &info);
     // A and TAU are modified in place.
+
+    /* No copy-back needed as column-major is assumed for A and TAU */
 
 cleanup:
     /* --- Cleanup --- */

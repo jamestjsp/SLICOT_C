@@ -5,7 +5,8 @@
  * This file provides a C wrapper implementation for the SLICOT routine MB03WD,
  * which computes the Schur decomposition and eigenvalues of a product
  * of matrices H = H_1*...*H_p in periodic Hessenberg form.
- * NOTE: This wrapper assumes the 3D arrays 'h' and 'z' are passed in column-major order.
+ * NOTE: This wrapper assumes the 3D arrays 'h' and 'z' are passed in column-major order
+ * and the 'row_major' flag is IGNORED for 'h' and 'z'.
  */
 
 #include <stdlib.h>
@@ -59,34 +60,41 @@ int slicot_mb03wd(char job, char compz, int n, int p, int ilo, int ihi,
 {
     /* Local variables */
     int info = 0;
+    int ldwork = 0; // Size is calculated directly
     double* dwork = NULL; // Workspace
-    int ldwork = 0;
+    // No iwork needed for this routine.
     const int job_len = 1, compz_len = 1;
 
     char job_upper = toupper(job);
     char compz_upper = toupper(compz);
 
-    /* --- Input Parameter Validation --- */
+    // No _cm pointers needed as 'h', 'z' are assumed column-major and row_major is ignored.
 
+    /* --- Input Parameter Validation --- */
+    if (job_upper != 'E' && job_upper != 'S') { info = -1; goto cleanup; }
+    if (compz_upper != 'N' && compz_upper != 'I' && compz_upper != 'V') { info = -2; goto cleanup; }
     if (n < 0) { info = -3; goto cleanup; }
     if (p < 1) { info = -4; goto cleanup; }
     if (ilo < 1 || ilo > MAX(1, n)) { info = -5; goto cleanup; }
     if (ihi < MIN(ilo, n) || ihi > n) { info = -6; goto cleanup; }
     if (iloz < 1 || iloz > ilo) { info = -7; goto cleanup; }
     if (ihiz < ihi || ihiz > n) { info = -8; goto cleanup; }
-    if (job_upper != 'E' && job_upper != 'S') { info = -1; goto cleanup; }
-    if (compz_upper != 'N' && compz_upper != 'I' && compz_upper != 'V') { info = -2; goto cleanup; }
 
-    // Check leading dimensions
+    // NOTE: LDH1, LDH2, LDZ1, LDZ2 checks assume 'h' and 'z' are column-major.
     if (ldh1 < MAX(1, n)) { info = -10; goto cleanup; }
     if (ldh2 < MAX(1, n)) { info = -11; goto cleanup; }
     if (compz_upper == 'N') {
+        // LDZ1, LDZ2 are not strictly checked by LAPACK/SLICOT if COMPZ='N'
+        // but we ensure they are at least 1 if passed non-NULL.
+        // However, passing NULL for Z is safer when COMPZ='N'.
+        // Let's keep the original checks for consistency if Z is non-NULL.
         if (ldz1 < 1) { info = -13; goto cleanup; }
         if (ldz2 < 1) { info = -14; goto cleanup; }
-    } else {
+    } else { // COMPZ = 'I' or 'V'
         if (ldz1 < MAX(1, n)) { info = -13; goto cleanup; }
         if (ldz2 < MAX(1, n)) { info = -14; goto cleanup; }
     }
+    // The 'row_major' flag is intentionally ignored for validation here due to the 3D arrays.
 
 
     /* --- Workspace Allocation --- */
@@ -96,21 +104,22 @@ int slicot_mb03wd(char job, char compz, int n, int p, int ilo, int ihi,
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
 
-    /* --- Prepare Arrays and Call Fortran Routine --- */
+    /* --- Call the computational routine --- */
 
     // NOTE: Assuming 'h' and 'z' are already in column-major (Fortran) layout.
     // No transposition is performed for these 3D arrays.
-    // The 'row_major' flag is effectively ignored for 'h' and 'z'.
-
-    /* Call the Fortran routine directly */
+    // 'row_major' flag is ignored. WR, WI are 1D output, no copy-back needed.
     F77_FUNC(mb03wd, MB03WD)(&job_upper, &compz_upper, &n, &p, &ilo, &ihi,
                              &iloz, &ihiz,
                              h, &ldh1, &ldh2,
-                             (compz_upper == 'N' ? NULL : z), &ldz1, &ldz2,
+                             (compz_upper == 'N' ? NULL : z), &ldz1, &ldz2, // Pass NULL if Z not used
                              wr, wi,
                              dwork, &ldwork, &info,
                              job_len, compz_len);
     // H, Z (if COMPZ != 'N'), WR, WI are modified in place.
+
+    /* --- Copy results back to row-major format if needed --- */
+    // No copy-back needed as 'h', 'z' are assumed column-major and modified in-place.
 
 cleanup:
     /* --- Cleanup --- */

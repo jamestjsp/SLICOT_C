@@ -5,10 +5,11 @@
  * This file provides a C wrapper implementation for the SLICOT routine MB03RD,
  * which reduces a matrix A in real Schur form to block-diagonal form
  * using well-conditioned non-orthogonal similarity transformations.
+ * Refactored to align with ab01nd.c structure.
  */
 
 #include <stdlib.h>
-#include <ctype.h>
+#include <ctype.h>  // For toupper
 #include <stddef.h> // For size_t
 
 // Include the header file for this wrapper
@@ -63,6 +64,10 @@ int slicot_mb03rd(char jobx, char sort, int n, double pmax,
     double *a_cm = NULL;
     double *x_cm = NULL; // Needed if row_major and jobx == 'U'
 
+    /* Pointers to pass to Fortran */
+    double *a_ptr, *x_ptr;
+    int lda_f, ldx_f;
+
     /* --- Input Parameter Validation --- */
 
     if (n < 0) { info = -3; goto cleanup; }
@@ -71,6 +76,8 @@ int slicot_mb03rd(char jobx, char sort, int n, double pmax,
     if (sort_upper != 'N' && sort_upper != 'S' && sort_upper != 'C' && sort_upper != 'B') {
         info = -2; goto cleanup;
     }
+    // Optional: Check TOL range if necessary
+    // if (tol < 0.0) { info = -13; goto cleanup; }
 
     // Check leading dimensions based on storage order and JOBX
     int min_lda_f = MAX(1, n);
@@ -80,8 +87,8 @@ int slicot_mb03rd(char jobx, char sort, int n, double pmax,
         // For row-major C, LDA is the number of columns
         int min_lda_rm_cols = n;
         int min_ldx_rm_cols = (jobx_upper == 'U') ? n : 1;
-        if (lda < min_lda_rm_cols) { info = -6; goto cleanup; }
-        if (ldx < min_ldx_rm_cols) { info = -8; goto cleanup; } // Check even if JOBX='N'? Fortran requires >=1
+        if (n > 0 && lda < min_lda_rm_cols) { info = -6; goto cleanup; }
+        if (ldx < min_ldx_rm_cols) { info = -8; goto cleanup; } // Check even if JOBX='N' as Fortran requires >=1
     } else {
         // For column-major C, LDA is the number of rows (Fortran style)
         if (lda < min_lda_f) { info = -6; goto cleanup; }
@@ -108,56 +115,56 @@ int slicot_mb03rd(char jobx, char sort, int n, double pmax,
         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
         if (jobx_upper == 'U' && x_size > 0) {
             x_cm = (double*)malloc(x_size * elem_size); CHECK_ALLOC(x_cm);
+        } else {
+            x_cm = NULL; // Ensure NULL if not needed
         }
 
         /* Transpose C (row-major) inputs to Fortran (column-major) copies */
-        if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-        if (jobx_upper == 'U' && x_size > 0) {
-            slicot_transpose_to_fortran(x, x_cm, x_rows, x_cols, elem_size);
-        }
+        if (a_cm) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
+        if (x_cm) slicot_transpose_to_fortran(x, x_cm, x_rows, x_cols, elem_size);
 
         /* Fortran leading dimensions */
-        int lda_f = (a_rows > 0) ? a_rows : 1;
-        int ldx_f = (x_rows > 0) ? x_rows : 1;
+        lda_f = MAX(1, a_rows);
+        ldx_f = MAX(1, x_rows);
 
-        /* Call the Fortran routine */
-        F77_FUNC(mb03rd, MB03RD)(&jobx_upper, &sort_upper, &n, &pmax,
-                                 a_cm, &lda_f,           // Pass CM A
-                                 (jobx_upper == 'U' ? x_cm : NULL), &ldx_f, // Pass CM X or NULL
-                                 nblcks, blsize, wr, wi,
-                                 &tol, dwork, &info,
-                                 jobx_len, sort_len);
-
-        /* Copy back results from column-major temps to original row-major arrays */
-        if (info == 0) {
-            // Copy back modified A
-            if (a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
-            // Copy back modified X if accumulated
-            if (jobx_upper == 'U' && x_size > 0) {
-                slicot_transpose_to_c(x_cm, x, x_rows, x_cols, elem_size);
-            }
-            // NBLCKS, BLSIZE, WR, WI are filled directly.
-        }
-        /* Column-major copies will be freed in cleanup */
+        /* Set pointers for Fortran call */
+        a_ptr = a_cm;
+        x_ptr = (jobx_upper == 'U' ? x_cm : NULL);
 
     } else {
         /* --- Column-Major Case --- */
+        lda_f = lda;
+        ldx_f = ldx;
+        a_ptr = a;
+        x_ptr = (jobx_upper == 'U' ? x : NULL);
+    }
 
-        /* Call the Fortran routine directly with user-provided arrays */
-        F77_FUNC(mb03rd, MB03RD)(&jobx_upper, &sort_upper, &n, &pmax,
-                                 a, &lda,                // Pass original A
-                                 (jobx_upper == 'U' ? x : NULL), &ldx, // Pass original X or NULL
-                                 nblcks, blsize, wr, wi,
-                                 &tol, dwork, &info,
-                                 jobx_len, sort_len);
-        // A, X (if JOBX='U'), NBLCKS, BLSIZE, WR, WI are modified in place.
+    /* Call the computational routine */
+    F77_FUNC(mb03rd, MB03RD)(&jobx_upper, &sort_upper, &n, &pmax,
+                             a_ptr, &lda_f,           // Pass A ptr
+                             x_ptr, &ldx_f,           // Pass X ptr or NULL
+                             nblcks, blsize, wr, wi,
+                             &tol, dwork, &info,
+                             jobx_len, sort_len);
+
+    /* Copy back results from column-major temps to original row-major arrays */
+    if (row_major && info == 0) {
+        size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+        size_t x_rows = n; size_t x_cols = n; size_t x_size = x_rows * x_cols;
+        // Copy back modified A
+        if (a_cm && a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
+        // Copy back modified X if accumulated
+        if (x_cm && x_size > 0) { // Check x_cm was allocated
+            slicot_transpose_to_c(x_cm, x, x_rows, x_cols, elem_size);
+        }
+        // NBLCKS, BLSIZE, WR, WI are filled directly.
     }
 
 cleanup:
     /* --- Cleanup --- */
     free(dwork);
-    free(a_cm);
-    free(x_cm); // Safe even if NULL
+    free(a_cm); // Safe if NULL
+    free(x_cm); // Safe if NULL
 
     return info;
 }

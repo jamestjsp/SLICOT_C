@@ -11,13 +11,13 @@
  #include <stdlib.h>
  #include <string.h> // For memcpy
  #include <stddef.h> // For size_t
- 
+
  // Include the header file for this wrapper
- #include "tf01md.h"
+ // #include "tf01md.h" // Assuming a header file exists
  // Include necessary SLICOT utility headers
  #include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
  #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
- 
+
  /*
   * Declare the external Fortran routine using the F77_FUNC macro.
   */
@@ -42,8 +42,8 @@
      double* dwork,          // DOUBLE PRECISION DWORK(*)
      int* info               // INTEGER INFO (output)
  );
- 
- 
+
+
  /* C wrapper function definition */
  SLICOT_C_WRAPPER_API
  int slicot_tf01md(int n, int m, int p, int ny,
@@ -56,17 +56,21 @@
      int info = 0;
      double* dwork = NULL;
      int dwork_size = 0;
- 
+     // No iwork needed
+
      /* Pointers for column-major copies if needed */
      double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL, *d_cm = NULL, *u_cm = NULL;
      double *y_cm = NULL; // For output
- 
+     const double *a_ptr, *b_ptr, *c_ptr, *d_ptr, *u_ptr; // Input pointers
+     double *y_ptr; // Output pointer
+     int lda_f, ldb_f, ldc_f, ldd_f, ldu_f, ldy_f;
+
      /* --- Input Parameter Validation --- */
      if (n < 0) { info = -1; goto cleanup; }
      if (m < 0) { info = -2; goto cleanup; }
      if (p < 0) { info = -3; goto cleanup; }
      if (ny < 0) { info = -4; goto cleanup; }
- 
+
      // Check leading dimensions based on storage order
      int min_lda_f = MAX(1, n);
      int min_ldb_f = MAX(1, n);
@@ -74,7 +78,7 @@
      int min_ldd_f = MAX(1, p);
      int min_ldu_f = MAX(1, m);
      int min_ldy_f = MAX(1, p);
- 
+
      if (row_major) {
          // For row-major C, LD is number of columns
          int min_lda_rm_cols = n;
@@ -98,28 +102,18 @@
          if (ldu < min_ldu_f) { info = -14; goto cleanup; }
          if (ldy < min_ldy_f) { info = -17; goto cleanup; }
      }
- 
-     /* --- Workspace Allocation --- */
-     dwork_size = n; // Size is N
-     if (dwork_size < 1) dwork_size = 1;
-     dwork = (double*)malloc((size_t)dwork_size * sizeof(double));
-     CHECK_ALLOC(dwork);
- 
-     /* --- Prepare Arrays and Call Fortran Routine --- */
+
+     /* --- Prepare arrays for column-major format if using row-major --- */
      size_t elem_size = sizeof(double);
- 
-     // Determine sizes for potential copies
-     size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-     size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-     size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-     size_t d_rows = p; size_t d_cols = m; size_t d_size = d_rows * d_cols;
-     size_t u_rows = m; size_t u_cols = ny; size_t u_size = u_rows * u_cols;
-     size_t y_rows = p; size_t y_cols = ny; size_t y_size = y_rows * y_cols;
- 
- 
      if (row_major) {
-         /* --- Row-Major Case --- */
- 
+         // Determine sizes for potential copies
+         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
+         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
+         size_t d_rows = p; size_t d_cols = m; size_t d_size = d_rows * d_cols;
+         size_t u_rows = m; size_t u_cols = ny; size_t u_size = u_rows * u_cols;
+         size_t y_rows = p; size_t y_cols = ny; size_t y_size = y_rows * y_cols;
+
          /* Allocate memory for column-major copies */
          if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
          if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
@@ -127,53 +121,61 @@
          if (d_size > 0) { d_cm = (double*)malloc(d_size * elem_size); CHECK_ALLOC(d_cm); }
          if (u_size > 0) { u_cm = (double*)malloc(u_size * elem_size); CHECK_ALLOC(u_cm); }
          if (y_size > 0) { y_cm = (double*)malloc(y_size * elem_size); CHECK_ALLOC(y_cm); }
- 
+
          /* Transpose C inputs to Fortran copies */
-         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-         if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-         if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
-         if (d_size > 0) slicot_transpose_to_fortran(d, d_cm, d_rows, d_cols, elem_size);
-         if (u_size > 0) slicot_transpose_to_fortran(u, u_cm, u_rows, u_cols, elem_size);
- 
+         if (a_cm) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
+         if (b_cm) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
+         if (c_cm) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
+         if (d_cm) slicot_transpose_to_fortran(d, d_cm, d_rows, d_cols, elem_size);
+         if (u_cm) slicot_transpose_to_fortran(u, u_cm, u_rows, u_cols, elem_size);
+
          /* Fortran leading dimensions */
-         int lda_f = (a_rows > 0) ? a_rows : 1;
-         int ldb_f = (b_rows > 0) ? b_rows : 1;
-         int ldc_f = (c_rows > 0) ? c_rows : 1;
-         int ldd_f = (d_rows > 0) ? d_rows : 1;
-         int ldu_f = (u_rows > 0) ? u_rows : 1;
-         int ldy_f = (y_rows > 0) ? y_rows : 1;
- 
-         /* Call the Fortran routine */
-         F77_FUNC(tf01md, TF01MD)(&n, &m, &p, &ny,
-                                  a_cm, &lda_f, b_cm, &ldb_f, c_cm, &ldc_f, d_cm, &ldd_f,
-                                  u_cm, &ldu_f, x, y_cm, &ldy_f, dwork, &info);
- 
-         /* Copy back results from column-major temps to original row-major arrays */
-         if (info == 0) {
-             // X is modified directly
-             if (y_size > 0) slicot_transpose_to_c(y_cm, y, y_rows, y_cols, elem_size);
-         }
-         /* Temps freed in cleanup */
- 
+         lda_f = (n > 0) ? n : 1;
+         ldb_f = (n > 0) ? n : 1;
+         ldc_f = (p > 0) ? p : 1;
+         ldd_f = (p > 0) ? p : 1;
+         ldu_f = (m > 0) ? m : 1;
+         ldy_f = (p > 0) ? p : 1;
+
+         /* Set pointers */
+         a_ptr = a_cm; b_ptr = b_cm; c_ptr = c_cm; d_ptr = d_cm; u_ptr = u_cm;
+         y_ptr = y_cm;
+
      } else {
-         /* --- Column-Major Case --- */
-         /* Call the Fortran routine directly with user-provided arrays */
-         F77_FUNC(tf01md, TF01MD)(&n, &m, &p, &ny,
-                                  a, &lda, b, &ldb, c, &ldc, d, &ldd,
-                                  u, &ldu, x, y, &ldy, dwork, &info);
-         // X, Y modified in place.
+         /* Column-major case - use original arrays */
+         lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd; ldu_f = ldu; ldy_f = ldy;
+         a_ptr = a; b_ptr = b; c_ptr = c; d_ptr = d; u_ptr = u;
+         y_ptr = y;
      }
- 
+
+     /* --- Workspace Allocation --- */
+     // No query needed, size is fixed
+     dwork_size = n; // Size is N
+     if (dwork_size < 1) dwork_size = 1; // Ensure at least 1
+     dwork = (double*)malloc((size_t)dwork_size * sizeof(double));
+     CHECK_ALLOC(dwork);
+
+     /* --- Call the computational routine --- */
+     // X is 1D in/out, no transposition needed
+     F77_FUNC(tf01md, TF01MD)(&n, &m, &p, &ny,
+                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
+                              u_ptr, &ldu_f, x, y_ptr, &ldy_f, dwork, &info);
+
+     /* --- Copy results back to row-major format if needed --- */
+     if (row_major && info == 0) {
+         // X is modified directly (1D)
+         size_t y_rows = p; size_t y_cols = ny; size_t y_size = y_rows * y_cols;
+         if (y_size > 0 && y_cm) {
+             slicot_transpose_to_c(y_cm, y, y_rows, y_cols, elem_size);
+         }
+     }
+     // In column-major case, X, Y modified in place.
+
   cleanup:
      /* --- Cleanup --- */
      free(dwork);
-     free(a_cm);
-     free(b_cm);
-     free(c_cm);
-     free(d_cm);
-     free(u_cm);
+     free(a_cm); free(b_cm); free(c_cm); free(d_cm); free(u_cm);
      free(y_cm);
- 
+
      return info;
  }
- 

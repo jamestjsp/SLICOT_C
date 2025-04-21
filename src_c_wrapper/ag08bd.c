@@ -5,16 +5,17 @@
  * This file provides a C wrapper implementation for the SLICOT routine AG08BD,
  * which computes the zeros and Kronecker structure of a descriptor
  * system pencil S(lambda) = [A-lambda*E, B; C, D].
+ * Refactored to align with ab01nd.c structure.
  */
 
 #include <stdlib.h>
-#include <ctype.h>
+#include <ctype.h>  // For toupper
 #include <stddef.h> // For size_t
 
 // Include the header file for this wrapper
 #include "ag08bd.h"
 // Include necessary SLICOT utility headers
-#include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
+#include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
 #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
 
 /*
@@ -81,7 +82,14 @@ int slicot_ag08bd(char equil, int l, int n, int m, int p,
     char equil_upper = toupper(equil);
 
     /* Pointers for column-major copies if needed */
-    double *a_cm = NULL, *e_cm = NULL, *b_cm = NULL, *c_cm = NULL, *d_cm = NULL;
+    double *a_cm = NULL, *e_cm = NULL, *b_cm = NULL, *c_cm = NULL;
+    double *d_cm = NULL; // D is const input, but need temp if row_major
+
+    /* Pointers to pass to Fortran */
+    double *a_ptr, *e_ptr, *b_ptr, *c_ptr;
+    const double *d_ptr;
+    int lda_f, lde_f, ldb_f, ldc_f, ldd_f;
+
 
     /* --- Input Parameter Validation --- */
 
@@ -90,7 +98,7 @@ int slicot_ag08bd(char equil, int l, int n, int m, int p,
     if (m < 0) { info = -4; goto cleanup; }
     if (p < 0) { info = -5; goto cleanup; }
     if (equil_upper != 'S' && equil_upper != 'N') { info = -1; goto cleanup; }
-    if (tol >= 1.0) { info = -26; goto cleanup; } // TOL must be < 1
+    if (tol >= 1.0 || tol < 0.0) { info = -26; goto cleanup; } // TOL must be [0, 1)
 
     // Check leading dimensions based on storage order
     int min_lda_f = MAX(1, l); int min_lde_f = MAX(1, l);
@@ -102,11 +110,11 @@ int slicot_ag08bd(char equil, int l, int n, int m, int p,
         int min_lda_rm_cols = n; int min_lde_rm_cols = n;
         int min_ldb_rm_cols = m;
         int min_ldc_rm_cols = n; int min_ldd_rm_cols = m;
-        if (lda < min_lda_rm_cols) { info = -7; goto cleanup; }
-        if (lde < min_lde_rm_cols) { info = -9; goto cleanup; }
-        if (ldb < min_ldb_rm_cols) { info = -11; goto cleanup; }
-        if (ldc < min_ldc_rm_cols) { info = -13; goto cleanup; }
-        if (ldd < min_ldd_rm_cols) { info = -15; goto cleanup; }
+        if (l > 0 && lda < min_lda_rm_cols) { info = -7; goto cleanup; }
+        if (l > 0 && lde < min_lde_rm_cols) { info = -9; goto cleanup; }
+        if (l > 0 && ldb < min_ldb_rm_cols) { info = -11; goto cleanup; }
+        if (p > 0 && ldc < min_ldc_rm_cols) { info = -13; goto cleanup; }
+        if (p > 0 && ldd < min_ldd_rm_cols) { info = -15; goto cleanup; }
     } else {
         // For column-major C, LDA is the number of rows (Fortran style)
         if (lda < min_lda_f) { info = -7; goto cleanup; }
@@ -125,10 +133,17 @@ int slicot_ag08bd(char equil, int l, int n, int m, int p,
 
     // Allocate DWORK based on query
     ldwork = -1; // Query mode
+    // Use dummy LDs for query if dimensions are 0
+    int lda_q = row_major ? MAX(1, l) : lda;
+    int lde_q = row_major ? MAX(1, l) : lde;
+    int ldb_q = row_major ? MAX(1, l) : ldb;
+    int ldc_q = row_major ? MAX(1, p) : ldc;
+    int ldd_q = row_major ? MAX(1, p) : ldd;
+
     F77_FUNC(ag08bd, AG08BD)(&equil_upper, &l, &n, &m, &p,
-                             a, &lda, e, &lde, b, &ldb, c, &ldc, d, &ldd,
+                             NULL, &lda_q, NULL, &lde_q, NULL, &ldb_q, NULL, &ldc_q, NULL, &ldd_q, // NULL arrays
                              nfz, nrank, niz, dinfz, nkror, ninfe, nkrol,
-                             infz, kronr, infe, kronl,
+                             NULL, NULL, NULL, NULL, // NULL integer arrays
                              &tol, iwork, &dwork_query, &ldwork, &info,
                              equil_len);
 
@@ -139,7 +154,8 @@ int slicot_ag08bd(char equil, int l, int n, int m, int p,
     ldwork = (int)dwork_query;
     // Check against minimum documented size
     int ldw = MAX(1, 5 * MAX(l + p, m + n));
-    ldw = MAX(ldw, (l + p + m + n) * (m + n)); // Simplified check, full formula complex
+    // Simplified check, full formula complex: MAX(ldw, (L+P+M+N)*(M+N))
+    ldw = MAX(ldw, (l + p + m + n) * (m + n));
     int min_ldwork = ldw;
     if (equil_upper == 'S') {
         min_ldwork = MAX(4 * (l + n), ldw);
@@ -169,53 +185,53 @@ int slicot_ag08bd(char equil, int l, int n, int m, int p,
         if (d_size > 0) { d_cm = (double*)malloc(d_size * elem_size); CHECK_ALLOC(d_cm); } // D is input only
 
         /* Transpose C (row-major) inputs to Fortran (column-major) copies */
-        if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-        if (e_size > 0) slicot_transpose_to_fortran(e, e_cm, e_rows, e_cols, elem_size);
-        if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-        if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
-        if (d_size > 0) slicot_transpose_to_fortran(d, d_cm, d_rows, d_cols, elem_size);
+        if (a_cm) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
+        if (e_cm) slicot_transpose_to_fortran(e, e_cm, e_rows, e_cols, elem_size);
+        if (b_cm) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
+        if (c_cm) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
+        if (d_cm) slicot_transpose_to_fortran(d, d_cm, d_rows, d_cols, elem_size);
 
         /* Fortran leading dimensions */
-        int lda_f = (a_rows > 0) ? a_rows : 1;
-        int lde_f = (e_rows > 0) ? e_rows : 1;
-        int ldb_f = (b_rows > 0) ? b_rows : 1;
-        int ldc_f = (c_rows > 0) ? c_rows : 1;
-        int ldd_f = (d_rows > 0) ? d_rows : 1;
+        lda_f = MAX(1, a_rows);
+        lde_f = MAX(1, e_rows);
+        ldb_f = MAX(1, b_rows);
+        ldc_f = MAX(1, c_rows);
+        ldd_f = MAX(1, d_rows);
 
-        /* Call the Fortran routine */
-        F77_FUNC(ag08bd, AG08BD)(&equil_upper, &l, &n, &m, &p,
-                                 a_cm, &lda_f, e_cm, &lde_f, // Pass CM A, E
-                                 b_cm, &ldb_f, c_cm, &ldc_f, // Pass CM B, C
-                                 d_cm, &ldd_f,              // Pass CM D (const in Fortran call)
-                                 nfz, nrank, niz, dinfz, nkror, ninfe, nkrol,
-                                 infz, kronr, infe, kronl,
-                                 &tol, iwork, dwork, &ldwork, &info,
-                                 equil_len);
-
-        /* Copy back results from column-major temps to original row-major arrays */
-        if (info == 0) {
-            int nfz_val = *nfz;
-            // Copy back modified A and E (reduced pencil Af, Ef)
-            if (nfz_val >= 0) { // Allow NFZ=0
-                if (a_size > 0) slicot_transpose_to_c(a_cm, a, nfz_val, nfz_val, elem_size);
-                if (e_size > 0) slicot_transpose_to_c(e_cm, e, nfz_val, nfz_val, elem_size);
-            }
-            // B and C are overwritten with useless info, no need to copy back.
-            // Integer output arrays are filled directly.
-        }
-        /* Column-major copies will be freed in cleanup */
+        /* Set pointers for Fortran call */
+        a_ptr = a_cm; e_ptr = e_cm; b_ptr = b_cm; c_ptr = c_cm;
+        d_ptr = d_cm; // Pass pointer to temp CM copy of D
 
     } else {
         /* --- Column-Major Case --- */
+        lda_f = lda; lde_f = lde; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd;
+        a_ptr = a; e_ptr = e; b_ptr = b; c_ptr = c;
+        d_ptr = d; // Pass original pointer
+    }
 
-        /* Call the Fortran routine directly with user-provided arrays */
-        F77_FUNC(ag08bd, AG08BD)(&equil_upper, &l, &n, &m, &p,
-                                 a, &lda, e, &lde, b, &ldb, c, &ldc, d, &ldd,
-                                 nfz, nrank, niz, dinfz, nkror, ninfe, nkrol,
-                                 infz, kronr, infe, kronl,
-                                 &tol, iwork, dwork, &ldwork, &info,
-                                 equil_len);
-        // A, E, B, C and integer output arrays are modified in place.
+    /* Call the computational routine */
+    F77_FUNC(ag08bd, AG08BD)(&equil_upper, &l, &n, &m, &p,
+                             a_ptr, &lda_f, e_ptr, &lde_f, // Pass A, E ptrs
+                             b_ptr, &ldb_f, c_ptr, &ldc_f, // Pass B, C ptrs
+                             d_ptr, &ldd_f,              // Pass D ptr
+                             nfz, nrank, niz, dinfz, nkror, ninfe, nkrol,
+                             infz, kronr, infe, kronl,
+                             &tol, iwork, dwork, &ldwork, &info,
+                             equil_len);
+
+    /* Copy back results from column-major temps to original row-major arrays */
+    if (row_major && info == 0) {
+        int nfz_val = *nfz;
+        // Copy back modified A and E (reduced pencil Af, Ef)
+        if (nfz_val >= 0) { // Allow NFZ=0
+            size_t a_rows = l; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+            size_t e_rows = l; size_t e_cols = n; size_t e_size = e_rows * e_cols;
+            if (a_cm && a_size > 0) slicot_transpose_to_c(a_cm, a, nfz_val, nfz_val, elem_size);
+            if (e_cm && e_size > 0) slicot_transpose_to_c(e_cm, e, nfz_val, nfz_val, elem_size);
+        }
+        // B and C are overwritten with useless info, no need to copy back.
+        // D is input only, no copy back needed.
+        // Integer output arrays are filled directly.
     }
 
 cleanup:
@@ -226,7 +242,7 @@ cleanup:
     free(e_cm);
     free(b_cm);
     free(c_cm);
-    free(d_cm);
+    free(d_cm); // Safe even if NULL
 
     return info;
 }

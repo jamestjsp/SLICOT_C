@@ -11,13 +11,13 @@
  #include <ctype.h>
  #include <stddef.h> // For size_t
  #include <string.h> // For memcpy
- 
+
  // Include the header file for this wrapper
  #include "sb02md.h"
  // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines, slicot_copy_symmetric_part
+ #include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines, slicot_copy_symmetric_part, slicot_transpose_symmetric_to_fortran, slicot_transpose_symmetric_to_c
  #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
- 
+
  /*
   * Declare the external Fortran routine using the F77_FUNC macro.
   * A is input/output if DICO='D'. G is input. Q is input/output (solution X).
@@ -25,14 +25,14 @@
   */
  extern void F77_FUNC(sb02md, SB02MD)(
      const char* dico,       // CHARACTER*1 DICO
-     const char* hinv,       // CHARACTER*1 HINV
+     const char* hinv,       // CHARACTER*1 HINV ('D' only if DICO='D')
      const char* uplo,       // CHARACTER*1 UPLO
      const char* scal,       // CHARACTER*1 SCAL
      const char* sort,       // CHARACTER*1 SORT
      const int* n,           // INTEGER N
      double* a,              // DOUBLE PRECISION A(LDA,*) (in/out if DICO='D')
      const int* lda,         // INTEGER LDA
-     const double* g,        // DOUBLE PRECISION G(LDG,*)
+     const double* g,        // DOUBLE PRECISION G(LDG,*) (in)
      const int* ldg,         // INTEGER LDG
      double* q,              // DOUBLE PRECISION Q(LDQ,*) (in/out -> X)
      const int* ldq,         // INTEGER LDQ
@@ -54,8 +54,8 @@
      int scal_len,           // Hidden length
      int sort_len            // Hidden length
  );
- 
- 
+
+
  /* C wrapper function definition */
  SLICOT_C_WRAPPER_API
  int slicot_sb02md(char dico, char hinv, char uplo, char scal, char sort,
@@ -73,35 +73,39 @@
      int* iwork = NULL;
      int* bwork = NULL; // Map LOGICAL to int
      int work_size_2n = 0;
- 
+
      const int dico_len = 1, hinv_len = 1, uplo_len = 1, scal_len = 1, sort_len = 1;
- 
+
      char dico_upper = toupper(dico);
      char hinv_upper = toupper(hinv);
      char uplo_upper = toupper(uplo);
      char scal_upper = toupper(scal);
      char sort_upper = toupper(sort);
- 
+
      /* Pointers for column-major copies if needed */
      double *a_cm = NULL, *g_cm = NULL, *q_cm = NULL;
      double *s_cm = NULL, *u_cm = NULL;
- 
+     double *a_ptr, *q_ptr, *s_ptr, *u_ptr;
+     const double *g_ptr; // G is input only
+     int lda_f, ldg_f, ldq_f, lds_f, ldu_f;
+
+
      /* --- Input Parameter Validation --- */
- 
-     if (n < 0) { info = -6; goto cleanup; }
+
      if (dico_upper != 'C' && dico_upper != 'D') { info = -1; goto cleanup; }
      if (dico_upper == 'D' && hinv_upper != 'D' && hinv_upper != 'I') { info = -2; goto cleanup; }
      if (uplo_upper != 'U' && uplo_upper != 'L') { info = -3; goto cleanup; }
      if (scal_upper != 'G' && scal_upper != 'N') { info = -4; goto cleanup; }
      if (sort_upper != 'S' && sort_upper != 'U') { info = -5; goto cleanup; }
- 
+     if (n < 0) { info = -6; goto cleanup; }
+
      // Check leading dimensions based on storage order
      int min_lda_f = MAX(1, n);
      int min_ldg_f = MAX(1, n);
      int min_ldq_f = MAX(1, n);
      int min_lds_f = MAX(1, 2 * n);
      int min_ldu_f = MAX(1, 2 * n);
- 
+
      if (row_major) {
          // For row-major C, LDA is the number of columns
          int min_lda_rm_cols = n;
@@ -122,132 +126,146 @@
          if (lds < min_lds_f) { info = -17; goto cleanup; }
          if (ldu < min_ldu_f) { info = -19; goto cleanup; }
      }
- 
+
+     /* --- Prepare arrays for column-major format if using row-major --- */
+     size_t elem_size = sizeof(double);
+     if (row_major) {
+         /* Allocate memory for column-major copies */
+         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+         size_t g_rows = n; size_t g_cols = n; size_t g_size = g_rows * g_cols;
+         size_t q_rows = n; size_t q_cols = n; size_t q_size = q_rows * q_cols;
+         size_t s_rows = 2*n; size_t s_cols = 2*n; size_t s_size = s_rows * s_cols;
+         size_t u_rows = 2*n; size_t u_cols = 2*n; size_t u_size = u_rows * u_cols;
+
+         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); } // A might be in/out
+         if (g_size > 0) { g_cm = (double*)malloc(g_size * elem_size); CHECK_ALLOC(g_cm); } // G is input
+         if (q_size > 0) { q_cm = (double*)malloc(q_size * elem_size); CHECK_ALLOC(q_cm); } // Q is in/out (X)
+         if (s_size > 0) { s_cm = (double*)malloc(s_size * elem_size); CHECK_ALLOC(s_cm); } // S is output
+         if (u_size > 0) { u_cm = (double*)malloc(u_size * elem_size); CHECK_ALLOC(u_cm); } // U is output
+
+         /* Transpose C (row-major) inputs to Fortran (column-major) copies */
+         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
+         if (g_size > 0) slicot_transpose_symmetric_to_fortran(g, g_cm, g_rows, uplo_upper, elem_size); // Use symmetric transpose for G
+         if (q_size > 0) slicot_transpose_symmetric_to_fortran(q, q_cm, q_rows, uplo_upper, elem_size); // Use symmetric transpose for Q
+
+         /* Fortran leading dimensions */
+         lda_f = (a_rows > 0) ? a_rows : 1;
+         ldg_f = (g_rows > 0) ? g_rows : 1;
+         ldq_f = (q_rows > 0) ? q_rows : 1;
+         lds_f = (s_rows > 0) ? s_rows : 1;
+         ldu_f = (u_rows > 0) ? u_rows : 1;
+
+         /* Set pointers */
+         a_ptr = a_cm;
+         g_ptr = g_cm;
+         q_ptr = q_cm;
+         s_ptr = s_cm;
+         u_ptr = u_cm;
+
+     } else {
+         /* Column-major case - use original arrays */
+         lda_f = lda;
+         ldg_f = ldg;
+         ldq_f = ldq;
+         lds_f = lds;
+         ldu_f = ldu;
+         a_ptr = a;
+         g_ptr = g; // G is input
+         q_ptr = q; // Q is in/out
+         s_ptr = s; // S is output
+         u_ptr = u; // U is output
+
+         // Need to copy symmetric inputs G and Q to ensure full matrix is passed if they are modified or used internally
+         // Since G is const input, copy only if needed for internal algorithm (unlikely, but safer)
+         // Since Q is input/output, definitely copy it to a temporary full matrix
+         size_t g_rows = n; size_t g_cols = n; size_t g_size = g_rows * g_cols;
+         size_t q_rows = n; size_t q_cols = n; size_t q_size = q_rows * q_cols;
+         if (g_size > 0) { g_cm = (double*)malloc(g_size * elem_size); CHECK_ALLOC(g_cm); slicot_copy_symmetric_part(g, g_cm, n, uplo_upper, ldg, elem_size); g_ptr = g_cm; ldg_f = n;} // Use copy
+         if (q_size > 0) { q_cm = (double*)malloc(q_size * elem_size); CHECK_ALLOC(q_cm); slicot_copy_symmetric_part(q, q_cm, n, uplo_upper, ldq, elem_size); q_ptr = q_cm; ldq_f = n;} // Use copy
+
+     }
+
+
      /* --- Workspace Allocation --- */
- 
+
      // Allocate IWORK and BWORK (size 2*N)
      work_size_2n = MAX(1, 2 * n);
      iwork = (int*)malloc((size_t)work_size_2n * sizeof(int));
      CHECK_ALLOC(iwork);
      bwork = (int*)malloc((size_t)work_size_2n * sizeof(int)); // Use int for LOGICAL
      CHECK_ALLOC(bwork);
- 
-     // Allocate DWORK based on query
+
+     // Perform workspace query for DWORK
      ldwork = -1; // Query mode
      F77_FUNC(sb02md, SB02MD)(&dico_upper, &hinv_upper, &uplo_upper, &scal_upper, &sort_upper,
-                              &n, a, &lda, g, &ldg, q, &ldq, rcond, wr, wi,
-                              s, &lds, u, &ldu, iwork, &dwork_query, &ldwork,
+                              &n, a_ptr, &lda_f, g_ptr, &ldg_f, q_ptr, &ldq_f,
+                              rcond, wr, wi,
+                              s_ptr, &lds_f, u_ptr, &ldu_f,
+                              iwork, &dwork_query, &ldwork,
                               bwork, &info,
                               dico_len, hinv_len, uplo_len, scal_len, sort_len);
- 
-     if (info < 0) { goto cleanup; } // Query failed due to invalid argument
+
+     if (info < 0 && info != -23) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-23 from query)
      info = 0; // Reset info after query
- 
+
      // Get the required dwork size from query result
      ldwork = (int)dwork_query;
      // Check against minimum documented size
      int min_ldwork = (dico_upper == 'C') ? MAX(2, 6 * n) : MAX(3, 6 * n);
      ldwork = MAX(ldwork, min_ldwork);
- 
+
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
- 
-     /* --- Prepare Arrays and Call Fortran Routine --- */
-     size_t elem_size = sizeof(double);
- 
-     // Determine sizes for potential copies (moved before if/else)
-     size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-     size_t g_rows = n; size_t g_cols = n; size_t g_size = g_rows * g_cols;
-     size_t q_rows = n; size_t q_cols = n; size_t q_size = q_rows * q_cols;
-     size_t s_rows = 2*n; size_t s_cols = 2*n; size_t s_size = s_rows * s_cols;
-     size_t u_rows = 2*n; size_t u_cols = 2*n; size_t u_size = u_rows * u_cols;
- 
-     if (row_major) {
-         /* --- Row-Major Case --- */
- 
-         /* Allocate memory for column-major copies */
-         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
-         if (g_size > 0) { g_cm = (double*)malloc(g_size * elem_size); CHECK_ALLOC(g_cm); }
-         if (q_size > 0) { q_cm = (double*)malloc(q_size * elem_size); CHECK_ALLOC(q_cm); }
-         if (s_size > 0) { s_cm = (double*)malloc(s_size * elem_size); CHECK_ALLOC(s_cm); }
-         if (u_size > 0) { u_cm = (double*)malloc(u_size * elem_size); CHECK_ALLOC(u_cm); }
- 
-         /* Transpose C (row-major) inputs to Fortran (column-major) copies */
-         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-         if (g_size > 0) slicot_transpose_symmetric_to_fortran(g, g_cm, n, uplo_upper, elem_size); // Use symmetric transpose
-         if (q_size > 0) slicot_transpose_symmetric_to_fortran(q, q_cm, n, uplo_upper, elem_size); // Use symmetric transpose
- 
-         /* Fortran leading dimensions */
-         int lda_f = (a_rows > 0) ? a_rows : 1;
-         int ldg_f = (g_rows > 0) ? g_rows : 1;
-         int ldq_f = (q_rows > 0) ? q_rows : 1;
-         int lds_f = (s_rows > 0) ? s_rows : 1;
-         int ldu_f = (u_rows > 0) ? u_rows : 1;
- 
-         /* Call the Fortran routine */
-         F77_FUNC(sb02md, SB02MD)(&dico_upper, &hinv_upper, &uplo_upper, &scal_upper, &sort_upper,
-                                  &n,
-                                  a_cm, &lda_f,           // Pass CM A (in/out if D='D')
-                                  g_cm, &ldg_f,           // Pass CM G (in)
-                                  q_cm, &ldq_f,           // Pass CM Q (in/out -> X)
-                                  rcond, wr, wi,          // Pass output pointers
-                                  s_cm, &lds_f,           // Pass CM S (out)
-                                  u_cm, &ldu_f,           // Pass CM U (out)
-                                  iwork, dwork, &ldwork, bwork, &info,
-                                  dico_len, hinv_len, uplo_len, scal_len, sort_len);
- 
-         /* Copy back results from column-major temps to original row-major arrays */
-         if (info == 0 || info == 5) { // Copy back even if INFO=5
-             // Copy back A only if discrete time case
-             if (dico_upper == 'D' && a_size > 0) {
-                 slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
-             }
-             // Copy back Q (contains solution X)
-             if (q_size > 0) slicot_transpose_symmetric_to_c(q_cm, q, n, uplo_upper, elem_size); // Symmetric copy back
-             // Copy back S and U
-             if (s_size > 0) slicot_transpose_to_c(s_cm, s, s_rows, s_cols, elem_size);
-             if (u_size > 0) slicot_transpose_to_c(u_cm, u, u_rows, u_cols, elem_size);
-             // RCOND, WR, WI are filled directly.
+
+
+     /* --- Call the computational routine --- */
+     F77_FUNC(sb02md, SB02MD)(&dico_upper, &hinv_upper, &uplo_upper, &scal_upper, &sort_upper,
+                              &n,
+                              a_ptr, &lda_f,           // Pass A ptr
+                              g_ptr, &ldg_f,           // Pass G ptr (original or CM copy)
+                              q_ptr, &ldq_f,           // Pass Q ptr (original or CM copy)
+                              rcond, wr, wi,          // Pass output pointers
+                              s_ptr, &lds_f,           // Pass S ptr (original or CM copy)
+                              u_ptr, &ldu_f,           // Pass U ptr (original or CM copy)
+                              iwork, dwork, &ldwork, bwork, &info,
+                              dico_len, hinv_len, uplo_len, scal_len, sort_len);
+
+     /* --- Copy results back to row-major format if needed --- */
+     if (row_major && (info == 0 || info == 5)) { // Copy back even if INFO=5
+         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
+         size_t q_rows = n; size_t q_cols = n; size_t q_size = q_rows * q_cols;
+         size_t s_rows = 2*n; size_t s_cols = 2*n; size_t s_size = s_rows * s_cols;
+         size_t u_rows = 2*n; size_t u_cols = 2*n; size_t u_size = u_rows * u_cols;
+
+         // Copy back A only if discrete time case
+         if (dico_upper == 'D' && a_size > 0) {
+             slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
          }
-         /* Column-major copies will be freed in cleanup */
- 
-     } else {
-         /* --- Column-Major Case --- */
-         // Need to copy symmetric inputs G and Q to ensure full matrix is passed if needed
-         if (g_size > 0) { g_cm = (double*)malloc(g_size * elem_size); CHECK_ALLOC(g_cm); slicot_copy_symmetric_part(g, g_cm, n, uplo_upper, ldg, elem_size); }
-         if (q_size > 0) { q_cm = (double*)malloc(q_size * elem_size); CHECK_ALLOC(q_cm); slicot_copy_symmetric_part(q, q_cm, n, uplo_upper, ldq, elem_size); }
- 
- 
-         /* Call the Fortran routine directly with user-provided arrays (or copies) */
-         F77_FUNC(sb02md, SB02MD)(&dico_upper, &hinv_upper, &uplo_upper, &scal_upper, &sort_upper,
-                                  &n,
-                                  a, &lda,                // Pass original A
-                                  (g_cm ? g_cm : g), &ldg, // Pass copy of G if created
-                                  (q_cm ? q_cm : q), &ldq, // Pass copy of Q (in/out -> X) if created
-                                  rcond, wr, wi,          // Pass output pointers
-                                  s, &lds,                // Pass original S
-                                  u, &ldu,                // Pass original U
-                                  iwork, dwork, &ldwork, bwork, &info,
-                                  dico_len, hinv_len, uplo_len, scal_len, sort_len);
- 
-         // Copy back solution X from q_cm to q if column major copy was made
-         if (info == 0 || info == 5) {
-              if (q_size > 0 && q_cm) slicot_copy_symmetric_part(q_cm, q, n, uplo_upper, ldq, elem_size);
+         // Copy back Q (contains solution X)
+         if (q_size > 0) slicot_transpose_symmetric_to_c(q_cm, q, q_rows, uplo_upper, elem_size); // Symmetric copy back
+         // Copy back S and U
+         if (s_size > 0) slicot_transpose_to_c(s_cm, s, s_rows, s_cols, elem_size);
+         if (u_size > 0) slicot_transpose_to_c(u_cm, u, u_rows, u_cols, elem_size);
+         // RCOND, WR, WI are filled directly.
+     } else if (!row_major && (info == 0 || info == 5)) {
+         // Copy back solution X from temporary full q_cm to original symmetric q
+         size_t q_rows = n; size_t q_cols = n; size_t q_size = q_rows * q_cols;
+         if (q_size > 0 && q_cm) { // Check if q_cm was allocated
+             slicot_copy_symmetric_part(q_cm, q, n, uplo_upper, ldq, elem_size); // Copy full result to symmetric storage
          }
-         // A (if DICO='D'), RCOND, WR, WI, S, U are modified in place.
+         // A (if DICO='D'), RCOND, WR, WI, S, U are modified in place in original arrays.
      }
- 
+
  cleanup:
      /* --- Cleanup --- */
      free(dwork);
      free(iwork);
      free(bwork);
      free(a_cm);
-     free(g_cm);
-     free(q_cm);
+     free(g_cm); // Free G copy if allocated
+     free(q_cm); // Free Q copy if allocated
      free(s_cm);
      free(u_cm);
- 
+
      return info;
  }
- 
