@@ -16,7 +16,9 @@
  // Include the header file for this wrapper
  #include "ab08nd.h"
  // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
+ // Ensure slicot_utils.h provides: MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR,
+ // slicot_transpose_to_fortran, slicot_transpose_to_c
+ #include "slicot_utils.h"
  #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
 
  /*
@@ -78,34 +80,35 @@
      // Optional: Check TOL range if necessary
      // if (tol < 0.0) { info = -23; goto cleanup; }
 
-     // Check leading dimensions based on storage order
+     // Determine minimum required Fortran leading dimensions
      int min_lda_f = MAX(1, n);
      int min_ldb_f = MAX(1, n);
      int min_ldc_f = MAX(1, p);
      int min_ldd_f = MAX(1, p);
-     int min_ldaf_f = MAX(1, n + m); // Fortran routine requires LDAF >= N+M
-     int min_ldbf_f = MAX(1, n + p); // Fortran routine requires LDBF >= N+P
+     int min_ldaf_f = MAX(1, n + m); // Fortran routine requires LDAF >= N+M (rows)
+     int min_ldbf_f = MAX(1, n + p); // Fortran routine requires LDBF >= N+P (rows)
 
      if (row_major) {
          // For row-major C, LDA/LDB/LDC/LDD are the number of columns
+         // LDAF/LDBF are also number of columns for the C arrays af/bf
          int min_lda_rm_cols = n;
          int min_ldb_rm_cols = m;
          int min_ldc_rm_cols = n;
          int min_ldd_rm_cols = m;
-         // LDAF/LDBF (number of columns) check depends on NU, done after Fortran call.
-         // However, the *values* passed for ldaf/ldbf must be >= Fortran's row requirements
-         // because the wrapper uses them as rows for internal arrays.
+         // Check C array dimensions (number of columns)
          if (n > 0 && lda < min_lda_rm_cols) { info = -6; goto cleanup; }
          if (n > 0 && ldb < min_ldb_rm_cols) { info = -8; goto cleanup; }
          if (p > 0 && ldc < min_ldc_rm_cols) { info = -10; goto cleanup; }
          if (p > 0 && ldd < min_ldd_rm_cols) { info = -12; goto cleanup; }
+         // Check if C ldaf/ldbf are sufficient to act as Fortran LDAF/LDBF (rows)
+         if (ldaf < min_ldaf_f) { info = -20; goto cleanup; } // C ldaf (cols) must be >= Fortran LDAF (rows) requirement
+         if (ldbf < min_ldbf_f) { info = -22; goto cleanup; } // C ldbf (cols) must be >= Fortran LDBF (rows) requirement
      } else {
-         // For column-major C, LDA/LDB/LDC/LDD are the number of rows (Fortran style)
+         // For column-major C, LDA/LDB/LDC/LDD/LDAF/LDBF are the number of rows (Fortran style)
          if (lda < min_lda_f) { info = -6; goto cleanup; }
          if (ldb < min_ldb_f) { info = -8; goto cleanup; }
          if (ldc < min_ldc_f) { info = -10; goto cleanup; }
          if (ldd < min_ldd_f) { info = -12; goto cleanup; }
-         // Check LDAF/LDBF against minimum Fortran requirements (rows)
          if (ldaf < min_ldaf_f) { info = -20; goto cleanup; }
          if (ldbf < min_ldbf_f) { info = -22; goto cleanup; }
      }
@@ -119,13 +122,14 @@
 
      // Call Fortran routine for DWORK workspace query
      ldwork = -1; // Query mode
-     // Use dummy LDs for query if dimensions are 0
-     int lda_q = row_major ? MAX(1, n) : lda;
-     int ldb_q = row_major ? MAX(1, n) : ldb;
-     int ldc_q = row_major ? MAX(1, p) : ldc;
-     int ldd_q = row_major ? MAX(1, p) : ldd;
-     int ldaf_q = ldaf; // Pass user-provided LDs
-     int ldbf_q = ldbf;
+     // Use dummy LDs for query if dimensions are 0, otherwise use provided LDs
+     // For row-major, use the C leading dimensions (cols) as Fortran LDs (rows) for the query
+     int lda_q = (n == 0) ? 1 : (row_major ? lda : lda);
+     int ldb_q = (n == 0) ? 1 : (row_major ? ldb : ldb); // Note: Fortran LDB needs >= N
+     int ldc_q = (p == 0) ? 1 : (row_major ? ldc : ldc);
+     int ldd_q = (p == 0) ? 1 : (row_major ? ldd : ldd);
+     int ldaf_q = row_major ? ldaf : ldaf; // Use C ldaf/ldbf for Fortran LDAF/LDBF in query
+     int ldbf_q = row_major ? ldbf : ldbf;
 
      F77_FUNC(ab08nd, AB08ND)(&equil_upper, &n, &m, &p,
                               NULL, &lda_q, NULL, &ldb_q, // NULL arrays
@@ -137,15 +141,21 @@
                               equil_len /* Explicit length for equil */);
 
      if (info != 0) {
-         // Query failed, likely due to invalid N, M, P, LDA etc. passed to query
+         // Query failed, likely due to invalid N, M, P, or LDs passed to query
          goto cleanup;
      }
 
      // Get the required dwork size from query result
      ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX(1, N + MAX(N, M, P))
-     int min_ldwork = MAX(1, n + MAX(n, MAX(m, p)));
-     ldwork = MAX(ldwork, min_ldwork);
+     // Ensure minimum size based on documentation formula (adjust if needed based on specific SLICOT version)
+     int min_ldwork_doc = 1;
+     if (n > 0 || m > 0 || p > 0) {
+         min_ldwork_doc = MAX(1, MIN(p, m) + MAX(3 * m - 1, n));
+         min_ldwork_doc = MAX(min_ldwork_doc, MIN(p, n) + MAX(3 * p - 1, MAX(n + p, n + m)));
+         min_ldwork_doc = MAX(min_ldwork_doc, MIN(m, n) + MAX(3 * m - 1, n + m));
+     }
+     ldwork = MAX(ldwork, min_ldwork_doc);
+
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Use CHECK_ALLOC macro
@@ -157,15 +167,19 @@
          /* --- Row-Major Case --- */
 
          /* Allocate memory for column-major copies */
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-         size_t d_rows = p; size_t d_cols = m; size_t d_size = d_rows * d_cols;
-         // Fortran AF is LDAF x (N+MIN(P,M)), BF is LDBF x (N+M)
-         // Allocate based on Fortran LDs and max possible columns
-         size_t af_fort_rows = ldaf; size_t af_fort_cols = n + MIN(p, m); size_t af_size = af_fort_rows * af_fort_cols;
-         size_t bf_fort_rows = ldbf; size_t bf_fort_cols = n + m; size_t bf_size = bf_fort_rows * bf_fort_cols;
+         // Dimensions for temporary Fortran-style matrices
+         size_t a_rows_f = n; size_t a_cols_f = n; size_t a_size = a_rows_f * a_cols_f;
+         size_t b_rows_f = n; size_t b_cols_f = m; size_t b_size = b_rows_f * b_cols_f;
+         size_t c_rows_f = p; size_t c_cols_f = n; size_t c_size = c_rows_f * c_cols_f;
+         size_t d_rows_f = p; size_t d_cols_f = m; size_t d_size = d_rows_f * d_cols_f;
+         // Fortran AF is LDAF_f x (N+MIN(P,M)), BF is LDBF_f x (N+M)
+         // Use C ldaf/ldbf as Fortran LDAF_f/LDBF_f (rows)
+         ldaf_f = ldaf; // Fortran LDAF (rows) = C ldaf (cols)
+         ldbf_f = ldbf; // Fortran LDBF (rows) = C ldbf (cols)
+         size_t af_rows_f = ldaf_f; size_t af_cols_f = n + MIN(p, m); size_t af_size = af_rows_f * af_cols_f;
+         size_t bf_rows_f = ldbf_f; size_t bf_cols_f = n + m; size_t bf_size = bf_rows_f * bf_cols_f;
 
+         // Allocate only if size > 0
          if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
          if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
          if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
@@ -174,18 +188,18 @@
          if (bf_size > 0) { bf_cm = (double*)malloc(bf_size * elem_size); CHECK_ALLOC(bf_cm); }
 
          /* Convert row-major inputs to column-major */
-         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-         if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-         if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
-         if (d_size > 0) slicot_transpose_to_fortran(d, d_cm, d_rows, d_cols, elem_size);
+         // Pass C dimensions (rows, cols) to transpose function
+         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, n, n, elem_size); // C A is n x n (lda cols)
+         if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, n, m, elem_size); // C B is n x m (ldb cols)
+         if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, p, n, elem_size); // C C is p x n (ldc cols)
+         if (d_size > 0) slicot_transpose_to_fortran(d, d_cm, p, m, elem_size); // C D is p x m (ldd cols)
 
-         /* Fortran leading dimensions for the call */
-         lda_f = MAX(1, a_rows);
-         ldb_f = MAX(1, b_rows);
-         ldc_f = MAX(1, c_rows);
-         ldd_f = MAX(1, d_rows);
-         ldaf_f = ldaf; // Use passed C ldaf as Fortran LDAF
-         ldbf_f = ldbf; // Use passed C ldbf as Fortran LDBF
+         /* Fortran leading dimensions for the call (rows) */
+         lda_f = MAX(1, a_rows_f);
+         ldb_f = MAX(1, b_rows_f);
+         ldc_f = MAX(1, c_rows_f);
+         ldd_f = MAX(1, d_rows_f);
+         // ldaf_f and ldbf_f already set above
 
          /* Set pointers for Fortran call */
          a_ptr = a_cm; b_ptr = b_cm; c_ptr = c_cm; d_ptr = d_cm;
@@ -193,8 +207,10 @@
 
      } else {
          /* --- Column-Major Case --- */
+         // Fortran LDs are the same as C LDs
          lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd;
          ldaf_f = ldaf; ldbf_f = ldbf;
+         // Pointers point directly to user data
          a_ptr = a; b_ptr = b; c_ptr = c; d_ptr = d;
          af_ptr = af; bf_ptr = bf;
      }
@@ -213,34 +229,37 @@
      if (row_major && info == 0) {
           int nu_val = *nu;
           // Check if C caller allocated enough columns for the nu x nu result
-          if (ldaf < nu_val) { info = -20; goto cleanup; } // Invalid LDAF (cols) for computed NU
-          if (ldbf < nu_val) { info = -22; goto cleanup; } // Invalid LDBF (cols) for computed NU
+          // C ldaf/ldbf are number of columns
+          if (ldaf < nu_val) { info = -20; goto cleanup; } // Invalid C LDAF (cols) for computed NU
+          if (ldbf < nu_val) { info = -22; goto cleanup; } // Invalid C LDBF (cols) for computed NU
 
-          // Copy back AF and BF
+          // Copy back AF and BF (only the NU x NU part)
           if (nu_val > 0) {
-              // Fortran AF is ldaf_f x nu_val, BF is ldbf_f x nu_val
-              // ldaf_f = C ldaf (rows allocated for af_cm)
-              // ldbf_f = C ldbf (rows allocated for bf_cm)
-              size_t af_src_rows = ldaf_f; size_t af_src_cols = nu_val;
-              size_t bf_src_rows = ldbf_f; size_t bf_src_cols = nu_val;
-              if (af_src_rows * af_src_cols > 0) {
-                  slicot_transpose_to_c(af_cm, af, af_src_rows, af_src_cols, elem_size);
+              // REVIEW: Ensure slicot_transpose_to_c correctly transposes the
+              // leading nu_val x nu_val submatrix from af_cm (ldaf_f rows)
+              // into af (ldaf columns).
+              // Assuming slicot_transpose_to_c(src_cm, dest_rm, rows, cols, elem_size)
+              // transposes the top-left rows x cols block.
+              if (af_cm) { // Check if allocated
+                  slicot_transpose_to_c(af_cm, af, nu_val, nu_val, elem_size);
               }
-              if (bf_src_rows * bf_src_cols > 0) {
-                  slicot_transpose_to_c(bf_cm, bf, bf_src_rows, bf_src_cols, elem_size);
+              if (bf_cm) { // Check if allocated
+                  slicot_transpose_to_c(bf_cm, bf, nu_val, nu_val, elem_size);
               }
           }
           /* Update original input matrices if changed by the routine (EQUIL='S') */
           if (equil_upper == 'S') {
-              size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-              size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-              size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-              size_t d_rows = p; size_t d_cols = m; size_t d_size = d_rows * d_cols;
+              // Dimensions of the original C matrices
+              size_t a_rows_c = n; size_t a_cols_c = n; size_t a_size = a_rows_c * a_cols_c;
+              size_t b_rows_c = n; size_t b_cols_c = m; size_t b_size = b_rows_c * b_cols_c;
+              size_t c_rows_c = p; size_t c_cols_c = n; size_t c_size = c_rows_c * c_cols_c;
+              size_t d_rows_c = p; size_t d_cols_c = m; size_t d_size = d_rows_c * d_cols_c;
 
-              if (a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
-              if (b_size > 0) slicot_transpose_to_c(b_cm, b, b_rows, b_cols, elem_size);
-              if (c_size > 0) slicot_transpose_to_c(c_cm, c, c_rows, c_cols, elem_size);
-              if (d_size > 0) slicot_transpose_to_c(d_cm, d, d_rows, d_cols, elem_size);
+              // Transpose back from temporary column-major storage
+              if (a_cm && a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows_c, a_cols_c, elem_size);
+              if (b_cm && b_size > 0) slicot_transpose_to_c(b_cm, b, b_rows_c, b_cols_c, elem_size);
+              if (c_cm && c_size > 0) slicot_transpose_to_c(c_cm, c, c_rows_c, c_cols_c, elem_size);
+              if (d_cm && d_size > 0) slicot_transpose_to_c(d_cm, d, d_rows_c, d_cols_c, elem_size);
           }
      }
 
@@ -248,6 +267,7 @@
      /* --- Cleanup --- */
      free(dwork);
      free(iwork);
+     // Free temporary column-major arrays if allocated
      free(a_cm);
      free(b_cm);
      free(c_cm);
