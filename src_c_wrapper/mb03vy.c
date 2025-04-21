@@ -67,20 +67,24 @@ int slicot_mb03vy(int n, int p, int ilo, int ihi,
 
     /* --- Workspace Allocation --- */
 
-    // Perform workspace query for DWORK
+    // Allocate a small DWORK array for the workspace query
+    double dwork_temp[1];
     ldwork = -1; // Query mode
+    
+    // Perform workspace query
     F77_FUNC(mb03vy, MB03VY)(&n, &p, &ilo, &ihi, a, &lda1, &lda2, tau, &ldtau,
-                             &dwork_query, &ldwork, &info);
+                             dwork_temp, &ldwork, &info);
 
-    if (info < 0 && info != -11) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-11 from query)
-    info = 0; // Reset info after query
-
-    // Get the required dwork size from query result
-    ldwork = (int)dwork_query;
+    if (info < 0) { goto cleanup; } // Query failed due to invalid argument
+    
+    // Get the optimal workspace size from the query result
+    ldwork = (int)dwork_temp[0];
+    
     // Check against minimum documented size: MAX(1, N)
     int min_ldwork = MAX(1, n);
     ldwork = MAX(ldwork, min_ldwork);
 
+    // Allocate the workspace
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
 

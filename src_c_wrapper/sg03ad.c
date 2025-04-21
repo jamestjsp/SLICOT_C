@@ -201,26 +201,37 @@
          iwork = NULL; // Not referenced
      }
 
-     // Perform workspace query for DWORK
+     // Perform workspace query with small temporary array
+     double dwork_temp[2]; // Small array to receive query result
      ldwork = -1; // Query mode
+     
      F77_FUNC(sg03ad, SG03AD)(&dico_upper, &job_upper, &fact_upper, &trans_upper, &uplo_upper, &n,
                               a_ptr, &lda_f, e_ptr, &lde_f, q_ptr, &ldq_f, z_ptr, &ldz_f, x_ptr, &ldx_f,
                               scale, sep, ferr, alphar, alphai, beta,
-                              iwork, &dwork_query, &ldwork, &info,
+                              iwork, dwork_temp, &ldwork, &info,
                               dico_len, job_len, fact_len, trans_len, uplo_len);
-
-     if (info < 0 && info != -24) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-24)
+     
+     if (info < 0 && info != -24) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-24 from query)
      info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size
-     int min_ldwork = 1;
+     
+     // Calculate minimum workspace based on requirements
+     int min_ldwork;
      if (job_upper == 'X') {
-         min_ldwork = (fact_upper == 'F') ? MAX(1, n) : MAX(1, 4 * n);
+         if (fact_upper == 'F') {
+             min_ldwork = MAX(1, n);
+         } else { // FACT = 'N'
+             min_ldwork = MAX(1, 4 * n);
+         }
      } else { // JOB = 'S' or 'B'
-         min_ldwork = (fact_upper == 'F') ? MAX(1, 2*n*n) : MAX(1, MAX(2*n*n, 4*n));
+         if (fact_upper == 'F') {
+             min_ldwork = MAX(1, 2 * n * n);
+         } else { // FACT = 'N'
+             min_ldwork = MAX(1, MAX(2 * n * n, 4 * n));
+         }
      }
+     
+     // Use the larger of the queried optimal size and the minimum required size
+     ldwork = (int)dwork_temp[0]; // First element contains optimal ldwork
      ldwork = MAX(ldwork, min_ldwork);
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));

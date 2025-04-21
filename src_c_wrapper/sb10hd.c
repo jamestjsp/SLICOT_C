@@ -204,23 +204,26 @@
      bwork = (int*)malloc((size_t)lbwork * sizeof(int)); // Use int for LOGICAL
      CHECK_ALLOC(bwork);
 
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     F77_FUNC(sb10hd, SB10HD)(&n, &m, &np, &ncon, &nmeas,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
-                              ak_ptr, &ldak_f, bk_ptr, &ldbk_f, ck_ptr, &ldck_f, dk_ptr, &lddk_f,
-                              rcond, &tol, iwork, &dwork_query, &ldwork,
-                              bwork, &info);
-
-     if (info < 0 && info != -26) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-26 from query)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size (complex formula, rely on query + basic checks)
-     int min_ldwork = 1;
-     // Add basic checks based on components if needed, e.g., MAX(..., 16*n, ...)
-     ldwork = MAX(ldwork, min_ldwork);
+     // Calculate DWORK size directly based on formula
+     // Base calculation
+     int base_size = n*m + np*(n+m) + m2*m2 + np2*np2;
+     
+     // Part 1 inner max calculations
+     int part1a_inner = MAX(MAX(np1*n, 3*m2+np1), 5*m2);
+     int part1a = m2 + np1*np1 + part1a_inner;
+     
+     int part1b_inner = MAX(MAX(m1*n, 3*np2+m1), 5*np2);
+     int part1b = np2 + m1*m1 + part1b_inner;
+     
+     // Combine all max terms for part 1
+     int part1c = MAX(n*m2, MAX(np2*n, np2*m2));
+     int part1 = MAX(MAX(MAX(part1a, part1b), part1c), 1);
+     
+     // Part 2 calculation
+     int part2 = n*(14*n+12+m2+np2) + 5;
+     
+     // Final ldwork calculation
+     ldwork = base_size + MAX(part1, part2);
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure

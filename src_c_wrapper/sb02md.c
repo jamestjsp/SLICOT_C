@@ -194,29 +194,14 @@
      CHECK_ALLOC(iwork);
      bwork = (int*)malloc((size_t)work_size_2n * sizeof(int)); // Use int for LOGICAL
      CHECK_ALLOC(bwork);
-
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     F77_FUNC(sb02md, SB02MD)(&dico_upper, &hinv_upper, &uplo_upper, &scal_upper, &sort_upper,
-                              &n, a_ptr, &lda_f, g_ptr, &ldg_f, q_ptr, &ldq_f,
-                              rcond, wr, wi,
-                              s_ptr, &lds_f, u_ptr, &ldu_f,
-                              iwork, &dwork_query, &ldwork,
-                              bwork, &info,
-                              dico_len, hinv_len, uplo_len, scal_len, sort_len);
-
-     if (info < 0 && info != -23) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-23 from query)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size
+     
+     // Calculate and use the minimum required workspace size based on DICO
      int min_ldwork = (dico_upper == 'C') ? MAX(2, 6 * n) : MAX(3, 6 * n);
-     ldwork = MAX(ldwork, min_ldwork);
-
+     ldwork = min_ldwork;
+     
+     // Allocate DWORK with the minimum required size
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
-
 
      /* --- Call the computational routine --- */
      F77_FUNC(sb02md, SB02MD)(&dico_upper, &hinv_upper, &uplo_upper, &scal_upper, &sort_upper,

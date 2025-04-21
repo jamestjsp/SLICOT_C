@@ -196,29 +196,16 @@
      iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
      CHECK_ALLOC(iwork);
 
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     int nr_dummy; // Dummy output for query
-     F77_FUNC(tb04ad, TB04AD)(&rowcol_upper, &n, &m, &p,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
-                              &nr_dummy, index, dcoeff_ptr, &lddcoe_f, ucoeff_ptr, &lduco1_f, &lduco2_f,
-                              &tol1, &tol2, iwork, &dwork_query, &ldwork, &info,
-                              rowcol_len);
-
-     if (info < 0 && info != -24) { info = info; goto cleanup; } // Query failed due to invalid argument
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size
-     int min_ldwork_mp = (rowcol_upper == 'R') ? m : p;
-     int min_ldwork_pm = (rowcol_upper == 'R') ? p : m;
-     int term1 = n * (n + 1);
-     int term2 = n * min_ldwork_mp + 2 * n + MAX(n, min_ldwork_mp);
-     int term3 = 3 * min_ldwork_mp;
-     int term4 = min_ldwork_pm;
-     int min_ldwork = MAX(1, MAX(term1 + MAX(term2, term3), term4));
-     ldwork = MAX(ldwork, min_ldwork);
+     // Calculate DWORK size directly using the formula
+     int mp = (rowcol_upper == 'R') ? m : p;
+     int pm = (rowcol_upper == 'R') ? p : m;
+     
+     int inner_term1 = n * mp + 2 * n + MAX(n, mp);
+     int inner_term2 = 3 * mp;
+     int inner_term3 = pm;
+     
+     // LDWORK >= MAX(1, N*(N + 1) + MAX(N*MP + 2*N + MAX(N,MP), 3*MP, PM))
+     ldwork = MAX(1, n * (n + 1) + MAX(MAX(inner_term1, inner_term2), inner_term3));
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure

@@ -186,19 +186,22 @@
 
      /* --- Workspace Allocation --- */
 
-     // Perform workspace query for DWORK
+     // Perform workspace query with small temporary array
+     double dwork_temp[2]; // Small array to receive query result
      ldwork = -1; // Query mode
+     
      F77_FUNC(sg03bd, SG03BD)(&dico_upper, &fact_upper, &trans_upper, &n, &m,
                               a_ptr, &lda_f, e_ptr, &lde_f, q_ptr, &ldq_f, z_ptr, &ldz_f, b_ptr, &ldb_f,
                               scale, alphar, alphai, beta,
-                              &dwork_query, &ldwork, &info,
+                              dwork_temp, &ldwork, &info,
                               dico_len, fact_len, trans_len);
 
-     if (info < 0 && info != -21) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-21)
+     if (info < 0 && info != -21) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-21 from query)
      info = 0; // Reset info after query
 
      // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
+     ldwork = (int)dwork_temp[0]; // First element contains optimal ldwork
+     
      // Check against minimum documented size
      int min_ldwork = (fact_upper == 'N') ? MAX(1, MAX(4*n, 6*n-6)) : MAX(1, MAX(2*n, 6*n-6));
      ldwork = MAX(ldwork, min_ldwork);

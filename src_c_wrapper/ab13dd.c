@@ -69,8 +69,6 @@
      int info = 0;
      int ldwork = -1; /* Use -1 for workspace query */
      int lcwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
-     slicot_complex_double cwork_query;
      double* dwork = NULL;
      slicot_complex_double* cwork = NULL;
      int* iwork = NULL;
@@ -136,42 +134,86 @@
      iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
      CHECK_ALLOC(iwork);
 
-     // Query DWORK and CWORK sizes
-     ldwork = -1; // Query mode
-     lcwork = -1; // Query mode
-     // Use dummy LDs for query if dimensions are 0
-     int lda_q = row_major ? MAX(1, n) : lda;
-     int lde_q = row_major ? MAX(1, n) : lde;
-     int ldb_q = row_major ? MAX(1, n) : ldb;
-     int ldc_q = row_major ? MAX(1, p) : ldc;
-     int ldd_q = row_major ? MAX(1, p) : ldd;
+     // Calculate workspace sizes directly using the formula from documentation
+     // instead of using workspace query which is not supported
+     int min_p_m = MIN(p, m);
+     int max_p_m = MAX(p, m);
+     int d_ws = 6 * min_p_m;
+     int c_ws = MAX(4 * min_p_m + max_p_m, d_ws);
+     int r = 0, K = 0, b_ws = 0, e_ws = 0, w = 0;
 
-     F77_FUNC(ab13dd, AB13DD)(&dico_upper, &jobe_upper, &equil_upper, &jobd_upper,
-                              &n, &m, &p, fpeak,
-                              NULL, &lda_q, NULL, &lde_q, NULL, &ldb_q, // NULL const arrays
-                              NULL, &ldc_q, NULL, &ldd_q,
-                              gpeak, &tol, iwork,
-                              &dwork_query, &ldwork, // Pass address for query result
-                              &cwork_query, &lcwork, // Pass address for query result
-                              &info,
-                              dico_len, jobe_len, equil_len, jobd_len);
+     if (min_p_m == 0) {
+         ldwork = 1;
+     } else if (n == 0 || (ldb == 0 && ldc == 0)) {
+         if (jobd_upper == 'D') {
+             ldwork = p * m + c_ws;
+         } else {
+             ldwork = 1;
+         }
+     } else {
+         if (dico_upper == 'D') {
+             b_ws = 0;
+             e_ws = d_ws;
+         } else {
+             b_ws = n * (n + m);
+             e_ws = c_ws;
+             if (jobd_upper == 'Z') {
+                 b_ws = b_ws + p * m;
+             }
+         }
 
-     if (info < 0) { goto cleanup; } // Query failed due to invalid argument
-     info = 0; // Reset info after query
+         if (jobd_upper == 'D') {
+             r = p * m;
+             if (jobe_upper == 'I' && dico_upper == 'C' && n > 0) {
+                 K = p * p + m * m;
+                 r = r + n * (p + m);
+             } else {
+                 K = 0;
+             }
+             K = K + r + c_ws;
+             r = r + min_p_m;
+         } else {
+             r = 0;
+             K = 0;
+         }
 
-     // Get the required workspace sizes from query results
-     ldwork = (int)dwork_query;
-     lcwork = (int)SLICOT_COMPLEX_REAL(cwork_query); // Use macro to get real part
+         r = r + n * (n + p + m);
+         if (jobe_upper == 'G') {
+             r = r + n * n;
+             if (equil_upper == 'S') {
+                 K = MAX(K, r + 9 * n);
+             }
+             K = MAX(K, r + 4 * n + MAX(m, MAX(2 * n * n, n + b_ws + e_ws)));
+         } else {
+             K = MAX(K, r + n + MAX(m, MAX(p, MAX(n * n + 2 * n, 3 * n + b_ws + e_ws))));
+         }
 
-     // Check against minimum documented sizes
-     int min_ldwork = 1; // Placeholder - formula is very complex
-     int min_lcwork = 1;
-     if (n > 0 && m > 0 && p > 0) { // Basic check if system non-trivial
-         min_lcwork = MAX(1, (n + m) * (n + p) + 2 * MIN(p, m) + MAX(p, m));
+         w = 0;
+         if (jobe_upper == 'I' && dico_upper == 'C') {
+             w = r + 4 * n * n + 11 * n;
+             if (jobd_upper == 'D') {
+                 w = w + MAX(m, p) + n * (p + m);
+             }
+         }
+
+         if (jobe_upper != 'I' || dico_upper == 'D' || jobd_upper == 'D') {
+             w = MAX(w, r + 6 * n + (2 * n + p + m) * (2 * n + p + m) + 
+                     MAX(2 * (n + p + m), 8 * n * n + 16 * n));
+         }
+
+         ldwork = MAX(1, MAX(K, MAX(w, r + 2 * n + e_ws)));
      }
-     // Add complex formula check for min_ldwork if needed, or rely on query
-     ldwork = MAX(ldwork, min_ldwork);
-     lcwork = MAX(lcwork, min_lcwork);
+
+     // Use the upper bound formula for robust allocation
+     ldwork = MAX(ldwork, 15 * n * n + p * p + m * m + (6 * n + 3) * (p + m) + 
+                          4 * p * m + n * m + 22 * n + 7 * min_p_m);
+
+     // Calculate LCWORK size
+     if (n == 0 || ldb == 0 || ldc == 0) {
+         lcwork = 1;
+     } else {
+         lcwork = MAX(1, (n + m) * (n + p) + 2 * min_p_m + max_p_m);
+     }
 
      // Allocate workspaces
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));

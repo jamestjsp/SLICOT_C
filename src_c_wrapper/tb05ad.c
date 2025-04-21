@@ -181,56 +181,35 @@
      iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
      CHECK_ALLOC(iwork);
 
-     // Perform workspace queries for DWORK and ZWORK
-     ldwork = -1;
-     lzwork = -1;
-     slicot_complex_double freq_f = freq; // Assign C complex to standard complex type
-
-     F77_FUNC(tb05ad, TB05AD)(&baleig_upper, &inita_upper, &n, &m, &p, &freq_f,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, rcond,
-                              g_ptr, &ldg_f, evre, evim, hinvb_ptr, &ldhinv_f,
-                              iwork, &dwork_query, &ldwork, &zwork_query, &lzwork, &info,
-                              baleig_len, inita_len);
-
-     if (info < 0 && info != -22 && info != -24) { info = info; goto cleanup; } // Query failed
-     info = 0; // Reset info after query
-
-     // Get required sizes from query results
-     ldwork = (int)dwork_query;
-     // Use the real part of the complex query variable for LZWORK size.
-     lzwork_calc = (int)creal(zwork_query);
-
-     // Check DWORK minimum size based on documentation
-     int min_ldwork = 1;
+     // Calculate DWORK size directly using the formula
      if (inita_upper == 'G') {
          if (baleig_upper == 'N' || baleig_upper == 'B' || baleig_upper == 'E') {
-             min_ldwork = MAX(1, n - 1 + MAX(n, MAX(m, p)));
-         } else { // 'C' or 'A'
-             min_ldwork = MAX(1, n + MAX(n, MAX(m - 1, p - 1)));
+             ldwork = MAX(1, n - 1 + MAX(n, MAX(m, p)));
+         } else { // baleig_upper == 'C' || baleig_upper == 'A'
+             ldwork = MAX(1, n + MAX(n, MAX(m - 1, p - 1)));
          }
-     } else { // 'H'
+     } else { // inita_upper == 'H'
          if (baleig_upper == 'C' || baleig_upper == 'A') {
-             min_ldwork = MAX(1, 2 * n);
-         } // else min is 1
+             ldwork = MAX(1, 2 * n);
+         } else {
+             ldwork = 1;
+         }
      }
-     ldwork = MAX(ldwork, min_ldwork);
 
-     // Check ZWORK minimum size based on documentation
-     int min_lzwork = 1;
+     // Calculate ZWORK size directly using the formula
      if (baleig_upper == 'C' || baleig_upper == 'A') {
-         min_lzwork = MAX(1, n * n + 2 * n);
+         lzwork = MAX(1, n * n + 2 * n);
      } else {
-         min_lzwork = MAX(1, n * n);
+         lzwork = MAX(1, n * n);
      }
-     // Use the larger of the query result and the documented minimum
-     lzwork = MAX(lzwork_calc, min_lzwork);
-
 
      // Allocate DWORK and ZWORK
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork);
      zwork = (slicot_complex_double*)malloc((size_t)lzwork * sizeof(slicot_complex_double));
      CHECK_ALLOC(zwork);
+     
+     slicot_complex_double freq_f = freq; // Assign C complex to standard complex type
 
      /* --- Call the computational routine --- */
      F77_FUNC(tb05ad, TB05AD)(&baleig_upper, &inita_upper, &n, &m, &p, &freq_f,

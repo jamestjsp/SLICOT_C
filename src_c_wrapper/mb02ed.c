@@ -46,8 +46,6 @@ int slicot_mb02ed(char typet, int k, int n, int nrhs,
 {
     /* Local variables */
     int info = 0;
-    int ldwork = -1; /* Use -1 for workspace query */
-    double dwork_query;
     double* dwork = NULL;
     const int typet_len = 1;
 
@@ -107,27 +105,10 @@ int slicot_mb02ed(char typet, int k, int n, int nrhs,
 
     /* --- Workspace Allocation --- */
 
-    // Allocate DWORK based on query
-    ldwork = -1; // Query mode
-    // Use dummy LDs for query if dimensions are 0
-    int ldt_q = row_major ? MAX(1, t_c_rows) : ldt;
-    int ldb_q = row_major ? MAX(1, b_c_rows) : ldb;
+    // Calculate the minimum required workspace size as per documentation
+    int ldwork = MAX(1, n * k * k + (n + 2) * k);
 
-    F77_FUNC(mb02ed, MB02ED)(&typet_upper, &k, &n, &nrhs,
-                             NULL, &ldt_q, NULL, &ldb_q, // NULL arrays for query
-                             &dwork_query, &ldwork, &info,
-                             typet_len);
-
-    // Allow INFO = -10 from query (indicates LDWORK too small, returns minimum)
-    if (info < 0 && info != -10) { goto cleanup; }
-    info = 0; // Reset info after query
-
-    // Get the required dwork size from query result
-    ldwork = (int)dwork_query;
-    // Check against minimum documented size: MAX(1, N*K*K + (N+2)*K)
-    int min_ldwork = MAX(1, n * k * k + (n + 2) * k);
-    ldwork = MAX(ldwork, min_ldwork);
-
+    // Allocate workspace
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
 

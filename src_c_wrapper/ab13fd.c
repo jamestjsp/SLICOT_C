@@ -46,10 +46,6 @@ int slicot_ab13fd(int n, const double* a, int lda,
 {
     /* Local variables */
     int info = 0;
-    int ldwork = -1; /* Use -1 for workspace query */
-    int lcwork = -1; /* Use -1 for workspace query */
-    double dwork_query;
-    slicot_complex_double cwork_query;
     double* dwork = NULL;
     slicot_complex_double* cwork = NULL;
 
@@ -81,30 +77,9 @@ int slicot_ab13fd(int n, const double* a, int lda,
 
     /* --- Workspace Allocation --- */
 
-    // Query DWORK and CWORK sizes
-    ldwork = -1; // Query mode
-    lcwork = -1; // Query mode
-    // Use dummy LDs for query if dimensions are 0
-    int lda_q = row_major ? MAX(1, n) : lda;
-
-    F77_FUNC(ab13fd, AB13FD)(&n,
-                             NULL, &lda_q,          // NULL array for query
-                             beta, omega, &tol,
-                             &dwork_query, &ldwork,
-                             &cwork_query, &lcwork, &info);
-
-    if (info < 0) { goto cleanup; } // Query failed due to invalid argument
-    info = 0; // Reset info after query
-
-    // Get the required workspace sizes from query results
-    ldwork = (int)dwork_query;
-    lcwork = (int)SLICOT_COMPLEX_REAL(cwork_query); // Use macro to get real part
-
-    // Check against minimum documented sizes
-    int min_ldwork = MAX(1, 3 * n * (n + 2));
-    int min_lcwork = MAX(1, n * (n + 3));
-    ldwork = MAX(ldwork, min_ldwork);
-    lcwork = MAX(lcwork, min_lcwork);
+    // Calculate the minimum required workspace sizes as per documentation
+    int ldwork = MAX(1, 3 * n * (n + 2));
+    int lcwork = MAX(1, n * (n + 3));
 
     // Allocate workspaces
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));

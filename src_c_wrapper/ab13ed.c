@@ -43,8 +43,6 @@
  {
      /* Local variables */
      int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
      double* dwork = NULL;
 
      /* Pointers for column-major copies if needed */
@@ -75,24 +73,8 @@
 
      /* --- Workspace Allocation --- */
 
-     // Allocate DWORK based on query
-     ldwork = -1; // Query mode
-     // Use dummy LDs for query if dimensions are 0
-     int lda_q = row_major ? MAX(1, n) : lda;
-
-     F77_FUNC(ab13ed, AB13ED)(&n,
-                              NULL, &lda_q,          // NULL array for query
-                              low, high, &tol,
-                              &dwork_query, &ldwork, &info);
-
-     if (info < 0) { goto cleanup; } // Query failed due to invalid argument
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX(1, 3*N*(N+1))
-     int min_ldwork = MAX(1, 3 * n * (n + 1));
-     ldwork = MAX(ldwork, min_ldwork);
+     // Calculate the minimum required workspace size: MAX(1, 3*N*(N+1))
+     int ldwork = MAX(1, 3 * n * (n + 1));
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure

@@ -296,30 +296,12 @@
      bwork = (int*)malloc((size_t)bwork_size * sizeof(int)); // Use int for LOGICAL
      CHECK_ALLOC(bwork);
 
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     F77_FUNC(sg02ad, SG02AD)(&dico_upper, &jobb_upper, &fact_upper, &uplo_upper, &jobl_upper, &scal_upper, &sort_upper, &acc_upper,
-                              &n, &m, &p,
-                              a_ptr, &lda_f, e_ptr, &lde_f, b_ptr, &ldb_f, q_ptr, &ldq_f,
-                              r_ptr, &ldr_f, l_ptr, &ldl_f,
-                              rcondu, x_ptr, &ldx_f, alfar, alfai, beta,
-                              s_ptr, &lds_f, t_ptr, &ldt_f, u_ptr, &ldu_f,
-                              &tol, iwork, &dwork_query, &ldwork, bwork, iwarn, &info,
-                              dico_len, jobb_len, fact_len, uplo_len, jobl_len, scal_len, sort_len, acc_len);
-
-     if (info < 0 && info != -39) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-39)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size
-     int min_ldwork = 1;
+     // Calculate workspace size directly using the formula
      if (jobb_upper == 'G') {
-         min_ldwork = MAX(7 * (2 * n + 1) + 16, 16 * n);
+         ldwork = MAX(7 * (2 * n + 1) + 16, 16 * n);
      } else { // JOBB = 'B'
-         min_ldwork = MAX(7 * (2 * n + 1) + 16, MAX(16 * n, MAX(2 * n + m, 3 * m)));
+         ldwork = MAX(7 * (2 * n + 1) + 16, MAX(16 * n, MAX(2 * n + m, 3 * m)));
      }
-     ldwork = MAX(ldwork, min_ldwork);
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure

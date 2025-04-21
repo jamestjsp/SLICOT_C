@@ -236,24 +236,35 @@
      bwork = (int*)malloc((size_t)lbwork * sizeof(int)); // Use int for LOGICAL
      CHECK_ALLOC(bwork);
 
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     F77_FUNC(sb10dd, SB10DD)(&n, &m, &np, &ncon, &nmeas, &gamma,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
-                              ak_ptr, &ldak_f, bk_ptr, &ldbk_f, ck_ptr, &ldck_f, dk_ptr, &lddk_f,
-                              x_ptr, &ldx_f, z_ptr, &ldz_f, rcond, &tol,
-                              iwork, &dwork_query, &ldwork, bwork, &info);
-
-
-     if (info < 0 && info != -30) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-30 from query)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size (complex formula, rely on query + basic checks)
-     int min_ldwork = 1;
-     // Add basic checks based on components if needed, e.g., MAX(..., 16*n, ...)
-     ldwork = MAX(ldwork, min_ldwork);
+     // Calculate required DWORK size directly based on formula
+     // LW1 calculation
+     int lw1 = (n + np1 + 1) * (n + m2) + 
+               MAX(3 * (n + m2) + n + np1, 5 * (n + m2));
+     
+     // LW2 calculation
+     int lw2 = (n + np2) * (n + m1 + 1) + 
+               MAX(3 * (n + np2) + n + m1, 5 * (n + np2));
+     
+     // LW3 calculation
+     int lw3_temp1 = 14 * n + 23;
+     int lw3_temp2 = 16 * n;
+     int lw3_temp3 = 2 * n + m;
+     int lw3_temp4 = 3 * m;
+     int lw3 = 13 * n * n + 2 * m * m + n * (8 * m + np2) + 
+               m1 * (m2 + np2) + 6 * n +
+               MAX(MAX(MAX(lw3_temp1, lw3_temp2), lw3_temp3), lw3_temp4);
+     
+     // LW4 calculation
+     int lw4_temp1 = 14 * n + 23;
+     int lw4_temp2 = 16 * n;
+     int lw4_temp3 = 2 * n + m2 + np2;
+     int lw4_temp4 = 3 * (m2 + np2);
+     int lw4 = 13 * n * n + m * m + (8 * n + m + m2 + 2 * np2) * (m2 + np2) + 
+               6 * n + n * (m + np2) +
+               MAX(MAX(MAX(lw4_temp1, lw4_temp2), lw4_temp3), lw4_temp4);
+     
+     // Final LDWORK calculation - max of all components
+     ldwork = MAX(MAX(lw1, lw2), MAX(lw3, lw4));
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure

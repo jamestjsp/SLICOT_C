@@ -61,8 +61,6 @@
  {
      /* Local variables */
      int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
      double* dwork = NULL;
      // No iwork needed for this routine
      const int dico_len = 1;
@@ -155,27 +153,13 @@
 
      /* --- Workspace allocation --- */
 
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     F77_FUNC(sb01bd, SB01BD)(&dico_upper, &n, &m, &np, &alpha,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, // Use potentially copied A, B
-                              wr, wi, nfp, nap, nup,
-                              f_ptr, &ldf_f, z_ptr, &ldz_f, // Use potentially copied F, Z
-                              &tol, &dwork_query, &ldwork, iwarn, &info,
-                              dico_len);
+     // Calculate the minimum required workspace size as per documentation
+     int ldwork = 1;
+     ldwork = MAX(ldwork, 5 * m);
+     ldwork = MAX(ldwork, 5 * n);
+     ldwork = MAX(ldwork, 2 * n + 4 * m);
 
-     if (info < 0 && info != -21) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-21 from query)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX( 1,5*M,5*N,2*N+4*M )
-     int min_ldwork = 1;
-     min_ldwork = MAX(min_ldwork, 5 * m);
-     min_ldwork = MAX(min_ldwork, 5 * n);
-     min_ldwork = MAX(min_ldwork, 2 * n + 4 * m);
-     ldwork = MAX(ldwork, min_ldwork);
-
+     // Allocate the workspace
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
 

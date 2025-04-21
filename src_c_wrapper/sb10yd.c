@@ -57,7 +57,6 @@
      int info = 0;
      int ldwork = -1; /* Use -1 for workspace query */
      int lzwork = -1; /* Use -1 for workspace query */
-     double dwork_query[2]; // DWORK(1)=opt LDWORK, DWORK(2)=opt LZWORK
      double* dwork = NULL;
      slicot_complex_double* zwork = NULL;
      int* iwork = NULL;
@@ -119,45 +118,36 @@
      iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
      CHECK_ALLOC(iwork);
 
-     // Query DWORK and ZWORK sizes
-     ldwork = -1; // Query mode
-     lzwork = -1; // Query mode
-     F77_FUNC(sb10yd, SB10YD)(&discfl, &flag, &lendat, rfrdat, ifrdat, omega,
-                              &n_in, /* Use n_in for query */
-                              a_ptr, &lda_f, /* Use potentially temp A */
-                              b, c, d, &tol,
-                              iwork, dwork_query, &ldwork,
-                              NULL, &lzwork, &info); // Pass NULL for zwork in query
-
-     if (info < 0 && info != -18 && info != -20) { goto cleanup; } // Query failed due to invalid argument (allow workspace query errors)
-     info = 0; // Reset info after query
-
-     // Get the required workspace sizes from query results
-     ldwork = (int)dwork_query[0];
-     // Fortran often returns LZWORK optimal size in DWORK(2) from query
-     // Let's use that if available, otherwise fall back to calculation.
-     lzwork = (dwork_query[1] > 0) ? (int)dwork_query[1] : -1;
-
-     // Check against minimum documented sizes
-     int min_ldwork = 2;
+     // Calculate workspace sizes directly using the formulas
+     // LDWORK calculation
      int hnpts = 2048; // As per docs
      int lw1 = 2 * lendat + 4 * hnpts;
      int lw2 = lendat + 6 * hnpts;
+     
      int mn = MIN(2 * lendat, 2 * n_in + 1);
      int lw3 = 0;
-     if (n_in > 0) lw3 = 2*lendat*(2*n_in+1) + MAX(2*lendat, 2*n_in+1) + MAX(mn + 6*n_in + 4, 2*mn + 1);
-     else          lw3 = 4*lendat + 5;
-     int lw4 = 0;
-     if (flag == 1) lw4 = MAX(n_in*n_in + 5*n_in, 6*n_in + 1 + MIN(1, n_in));
-
-     min_ldwork = MAX(min_ldwork, MAX(lw1, MAX(lw2, MAX(lw3, lw4))));
-     ldwork = MAX(ldwork, min_ldwork);
-
-     int min_lzwork = (n_in > 0) ? MAX(1, lendat * (2 * n_in + 3)) : MAX(1, lendat);
-     if (lzwork < 0) { // If query didn't provide lzwork size
-         lzwork = min_lzwork;
+     if (n_in > 0) {
+         lw3 = 2 * lendat * (2 * n_in + 1) + 
+               MAX(2 * lendat, 2 * n_in + 1) + 
+               MAX(mn + 6 * n_in + 4, 2 * mn + 1);
      } else {
-         lzwork = MAX(lzwork, min_lzwork);
+         lw3 = 4 * lendat + 5;
+     }
+     
+     int lw4 = 0;
+     if (flag == 1) {
+         lw4 = MAX(n_in * n_in + 5 * n_in, 6 * n_in + 1 + MIN(1, n_in));
+     }
+     
+     ldwork = MAX(2, MAX(lw1, MAX(lw2, MAX(lw3, lw4))));
+     // Double for better performance as suggested
+     ldwork = 2 * ldwork;
+     
+     // LZWORK calculation
+     if (n_in > 0) {
+         lzwork = lendat * (2 * n_in + 3);
+     } else {
+         lzwork = lendat;
      }
 
      // Allocate workspaces

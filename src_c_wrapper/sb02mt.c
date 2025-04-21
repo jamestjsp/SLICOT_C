@@ -205,13 +205,14 @@
          iwork = NULL; // Not referenced
      }
 
-     // Allocate DWORK based on query
+     // Perform workspace query with small dwork array
+     double dwork_temp[2]; // Small array to receive query result
      ldwork = -1; // Query mode
      F77_FUNC(sb02mt, SB02MT)(&jobg_upper, &jobl_upper, &fact_upper, &uplo_upper,
                               &n, &m, a_ptr, &lda_f, b_ptr, &ldb_f, q_ptr, &ldq_f,
                               r_ptr, &ldr_f, l_ptr, &ldl_f,
                               ipiv, oufact, g_ptr, &ldg_f,
-                              iwork, &dwork_query, &ldwork,
+                              iwork, dwork_temp, &ldwork,
                               &info,
                               jobg_len, jobl_len, fact_len, uplo_len);
 
@@ -219,7 +220,7 @@
      info = 0; // Reset info after query
 
      // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
+     ldwork = (int)dwork_temp[0]; // First element contains optimal ldwork
      // Check against minimum documented size
      int min_ldwork = 1;
      if (fact_upper == 'N' && (jobg_upper == 'G' || jobl_upper == 'N')) {

@@ -56,9 +56,8 @@
  {
      /* Local variables */
      int info = 0; // Local info code
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
      double* dwork = NULL;
+     int ldwork = 0; // Workspace size
      const int dico_len = 1, jobn_len = 1;
      double norm_value = 0.0; // Function return value
 
@@ -108,34 +107,14 @@
 
      /* --- Workspace Allocation --- */
 
-     // Allocate DWORK based on query
-     ldwork = -1; // Query mode
-     // Use dummy LDs for query if dimensions are 0
-     int lda_q = row_major ? MAX(1, n) : lda;
-     int ldb_q = row_major ? MAX(1, n) : ldb;
-     int ldc_q = row_major ? MAX(1, p) : ldc;
-     int ldd_q = row_major ? MAX(1, p) : ldd;
-
-     // Call function just for query - result is irrelevant here
-     (void) F77_FUNC(ab13bd, AB13BD)(&dico_upper, &jobn_upper, &n, &m, &p,
-                                     NULL, &lda_q, NULL, &ldb_q, NULL, &ldc_q, NULL, &ldd_q, // NULL arrays
-                                     nq, &tol, &dwork_query, &ldwork,
-                                     iwarn, &info,
-                                     dico_len, jobn_len);
-
-     if (info < 0) { goto cleanup; } // Query failed due to invalid argument
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size:
+     // Calculate the minimum documented workspace size:
      // MAX( 1, M*(N+M) + MAX( N*(N+5), M*(M+2), 4*P ), N*( MAX( N, P ) + 4 ) + MIN( N, P ) )
      int min_ldwork = 1;
      int term1 = m * (n + m);
      int term2 = MAX(n * (n + 5), MAX(m * (m + 2), 4 * p));
+     int term1_plus_term2 = term1 + term2;
      int term3 = n * (MAX(n, p) + 4) + MIN(n, p);
-     min_ldwork = MAX(min_ldwork, MAX(term1 + term2, term3));
-     ldwork = MAX(ldwork, min_ldwork);
+     ldwork = MAX(min_ldwork, MAX(term1_plus_term2, term3));
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure

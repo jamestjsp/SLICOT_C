@@ -148,23 +148,9 @@
 
      /* --- Workspace Allocation --- */
 
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     F77_FUNC(tb01pd, TB01PD)(&job_upper, &equil_upper, &n, &m, &p,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, nr, &tol,
-                              iwork, &dwork_query, &ldwork, &info,
-                              job_len, equil_len);
-
-     if (info < 0 && info != -16) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-16)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX(1, N + MAX(N, 3*M, 3*P))
-     int min_ldwork = 1;
-     // Properly nest MAX for 3 arguments
-     min_ldwork = MAX(min_ldwork, n + MAX(n, MAX(3 * m, 3 * p)));
-     ldwork = MAX(ldwork, min_ldwork);
+     // Calculate DWORK size directly using the formula
+     int max_n_3m_3p = MAX(n, MAX(3 * m, 3 * p));
+     ldwork = MAX(1, n + max_n_3m_3p);
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure

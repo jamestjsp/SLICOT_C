@@ -226,25 +226,10 @@
      iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
      CHECK_ALLOC(iwork);
 
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     int nr_dummy; // Dummy output for query
-     F77_FUNC(tb03ad, TB03AD)(&leri_upper, &equil_upper, &n, &m, &p,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
-                              &nr_dummy, index, pcoeff_ptr, &ldpco1_f, &ldpco2_f,
-                              qcoeff_ptr, &ldqco1_f, &ldqco2_f, vcoeff_ptr, &ldvco1_f, &ldvco2_f,
-                              &tol, iwork, &dwork_query, &ldwork, &info,
-                              leri_len, equil_len);
-
-     if (info < 0 && info != -28) { info = info; goto cleanup; } // Query failed due to invalid argument
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size
-     int min_ldwork_pm = (leri_upper == 'L') ? p : m;
-     int min_ldwork = MAX(1, MAX(n + MAX(n, MAX(3*m, 3*p)), min_ldwork_pm * (min_ldwork_pm + 2)));
-     ldwork = MAX(ldwork, min_ldwork);
+     // Calculate DWORK size directly using the formula
+     int pm = (leri_upper == 'L') ? p : m;
+     int max_n_3m_3p = MAX(n, MAX(3 * m, 3 * p));
+     ldwork = MAX(1, MAX(n + max_n_3m_3p, pm * (pm + 2)));
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
      CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
