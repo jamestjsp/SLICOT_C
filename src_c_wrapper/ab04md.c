@@ -56,8 +56,7 @@ int slicot_ab04md(char type, int n, int m, int p,
 {
     /* Local variables */
     int info = 0;
-    int ldwork = -1;  /* Start with workspace query */
-    double dwork_query;
+    int ldwork = 0;
     double* dwork = NULL;
     int* iwork = NULL;
     int type_len = 1;  // Fortran expects 1-based length for strings
@@ -114,24 +113,13 @@ int slicot_ab04md(char type, int n, int m, int p,
     iwork = (int*)malloc((size_t)n * sizeof(int));
     CHECK_ALLOC(iwork);
 
-    // Perform workspace query
-    ldwork = -1; // Query mode
-    F77_FUNC(ab04md, AB04MD)(&type_upper, &n, &m, &p, &alpha, &beta,
-                            a, &lda, b, &ldb, c, &ldc, d, &ldd,
-                            iwork, &dwork_query, &ldwork, &info,
-                            type_len);
+    // Define optimal blocksize for better performance
+    const int nb = 64;  // A common blocksize that works well on most systems
+    
+    // Use optimal workspace size as recommended in documentation
+    ldwork = MAX(1, n * nb);
 
-    if (info != 0) {
-        // Query failed, use documented minimum size
-        ldwork = MAX(1, n);
-    } else {
-        // Get optimal workspace size from query
-        ldwork = (int)dwork_query;
-        // Ensure minimum size from documentation
-        ldwork = MAX(ldwork, MAX(1, n));
-    }
-
-    // Allocate DWORK with optimal/minimum size
+    // Allocate DWORK with optimal size
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
     CHECK_ALLOC(dwork);
 

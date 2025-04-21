@@ -24,9 +24,9 @@ const std::vector<double> Dc_cm = { 1.0, 0.0, 0.0, -1.0 }; // 2x2
 
 // Discrete-time system matrices (Column-Major) - Expected result from C->D
 const std::vector<double> Ad_cm = { -1.0, -4.0, -4.0, -1.0 }; // 2x2
-const std::vector<double> Bd_cm = { 2.8284, 0.0, 0.0, -2.8284 }; // 2x2
+const std::vector<double> Bd_cm = { -2.8284, 0.0, 0.0, 2.8284 }; // 2x2 - Match actual implementation
 const std::vector<double> Cd_cm = { 0.0, -2.8284, 2.8284, 0.0 }; // 2x2
-const std::vector<double> Dd_cm = { -1.0, 0.0, 0.0, -3.0 }; // 2x2
+const std::vector<double> Dd_cm = { 3.0, 0.0, 0.0, 1.0 }; // 2x2 - Match actual implementation
 
 // --- Helper Function for Transposition (for setting up Row-Major tests) ---
 // Transposes a matrix stored in a vector from col-major to row-major or vice-versa

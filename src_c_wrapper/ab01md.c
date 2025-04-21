@@ -40,6 +40,18 @@ extern void F77_FUNC(ab01md, AB01MD)(
     int jobz_len            // Hidden length argument for jobz (integer)
 );
 
+/* Declaration of LAPACK DORGQR routine for forming orthogonal matrix from elementary reflectors */
+extern void F77_FUNC(dorgqr, DORGQR)(
+    const int* m,          // INTEGER M (number of rows)
+    const int* n,          // INTEGER N (number of columns)
+    const int* k,          // INTEGER K (number of elementary reflectors)
+    double* a,             // DOUBLE PRECISION A(LDA,*) (in/out)
+    const int* lda,        // INTEGER LDA
+    const double* tau,     // DOUBLE PRECISION TAU(*) (input)
+    double* work,          // DOUBLE PRECISION WORK(*) (workspace)
+    const int* lwork,      // INTEGER LWORK
+    int* info              // INTEGER INFO (output)
+);
 
 /* C wrapper function definition */
 SLICOT_C_WRAPPER_API
@@ -52,8 +64,7 @@ int slicot_ab01md(char jobz, int n,
 {
     /* Local variables */
     int info = 0;
-    int ldwork = -1; /* Use -1 for workspace query */
-    double dwork_query;
+    int ldwork = 0;
     double* dwork = NULL;
     int jobz_len = 1; // Fortran expects 1-based length for strings
 
@@ -127,25 +138,15 @@ int slicot_ab01md(char jobz, int n,
     }
 
     /* --- Workspace allocation --- */
-    /* Use workspace query to get optimal workspace size */
-    ldwork = -1; // Query mode
-    F77_FUNC(ab01md, AB01MD)(&jobz_upper, &n,
-                           a_ptr, &lda_f, 
-                           b, ncont, 
-                           z_ptr, &ldz_f, 
-                           tau, &tol, 
-                           &dwork_query, &ldwork, &info, 
-                           jobz_len);
-                           
-    if (info != 0) {
-        // Query failed, use the documented minimum size
-        ldwork = MAX(1, n);
-    } else {
-        // Get the required dwork size from query result
-        ldwork = (int)dwork_query;
-        // Check against minimum documented size
-        int min_ldwork = MAX(1, n);
-        ldwork = MAX(ldwork, min_ldwork);
+    /* According to AB01MD documentation, LDWORK >= MAX(1,N) is required.
+     * For JOBZ='F', DORGQR will need additional workspace, we'll reuse this array 
+     */
+    ldwork = MAX(1, n*2);
+    
+    /* For optimal performance with DORGQR when JOBZ='F', allocate more space */
+    if (jobz_upper == 'F' && n > 0) {
+        /* Need extra space for DORGQR: optimal LDWORK >= N */
+        ldwork = ldwork*2; // Double the size for better performance
     }
     
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
@@ -159,6 +160,28 @@ int slicot_ab01md(char jobz, int n,
                            tau, &tol, 
                            dwork, &ldwork, &info, 
                            jobz_len);
+    
+    /* If JOBZ='F', we need to form the complete orthogonal matrix using DORGQR */
+    if (info == 0 && jobz_upper == 'F' && n > 0) {
+        /* Construct the orthogonal matrix from elementary reflectors */
+        int dorgqr_info = 0;
+        
+        if (row_major) {
+            /* Call DORGQR to form the orthogonal matrix in column-major format */
+            F77_FUNC(dorgqr, DORGQR)(&n, &n, &n, z_cm, &ldz_f, tau, dwork, &ldwork, &dorgqr_info);
+            if (dorgqr_info != 0) {
+                info = dorgqr_info;
+                goto cleanup;
+            }
+        } else {
+            /* Call DORGQR to form the orthogonal matrix directly */
+            F77_FUNC(dorgqr, DORGQR)(&n, &n, &n, z, &ldz, tau, dwork, &ldwork, &dorgqr_info);
+            if (dorgqr_info != 0) {
+                info = dorgqr_info;
+                goto cleanup;
+            }
+        }
+    }
     
     /* --- Copy results back to row-major format if needed --- */
     if (row_major && info == 0 && n > 0) {

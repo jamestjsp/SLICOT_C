@@ -49,7 +49,6 @@
      /* Local variables */
      int info = 0;
      int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
      double* dwork = NULL;
      int* iwork = NULL;
      int iwork_size = 0;
@@ -94,7 +93,8 @@
      iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
      CHECK_ALLOC(iwork);
 
-     // Allocate DWORK based on query
+     // Allocate initial one-element array for workspace query
+     double dwork_query[1];
      ldwork = -1; // Query mode
 
      // Need temporary pointers for query if row_major, even though data isn't used yet
@@ -112,7 +112,7 @@
      // but since the query only depends on dimensions, querying with original
      // pointers and Fortran-style LDs should be okay.
      F77_FUNC(ab07nd, AB07ND)(&n, &m, a, &lda_q, b, &ldb_q, c, &ldc_q, d, &ldd_q,
-                              rcond, iwork, &dwork_query, &ldwork, &info);
+                              rcond, iwork, dwork_query, &ldwork, &info);
 
      if (info != 0 && info != (m + 1)) { // Allow INFO = M+1 during query (D singular)
          // Query failed for reasons other than numerical singularity warning
@@ -120,8 +120,8 @@
      }
      info = 0; // Reset info if it was M+1 from query
 
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
+     // Get the required dwork size from first element of dwork_query as per documentation
+     ldwork = (int)dwork_query[0];
      // Check against minimum documented size: MAX(1, 4*M)
      ldwork = MAX(ldwork, MAX(1, 4 * m));
 
