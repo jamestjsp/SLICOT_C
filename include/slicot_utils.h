@@ -229,8 +229,24 @@ void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, c
 SLICOT_C_WRAPPER_API
 void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size);
 
+
+/**
+ * @brief Transpose a matrix from Fortran (column-major) to C (row-major) order with custom leading dimensions.
+ *
+ * @param src Pointer to the source matrix (column-major).
+ * @param dest Pointer to the destination matrix (row-major).
+ * @param rows Number of rows to copy.
+ * @param cols Number of columns to copy.
+ * @param ld_src Leading dimension of the source matrix (number of rows).
+ * @param ld_dest Leading dimension of the destination matrix (number of columns).
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+SLICOT_C_WRAPPER_API
+void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols, 
+                                  int ld_src, int ld_dest, size_t elem_size);
  #ifdef __cplusplus
  }
  #endif
  
  #endif /* SLICOT_UTILS_H */
+ 

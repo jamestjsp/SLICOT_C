@@ -95,6 +95,51 @@ void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size
 }
 
 /**
+ * @brief Transpose a matrix from Fortran (column-major) to C (row-major) order with custom leading dimensions.
+ *
+ * Copies elements from the source (column-major) matrix to the destination
+ * (row-major) matrix, performing the necessary index transformation and respecting
+ * the provided leading dimensions.
+ *
+ * @param src Pointer to the source matrix (column-major).
+ * @param dest Pointer to the destination matrix (row-major).
+ * @param rows Number of rows to copy.
+ * @param cols Number of columns to copy.
+ * @param ld_src Leading dimension of the source matrix (number of rows).
+ * @param ld_dest Leading dimension of the destination matrix (number of columns).
+ * @param elem_size Size (in bytes) of a single matrix element.
+ */
+SLICOT_C_WRAPPER_API
+void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols, 
+                                   int ld_src, int ld_dest, size_t elem_size)
+{
+    // Use char pointers for byte-level arithmetic
+    const char *src_ptr = (const char *)src;
+    char *dest_ptr = (char *)dest;
+    int i, j; // Row and column indices
+
+    // Check for invalid inputs
+    if (!src || !dest || rows <= 0 || cols <= 0 || ld_src < rows || ld_dest < cols || elem_size <= 0)
+    {
+        return; // Or handle error appropriately
+    }
+
+    for (i = 0; i < rows; i++)
+    { // Iterate through rows
+        for (j = 0; j < cols; j++)
+        { // Iterate through columns
+            // Source index (column-major): element at [i][j] is at offset (i + j * ld_src)
+            size_t src_offset = (i + (size_t)j * ld_src) * elem_size;
+            // Destination index (row-major): element at [i][j] is at offset (i * ld_dest + j)
+            size_t dest_offset = ((size_t)i * ld_dest + j) * elem_size;
+
+            // Copy the element
+            memcpy(dest_ptr + dest_offset, src_ptr + src_offset, elem_size);
+        }
+    }
+}
+
+/**
  * @brief In-place transpose of a square matrix (assumes row-major indexing for swap).
  *
  * Transposes the matrix by swapping elements across the main diagonal.
