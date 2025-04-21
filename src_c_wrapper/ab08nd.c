@@ -83,29 +83,29 @@
      int min_ldb_f = MAX(1, n);
      int min_ldc_f = MAX(1, p);
      int min_ldd_f = MAX(1, p);
-     int min_ldaf_f = MAX(1, n + m); // From AB08ND docs
-     int min_ldbf_f = MAX(1, n + p); // From AB08ND docs
+     int min_ldaf_f = MAX(1, n + m); // Fortran routine requires LDAF >= N+M
+     int min_ldbf_f = MAX(1, n + p); // Fortran routine requires LDBF >= N+P
 
      if (row_major) {
-         // For row-major C, LDA is the number of columns
+         // For row-major C, LDA/LDB/LDC/LDD are the number of columns
          int min_lda_rm_cols = n;
          int min_ldb_rm_cols = m;
          int min_ldc_rm_cols = n;
          int min_ldd_rm_cols = m;
-         // LDAF/LDBF check depends on NU, done later
+         // LDAF/LDBF (number of columns) check depends on NU, done after Fortran call.
+         // However, the *values* passed for ldaf/ldbf must be >= Fortran's row requirements
+         // because the wrapper uses them as rows for internal arrays.
          if (n > 0 && lda < min_lda_rm_cols) { info = -6; goto cleanup; }
          if (n > 0 && ldb < min_ldb_rm_cols) { info = -8; goto cleanup; }
          if (p > 0 && ldc < min_ldc_rm_cols) { info = -10; goto cleanup; }
          if (p > 0 && ldd < min_ldd_rm_cols) { info = -12; goto cleanup; }
-         // Check LDAF/LDBF against minimum Fortran requirements (rows)
-         if (ldaf < min_ldaf_f) { info = -20; goto cleanup; }
-         if (ldbf < min_ldbf_f) { info = -22; goto cleanup; }
      } else {
-         // For column-major C, LDA is the number of rows (Fortran style)
+         // For column-major C, LDA/LDB/LDC/LDD are the number of rows (Fortran style)
          if (lda < min_lda_f) { info = -6; goto cleanup; }
          if (ldb < min_ldb_f) { info = -8; goto cleanup; }
          if (ldc < min_ldc_f) { info = -10; goto cleanup; }
          if (ldd < min_ldd_f) { info = -12; goto cleanup; }
+         // Check LDAF/LDBF against minimum Fortran requirements (rows)
          if (ldaf < min_ldaf_f) { info = -20; goto cleanup; }
          if (ldbf < min_ldbf_f) { info = -22; goto cleanup; }
      }
@@ -212,20 +212,22 @@
      /* Copy back results if row_major */
      if (row_major && info == 0) {
           int nu_val = *nu;
-          // Check target C array dimensions (ldaf/ldbf = #cols >= nu)
-          if (ldaf < nu_val) { info = -20; goto cleanup; } // Invalid LDAF for computed NU
-          if (ldbf < nu_val) { info = -22; goto cleanup; } // Invalid LDBF for computed NU
+          // Check if C caller allocated enough columns for the nu x nu result
+          if (ldaf < nu_val) { info = -20; goto cleanup; } // Invalid LDAF (cols) for computed NU
+          if (ldbf < nu_val) { info = -22; goto cleanup; } // Invalid LDBF (cols) for computed NU
 
           // Copy back AF and BF
           if (nu_val > 0) {
-              // Fortran AF is LDAF x NU, BF is LDBF x NU
-              size_t af_fort_rows = ldaf; size_t af_fort_cols = nu_val;
-              size_t bf_fort_rows = ldbf; size_t bf_fort_cols = nu_val;
-              if (af_fort_rows * af_fort_cols > 0) {
-                  slicot_transpose_to_c(af_cm, af, af_fort_rows, af_fort_cols, elem_size);
+              // Fortran AF is ldaf_f x nu_val, BF is ldbf_f x nu_val
+              // ldaf_f = C ldaf (rows allocated for af_cm)
+              // ldbf_f = C ldbf (rows allocated for bf_cm)
+              size_t af_src_rows = ldaf_f; size_t af_src_cols = nu_val;
+              size_t bf_src_rows = ldbf_f; size_t bf_src_cols = nu_val;
+              if (af_src_rows * af_src_cols > 0) {
+                  slicot_transpose_to_c(af_cm, af, af_src_rows, af_src_cols, elem_size);
               }
-              if (bf_fort_rows * bf_fort_cols > 0) {
-                  slicot_transpose_to_c(bf_cm, bf, bf_fort_rows, bf_fort_cols, elem_size);
+              if (bf_src_rows * bf_src_cols > 0) {
+                  slicot_transpose_to_c(bf_cm, bf, bf_src_rows, bf_src_cols, elem_size);
               }
           }
           /* Update original input matrices if changed by the routine (EQUIL='S') */

@@ -70,20 +70,26 @@
   * The leading nkror elements contain the right Kronecker indices.
   * @param[out] kronl    Integer array, dimension (max(n,p)+1).
   * The leading nkrol elements contain the left Kronecker indices.
-  * @param[out] af       Double array, dimension (ldaf, *) (col-major) or (*, ldaf) (row-major).
-  * Fortran dimension is (LDAF, N+MIN(P,M)).
-  * The leading nu-by-nu part contains the coefficient matrix Af of
-  * the reduced pencil.
+  * @param[out] af       Double array, dimension (ldaf, n+m) (col-major) or (n+m, ldaf) (row-major).
+  * For COLUMN-MAJOR: The leading nu-by-nu part of this array contains the 
+  * coefficient matrix Af of the reduced pencil. The remainder of the leading 
+  * (n+m)-by-(n+m) part is used as internal workspace.
+  * For ROW-MAJOR: The leading nu-by-nu part of this array contains the 
+  * coefficient matrix Af of the reduced pencil. The remainder of the allocated 
+  * space is used as internal workspace.
   * @param[in] ldaf      The leading dimension of array AF.
   * If row_major=0, ldaf >= max(1,n+m).
-  * If row_major=1, ldaf >= max(1,nu) (number of columns).
-  * @param[out] bf       Double array, dimension (ldbf, *) (col-major) or (*, ldbf) (row-major).
-  * Fortran dimension is (LDBF, N+M).
-  * The leading nu-by-nu part contains the coefficient matrix Bf of
-  * the reduced pencil.
+  * If row_major=1, ldaf >= max(1,n+m) (number of columns).
+  * @param[out] bf       Double array, dimension (ldbf, n+m) (col-major) or (n+p, ldbf) (row-major).
+  * For COLUMN-MAJOR: The leading nu-by-nu part of this array contains the
+  * coefficient matrix Bf of the reduced pencil. The remainder of the leading
+  * (n+p)-by-(n+m) part is used as internal workspace.
+  * For ROW-MAJOR: The leading nu-by-nu part of this array contains the
+  * coefficient matrix Bf of the reduced pencil. The remainder of the allocated
+  * space is used as internal workspace.
   * @param[in] ldbf      The leading dimension of array BF.
   * If row_major=0, ldbf >= max(1,n+p).
-  * If row_major=1, ldbf >= max(1,nu) (number of columns).
+  * If row_major=1, ldbf >= max(1,n+m) (number of columns).
   * @param[in] tol       Tolerance used for rank decisions. If tol is less than
   * sqrt((n+p)*(n+m))*eps, a default value based on machine
   * precision is used internally by the Fortran routine.
@@ -115,4 +121,3 @@
  #endif
  
  #endif /* AB08ND_H */
- 
