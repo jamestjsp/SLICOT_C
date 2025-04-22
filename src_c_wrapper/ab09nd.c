@@ -70,11 +70,10 @@
  {
      /* Local variables */
      int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
+     int ldwork;
      double* dwork = NULL;
      int* iwork = NULL;
-     int iwork_size = 0;
+     int iwork_size;
      const int dico_len = 1, job_len = 1, equil_len = 1, ordsel_len = 1;
 
      char dico_upper = toupper(dico);
@@ -107,7 +106,6 @@
      if (tol2 < 0.0) { info = -19; goto cleanup; }
      if (tol1 > 0.0 && tol2 > 0.0 && tol2 > tol1) { info = -19; goto cleanup; }
 
-
      // Check leading dimensions based on storage order
      int min_lda_f = MAX(1, n);
      int min_ldb_f = MAX(1, n);
@@ -132,48 +130,12 @@
          if (ldd < min_ldd_f) { info = -17; goto cleanup; }
      }
 
-     /* --- Workspace Allocation --- */
-
-     // Allocate IWORK (size MAX(1, 2*N))
-     iwork_size = MAX(1, 2 * n);
-     iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-     CHECK_ALLOC(iwork);
-
-     // Allocate DWORK based on query
-     ldwork = -1; // Query mode
-     // Use dummy LDs for query if dimensions are 0
-     int lda_q = row_major ? MAX(1, n) : lda;
-     int ldb_q = row_major ? MAX(1, n) : ldb;
-     int ldc_q = row_major ? MAX(1, p) : ldc;
-     int ldd_q = row_major ? MAX(1, p) : ldd;
-
-     F77_FUNC(ab09nd, AB09ND)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
-                              &n, &m, &p, nr, &alpha,
-                              NULL, &lda_q, NULL, &ldb_q, NULL, &ldc_q, NULL, &ldd_q, // NULL arrays
-                              ns, NULL, &tol1, &tol2, iwork, &dwork_query, &ldwork, // NULL hsv
-                              iwarn, &info,
-                              dico_len, job_len, equil_len, ordsel_len);
-
-     if (info != 0) { goto cleanup; } // Query failed
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX(1, N*(2*N+MAX(N,M,P)+5)+N*(N+1)/2)
-     int min_ldwork = 1;
-     int max_nmp = MAX(n, MAX(m,p));
-     min_ldwork = MAX(min_ldwork, n * (2 * n + max_nmp + 5) + n * (n + 1) / 2);
-     ldwork = MAX(ldwork, min_ldwork);
-
-     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
-
-     /* --- Prepare Arrays and Call Fortran Routine --- */
+     /* --- Prepare Arrays --- */
      size_t elem_size = sizeof(double);
-
+     
+     /* Set pointers to original arrays for workspace query */
      if (row_major) {
-         /* --- Row-Major Case --- */
-
-         /* Allocate memory for column-major copies */
+         /* --- Need to create temporary column-major copies --- */
          size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
          size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
          size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
@@ -184,34 +146,44 @@
          if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
          if (d_size > 0) { d_cm = (double*)malloc(d_size * elem_size); CHECK_ALLOC(d_cm); }
 
-         /* Transpose C (row-major) inputs to Fortran (column-major) copies */
+         /* Convert to column-major */
          if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
          if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
          if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
          if (d_size > 0) slicot_transpose_to_fortran(d, d_cm, d_rows, d_cols, elem_size);
 
-         /* Fortran leading dimensions */
-         lda_f = MAX(1, a_rows);
-         ldb_f = MAX(1, b_rows);
-         ldc_f = MAX(1, c_rows);
-         ldd_f = MAX(1, d_rows);
-
-         /* Set pointers for Fortran call */
+         /* Set pointers for Fortran and leading dimensions */
          a_ptr = a_cm; b_ptr = b_cm; c_ptr = c_cm; d_ptr = d_cm;
-
+         lda_f = MAX(1, a_rows); 
+         ldb_f = MAX(1, b_rows);
+         ldc_f = MAX(1, c_rows); 
+         ldd_f = MAX(1, d_rows);
      } else {
-         /* --- Column-Major Case --- */
-         lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd;
+         /* --- Column-Major Case: Use original arrays --- */
          a_ptr = a; b_ptr = b; c_ptr = c; d_ptr = d;
+         lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd;
      }
 
-     /* Call the computational routine */
+     /* --- Workspace Allocation --- */
+     // Set IWORK size based on JOB parameter
+     iwork_size = (job_upper == 'B') ? MAX(1, 0) : MAX(1, 2 * n);
+     iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
+     CHECK_ALLOC(iwork);
+
+     // Calculate LDWORK directly using the formula
+     int max_nmp = MAX(n, MAX(m, p));
+     ldwork = MAX(1, n * (2 * n + max_nmp + 5) + n * (n + 1) / 2);
+
+     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
+     CHECK_ALLOC(dwork);
+
+     /* --- Call the computational routine --- */
      F77_FUNC(ab09nd, AB09ND)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
                               &n, &m, &p, nr, &alpha,
-                              a_ptr, &lda_f,           // Pass A ptr
-                              b_ptr, &ldb_f,           // Pass B ptr
-                              c_ptr, &ldc_f,           // Pass C ptr
-                              d_ptr, &ldd_f,           // Pass D ptr
+                              a_ptr, &lda_f,
+                              b_ptr, &ldb_f,
+                              c_ptr, &ldc_f,
+                              d_ptr, &ldd_f,
                               ns, hsv, &tol1, &tol2, iwork, dwork, &ldwork,
                               iwarn, &info,
                               dico_len, job_len, equil_len, ordsel_len);
@@ -220,19 +192,14 @@
      if (row_major && info == 0) {
          int nr_val = *nr; // Get the final reduced order
          // Copy back only the reduced portions for A, B, C
-         if (nr_val >= 0) { // Check nr_val is valid before using as dimension
-             size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-             size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-             size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-
-             if (a_size > 0) slicot_transpose_to_c(a_cm, a, nr_val, nr_val, elem_size);
-             if (b_size > 0) slicot_transpose_to_c(b_cm, b, nr_val, m, elem_size);
-             if (c_size > 0) slicot_transpose_to_c(c_cm, c, p, nr_val, elem_size);
+         if (nr_val > 0) { // Check nr_val is valid before using as dimension
+             // Use slicot_transpose_to_c_with_ld to properly handle leading dimensions
+             slicot_transpose_to_c_with_ld(a_cm, a, nr_val, nr_val, lda_f, lda, elem_size);
+             slicot_transpose_to_c_with_ld(b_cm, b, nr_val, m, ldb_f, ldb, elem_size);
+             slicot_transpose_to_c_with_ld(c_cm, c, p, nr_val, ldc_f, ldc, elem_size);
          }
          // Copy back the potentially modified D matrix
-         size_t d_rows = p; size_t d_cols = m; size_t d_size = d_rows * d_cols;
-         if (d_size > 0) slicot_transpose_to_c(d_cm, d, d_rows, d_cols, elem_size);
-         // NS and HSV were filled directly.
+         slicot_transpose_to_c_with_ld(d_cm, d, p, m, ldd_f, ldd, elem_size);
      }
 
  cleanup:
