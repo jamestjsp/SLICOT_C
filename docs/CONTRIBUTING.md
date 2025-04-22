@@ -2,6 +2,40 @@
 
 This document outlines the coding patterns, conventions, and best practices to follow when contributing to the SLICOT_C wrapper library.
 
+## 0. Project Directory Structure
+
+The SLICOT-Reference project has the following directory structure to help you navigate the codebase:
+
+```
+SLICOT-Reference/
+├── build/                   # Build output directories for different configurations
+├── cmake/                   # CMake configuration files
+├── doc/                     # SLICOT function documentation (HTML)
+├── docs/                    # Project documentation files
+├── include/                 # Public header files
+│   └── *.h                  # C wrapper headers
+├── src/                     # Original SLICOT Fortran source code
+├── src_aux/                 # Auxiliary source files
+├── src_c_wrapper/           # C wrapper implementation files
+│   └── *.c                  # C wrapper source files
+└── tests/                   # Test files
+    ├── *_test.cpp           # Test files for individual SLICOT routines
+    ├── CMakeLists.txt       # Test build configuration
+    └── Readme.md            # Test documentation
+
+Key Files:
+- CMakeLists.txt             # Main build configuration
+- README.md                  # Project overview
+- CONTRIBUTING.md            # This file
+```
+
+### File Naming Conventions
+
+- **Fortran source files**: Named according to original SLICOT routine names (e.g., `ab05od.f`)
+- **C wrapper headers**: Named with lowercase routine names (e.g., `ab05od.h`)
+- **C wrapper source**: Match header names (e.g., `ab05od.c`)
+- **Test files**: Named with function name followed by `_test.cpp` (e.g., `ab05od_test.cpp`)
+
 ## 1. Overall Code Structure
 
 ### Wrapper File Organization
@@ -436,23 +470,8 @@ double real_part = SLICOT_COMPLEX_REAL(z);
 
 ### Printing Matrices for Debugging
 
-During development, this helper function can be included in test files:
-
-```cpp
-void printMatrixD(const std::string& name, const double* data, int rows, int cols, 
-                 int ld, bool rowMajor) {
-    std::cout << name << " (" << rows << "x" << cols << ", ld=" << ld << "):\n";
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            double val = rowMajor ? data[i*ld + j] : data[i + j*ld];
-            std::cout << std::setw(10) << std::fixed 
-                      << std::setprecision(6) << val << " ";
-        }
-        std::cout << "\n";
-    }
-    std::cout << std::endl;
-}
-```
+During development, this helper function can be included in test files.
+**Note:** For printing matrices during development or debugging, use the `printMatrixD` function provided in `slicot_utils.h`. Do not redefine this function in your test files; simply include the header and call `printMatrixD` as needed.
 
 ### Fortran Name Mangling
 
@@ -608,3 +627,178 @@ When testing functions with LAPACK dependencies:
 1. Explicitly test the cases that trigger LAPACK function calls (e.g., JOBZ='F')
 2. Verify the results match expected outputs from the documentation
 3. Consider adding specific tests for the LAPACK-dependent functionality
+
+## 13. Guidelines for AI Coding Agents
+
+When using AI coding agents to implement SLICOT C wrappers and tests, following these guidelines can improve efficiency and accuracy:
+
+### Efficient Information Gathering
+
+1. **HTML Documentation Analysis**:
+   - Analyze the corresponding HTML documentation (in the `doc/` directory) first
+   - Extract key information in this order:
+     1. Purpose and mathematical function of the routine
+     2. Input/output parameters with dimensions
+     3. Workspace requirements
+     4. Example data/results for testing
+     5. Special cases and error conditions
+
+2. **Pattern Matching**:
+   - Identify similar routines that have already been implemented
+   - Look for wrappers with similar parameter structures or functionality
+   - For example, routines in the same family (AB05xx, AB09xx, etc.) often follow similar patterns
+
+3. **Fortran Source Analysis**:
+   - If the wrapper implementation is complex, examine the original Fortran source (in `src/`)
+   - Focus on array dimensions, workspace usage, and return code handling
+
+### Implementation Strategy
+
+1. **Wrapper Implementation Sequence**:
+   - Follow the established structure sequence exactly (see Section 1)
+   - Keep the parameter list as close as possible to the original Fortran function
+   - Validate all input parameters before allocating resources
+
+2. **Matrix Format Conversion Strategy**:
+   - For large matrices, verify dimensions before allocating memory
+   - When implementing new routines, follow the example of existing wrappers for similar routines
+   - For any new helper functions, add detailed comments explaining the matrix layout conversions
+
+3. **Test Design**:
+   - Create tests for both column-major and row-major formats
+   - Include at least one test with the example data from the HTML documentation
+   - Add boundary condition tests (zero dimensions, minimum workspace, etc.)
+
+### Troubleshooting Common Issues
+
+1. **Memory Management Issues**:
+   - Double-check allocation/deallocation patterns for consistency
+   - Ensure every allocated resource has a corresponding free in the cleanup section
+   - Watch for special cases where zero dimensions might cause issues
+
+2. **Matrix Transposition Errors**:
+   - Verify the dimensions used in transposition functions
+   - Ensure leading dimensions are handled correctly for both input and output
+   - For symmetric matrices, use the specific symmetric handling utilities
+
+3. **Testing Discrepancies**:
+   - If test results don't match documentation examples:
+     1. Verify the matrix data was parsed correctly from the HTML docs
+     2. Check if the original source has any undocumented behaviors
+     3. Consider numerical precision issues (use appropriate check_tol values)
+
+### Documentation and Commenting
+
+1. **AI-Generated Comments Quality**:
+   - Document parameter validation logic clearly
+   - Explain any deviations from the standard wrapper pattern
+   - Include references to the SLICOT documentation when implementing special cases
+
+2. **Test Case Documentation**:
+   - Note the source of test values (e.g., "from AB05OD.html example")
+   - Document expected behavior for negative tests
+   - Explain any transformations applied to the test data
+
+By following these guidelines, AI coding agents can more efficiently and accurately implement SLICOT C wrappers and tests, maintaining consistency with the project's coding standards and patterns.
+
+## 14. Code Template Examples
+
+### Standard Wrapper Template
+
+```c
+/**
+ * @file xxxxx.c
+ * @brief C wrapper implementation for SLICOT routine XXXXX
+ *
+ * This file provides a C wrapper implementation for the SLICOT routine XXXXX,
+ * which [brief description of what the routine does].
+ */
+
+#include <stdlib.h>
+#include <ctype.h>  // For toupper
+#include <stddef.h> // For size_t
+
+// Include the header file for this wrapper
+#include "xxxxx.h"
+
+// Include necessary SLICOT utility headers
+#include "slicot_utils.h" // For MAX, CHECK_ALLOC, etc.
+#include "slicot_f77.h"   // For F77_FUNC macro
+
+// Declare the external Fortran routine
+extern void F77_FUNC(xxxxx, XXXXX)(
+    // Fortran function parameters with types
+    // ...
+);
+
+/* C wrapper function definition */
+SLICOT_C_WRAPPER_API
+int slicot_xxxxx(/* C function parameters */)
+{
+    // Variable declarations
+    int info = 0;
+    
+    // Input parameter validation
+    
+    // Memory allocation for column-major copies (if needed)
+    
+    // Perform row-major to column-major conversion (if needed)
+    
+    // Workspace allocation
+    
+    // Call the Fortran routine
+    
+    // Convert results back to row-major format (if needed)
+    
+cleanup:
+    /* --- Cleanup --- */
+    // Free all allocated memory
+    
+    return info;
+}
+```
+
+### Standard Test Template
+
+```cpp
+#include <gtest/gtest.h>
+#include <vector>
+#include <cmath>
+
+// Include the header for the function being tested
+#include "xxxxx.h"
+
+// Define a fixture for column-major tests
+class XXXXXTestColMajor : public ::testing::Test {
+protected:
+    // Define common test variables
+    // Input parameters, expected output values, etc.
+    
+    // Column-major input matrices and expected outputs
+};
+
+// Row-major test fixture (inherit from column-major)
+class XXXXXTestRowMajor : public XXXXXTestColMajor {
+public:
+    XXXXXTestRowMajor() {
+        ROW_MAJOR = 1;  // Override for row-major tests
+        // Convert matrices from column-major to row-major
+    }
+};
+
+// Test case for column-major format
+TEST_F(XXXXXTestColMajor, DocExample) {
+    // Set up test parameters
+    // Call the wrapper function
+    // Verify results
+}
+
+// Test case for row-major format
+TEST_F(XXXXXTestRowMajor, DocExample) {
+    // Set up test parameters
+    // Call the wrapper function
+    // Verify results  
+}
+
+// Additional test cases for error conditions, special cases, etc.
+```
