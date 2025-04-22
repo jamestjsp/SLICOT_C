@@ -244,6 +244,22 @@ void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char up
 SLICOT_C_WRAPPER_API
 void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols, 
                                   int ld_src, int ld_dest, size_t elem_size);
+ /*
+/**
+ * @brief Prints a matrix of doubles to the standard output with formatting.
+ *
+ * @param name      Optional name of the matrix to display as a header. If NULL, no header is printed.
+ * @param data      Pointer to the matrix data stored as a contiguous array of doubles.
+ * @param rows      Number of rows in the matrix.
+ * @param cols      Number of columns in the matrix.
+ * @param ld        Leading dimension (stride) of the matrix in memory.
+ * @param rowMajor  If non-zero, the matrix is stored in row-major order; otherwise, in column-major order.
+ *
+ * The function prints the matrix in a human-readable format, including the matrix name (if provided),
+ * its dimensions, leading dimension, and storage order. Each row of the matrix is printed on a separate line.
+ */
+SLICOT_C_WRAPPER_API
+ void printMatrixD(const char* name, const double* data, int rows, int cols, int ld, int rowMajor);
  #ifdef __cplusplus
  }
  #endif

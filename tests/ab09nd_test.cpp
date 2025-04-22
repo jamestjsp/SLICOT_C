@@ -9,22 +9,6 @@
 // Include the specific header for the function being tested
 #include "ab09nd.h" // Header for slicot_ab09nd
 
-// Helper function to print matrix (optional, for debugging)
-void printMatrixD(const std::string& name, const double* data, int rows, int cols, int ld, bool rowMajor) {
-    std::cout << name << " (" << rows << "x" << cols << ", ld=" << ld << ", " << (rowMajor ? "RowMajor" : "ColMajor") << "):\n";
-    for (int i = 0; i < rows; ++i) {
-        std::cout << "  [";
-        for (int j = 0; j < cols; ++j) {
-            double val = rowMajor ? data[i * ld + j] : data[i + j * ld];
-            // Format output for better readability
-            std::cout << std::fixed << std::setprecision(4) << std::setw(9) << val << (j == cols - 1 ? "" : ", ");
-        }
-        std::cout << "]\n";
-    }
-     std::cout << std::defaultfloat << std::setprecision(6); // Reset default formatting
-}
-
-
 // =============================================================================
 // Test Fixture and Test Case for Column-Major Input (ROW_MAJOR = 0)
 // =============================================================================

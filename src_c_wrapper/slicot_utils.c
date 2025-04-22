@@ -11,6 +11,7 @@
 #include <string.h> // For memcpy
 #include <stdlib.h> // For malloc, free
 #include <ctype.h> // Fot toupper
+#include <stdio.h>
 
 /**
  * @brief Transpose a matrix from C (row-major) to Fortran (column-major) order.
@@ -417,5 +418,33 @@ void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char up
                 memcpy(dest_ptr + dest_offset, src_ptr + src_offset, elem_size);
             }
         }
+    }
+}
+
+/**
+ * @brief Prints a matrix of doubles to the standard output.
+ *
+ * This helper function is intended for debugging purposes. It takes a pointer to a matrix of doubles,
+ * along with its dimensions, and prints the matrix in a readable format to the standard output (usually the console).
+ * Each row of the matrix is printed on a new line, with elements separated by spaces or tabs for clarity.
+ *
+ * @param mat Pointer to the first element of the matrix (assumed to be stored in row-major order).
+ * @param rows The number of rows in the matrix.
+ * @param cols The number of columns in the matrix.
+ *
+ * @note This function is primarily intended for debugging and should not be used in production code
+ * where performance or formatted output is critical.
+ */
+SLICOT_C_WRAPPER_API
+void printMatrixD(const char* name, const double* data, int rows, int cols, int ld, int rowMajor) {
+    if (name)
+        printf("%s (%dx%d, ld=%d, %s):\n", name, rows, cols, ld, rowMajor ? "RowMajor" : "ColMajor");
+    for (int i = 0; i < rows; ++i) {
+        printf("  [");
+        for (int j = 0; j < cols; ++j) {
+            double val = rowMajor ? data[i * ld + j] : data[i + j * ld];
+            printf("%9.4f%s", val, (j == cols - 1 ? "" : ", "));
+        }
+        printf("]\n");
     }
 }
