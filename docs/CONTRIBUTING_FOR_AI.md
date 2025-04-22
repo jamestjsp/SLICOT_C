@@ -7,6 +7,7 @@ This document is structured specifically to help AI coding agents efficiently im
 ```
 SLICOT-Reference/
 ├── doc/                     # SLICOT function documentation (HTML)
+├── examples/                # Example data files (*.dat, *.res) and Fortran example programs (*.f)
 ├── include/                 # Public header files (*.h)
 ├── src/                     # Original SLICOT Fortran source code
 ├── src_c_wrapper/           # C wrapper implementation files (*.c)
