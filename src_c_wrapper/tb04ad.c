@@ -238,21 +238,23 @@
               size_t b_rows_f = n; size_t b_cols_f = (rowcol_upper == 'R') ? m : maxmp; size_t b_size = b_rows_f * b_cols_f;
               size_t c_rows_f = (rowcol_upper == 'R') ? p : maxmp; size_t c_cols_f = n; size_t c_size = c_rows_f * c_cols_f;
 
-              if (a_size > 0 && a_cm) slicot_transpose_to_c(a_cm, a, nr_val, nr_val, elem_size);
-              if (b_size > 0 && m > 0 && b_cm) slicot_transpose_to_c(b_cm, b, nr_val, m, elem_size);
-              if (c_size > 0 && p > 0 && c_cm) slicot_transpose_to_c(c_cm, c, p, nr_val, elem_size);
+              if (a_size > 0 && a_cm) slicot_transpose_to_c_with_ld(a_cm, a, nr_val, nr_val, n, lda, elem_size);
+              if (b_size > 0 && m > 0 && b_cm) slicot_transpose_to_c_with_ld(b_cm, b, nr_val, m, n, ldb, elem_size);
+              if (c_size > 0 && p > 0 && c_cm) slicot_transpose_to_c_with_ld(c_cm, c, p, nr_val, p, ldc, elem_size);
           }
 
           // Copy back 2D output array DCOEFF
           if (porm > 0 && kpcoef > 0 && dcoeff_cm) {
-              slicot_transpose_to_c(dcoeff_cm, dcoeff, porm, kpcoef, elem_size);
+              slicot_transpose_to_c_with_ld(dcoeff_cm, dcoeff, porm, kpcoef, porm, lddcoe, elem_size);
           }
 
           // Copy back 3D output array UCOEFF slice by slice
           size_t ucoeff_slice_size = (size_t)porm * porp; // Size of one PORM x PORP slice
           for (int k = 0; k < kpcoef; ++k) {
               if (ucoeff_slice_size > 0 && ucoeff_cm) {
-                  slicot_transpose_to_c(ucoeff_cm + k * ucoeff_slice_size, ucoeff + k * ucoeff_slice_size, porm, porp, elem_size);
+                  slicot_transpose_to_c_with_ld(ucoeff_cm + k * ucoeff_slice_size, 
+                                               ucoeff + k * ucoeff_slice_size, 
+                                               porm, porp, porm, lduco1, elem_size);
               }
           }
      }

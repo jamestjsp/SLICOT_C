@@ -199,9 +199,9 @@
              size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
              size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
 
-             if (a_size > 0) slicot_transpose_to_c(a_cm, a, nr_val, nr_val, elem_size);
-             if (b_size > 0) slicot_transpose_to_c(b_cm, b, nr_val, m, elem_size);
-             if (c_size > 0) slicot_transpose_to_c(c_cm, c, p, nr_val, elem_size);
+             if (a_size > 0) slicot_transpose_to_c_with_ld(a_cm, a, nr_val, nr_val, n, lda, elem_size);
+             if (b_size > 0) slicot_transpose_to_c_with_ld(b_cm, b, nr_val, m, n, ldb, elem_size);
+             if (c_size > 0) slicot_transpose_to_c_with_ld(c_cm, c, p, nr_val, p, ldc, elem_size);
          }
          // HSV was filled directly.
      }

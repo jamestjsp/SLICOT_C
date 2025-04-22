@@ -217,7 +217,9 @@
          if (fact_upper == 'N' && a_cm) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size); // Schur factor S
          if (fact_upper == 'N' && u_cm) slicot_transpose_to_c(u_cm, u, u_rows, u_cols, elem_size); // Schur vectors U
          if (c_cm) { // Copy solution X (stored in c_cm) back to c
-             slicot_transpose_symmetric_to_c(c_cm, c, n, 'U', elem_size); // Solution X
+             // Use full matrix transposition with leading dimensions
+             slicot_transpose_to_c_with_ld(c_cm, c, n, n, n, ldc, elem_size);
+             // Then extract only the symmetric part if needed
          }
          // SCALE, SEP, FERR, WR, WI modified directly
      } else if (!row_major && (info == 0 || info == (n + 1))) {

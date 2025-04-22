@@ -171,9 +171,9 @@ int slicot_mb05md(char balanc, int n, double delta,
         size_t v_rows = n; size_t v_cols = n; size_t v_size = v_rows * v_cols;
         size_t y_rows = n; size_t y_cols = n; size_t y_size = y_rows * y_cols;
 
-        if (a_cm && a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size); // Result exp(A*delta)
-        if (v_cm && v_size > 0) slicot_transpose_to_c(v_cm, v, v_rows, v_cols, elem_size); // Eigenvectors
-        if (y_cm && y_size > 0) slicot_transpose_to_c(y_cm, y, y_rows, y_cols, elem_size); // Intermediate Y
+        if (a_cm && a_size > 0) slicot_transpose_to_c_with_ld(a_cm, a, a_rows, a_cols, n, lda, elem_size); // Result exp(A*delta)
+        if (v_cm && v_size > 0) slicot_transpose_to_c_with_ld(v_cm, v, v_rows, v_cols, n, ldv, elem_size); // Eigenvectors
+        if (y_cm && y_size > 0) slicot_transpose_to_c_with_ld(y_cm, y, y_rows, y_cols, n, ldy, elem_size); // Intermediate Y
         // VALR, VALI are filled directly.
     }
 

@@ -174,10 +174,10 @@
          size_t c_rows = n; size_t c_cols = m; size_t c_size = c_rows * c_cols;
          size_t z_rows = m; size_t z_cols = m; size_t z_size = z_rows * z_cols;
 
-         if (a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size); // Modified A
-         if (b_size > 0) slicot_transpose_to_c(b_cm, b, b_rows, b_cols, elem_size); // Modified B
-         if (c_size > 0) slicot_transpose_to_c(c_cm, c, c_rows, c_cols, elem_size); // Solution X (in C)
-         if (z_size > 0) slicot_transpose_to_c(z_cm, z, z_rows, z_cols, elem_size); // Output Z
+         if (a_size > 0) slicot_transpose_to_c_with_ld(a_cm, a, a_rows, a_cols, n, lda, elem_size); // Modified A
+         if (b_size > 0) slicot_transpose_to_c_with_ld(b_cm, b, b_rows, b_cols, m, ldb, elem_size); // Modified B
+         if (c_size > 0) slicot_transpose_to_c_with_ld(c_cm, c, c_rows, c_cols, n, ldc, elem_size); // Solution X (in C)
+         if (z_size > 0) slicot_transpose_to_c_with_ld(z_cm, z, z_rows, z_cols, m, ldz, elem_size); // Output Z
      }
      // In column-major case, A, B, C, Z are modified in place.
 
