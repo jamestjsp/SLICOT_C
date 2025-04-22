@@ -293,9 +293,76 @@ cleanup:
     return info;
 ```
 
-## 6. Data Extraction for Test Cases
+## 6. Finding and Extracting Test Data
 
-### 6.1 Using Examples Directory for Test Data
+### 6.1 Hierarchical Approach to Finding Test Data
+
+Follow this order when searching for test data sources:
+
+1. **First Check the Examples Directory**
+   - Look for matching *.dat and *.res files in the examples directory:
+     ```
+     examples/[FUNCTION_NAME].dat  # Input test data
+     examples/[FUNCTION_NAME].res  # Expected output
+     examples/T[FUNCTION_NAME].f   # Fortran test program
+     ```
+   - Example: For function AB07ND, look for AB07ND.dat, AB07ND.res, and TAB07ND.f
+
+2. **If No Related Examples, Check HTML Documentation**
+   - Look in the doc directory for the function's HTML documentation:
+     ```
+     doc/[FUNCTION_NAME].html  # Function documentation
+     ```
+   - Parse examples in HTML documentation, paying attention to:
+     - Example matrices provided in formatted tables
+     - Input parameters and their descriptions
+     - Expected outputs described in the text
+   - Extract numerical values directly from code samples or examples
+
+
+3. **If No Examples in Documentation, Look at Fortran Source**
+   - Examine the original Fortran source code in the src directory:
+     ```
+     src/[FUNCTION_NAME].f  # Original Fortran implementation
+     ```
+   - Extract test cases from:
+     - Documentation comments at the beginning of the file
+     - Parameter validation and range checks
+     - Special case handling for specific values
+
+4. **For Last Resort: Generate Synthetic Test Data**
+   - Create composite test data by using inputs from related functions:
+     - Identify functions with similar parameter structures (e.g., AB05MD for AB05ND)
+     - Extract relevant matrices of appropriate dimensions from their example data
+     - Adapt matrices to match the specific requirements of your target function
+   
+   - Create matrices with specific mathematical properties relevant to the function:
+     - For state-space functions: controllable/observable canonical forms
+     - For stability functions: matrices with known eigenvalue distributions
+     - For filtering functions: stable system matrices with known frequency responses
+     - For decomposition functions: matrices with specific rank or condition number
+
+   - When adapting matrices from related examples:
+     - Preserve structural properties relevant to your function
+     - Ensure dimensions are compatible with your function's requirements
+     - Adjust values to ensure mathematical validity (e.g., matrix invertibility if required)
+     - Scale values appropriately to avoid numerical issues
+
+   - Run progressive validation:
+     - Start with simple cases (identity, diagonal, or block matrices)
+     - Gradually introduce more complex structures
+     - Use the function with synthetic inputs in a "learning mode"
+     - Capture the actual output for future test validation
+     - Cross-verify with related functions where mathematical relationships exist
+
+   - Document your synthetic test approach:
+     - Clearly note the origin of any adapted matrices
+     - Document any mathematical properties designed into test matrices
+     - Note which aspects of function behavior are being tested
+     - Clearly indicate these tests validate consistency rather than correctness against known standard results
+     - Include formulas or theoretical expectations where applicable
+
+### 6.2 Using Examples Directory for Test Data
 
 The **examples** directory contains important files that should be used as the primary source for creating test cases:
 
@@ -450,6 +517,42 @@ for (int i = 0; i < N; ++i) {
    - For non-square matrices, be especially careful with row/column ordering
    - Verify that leading dimension parameters are handled correctly
 
+### 6.3 Testing Zero-Dimension Cases
+
+When testing SLICOT functions with zero-dimension inputs (e.g., N=0, M=0, P=0), extra attention is needed:
+
+1. **Leading Dimensions for Zero-Dimension Matrices**:
+   - Always follow the function's minimum requirements for leading dimensions
+   - For column-major format, typically:
+     - State matrices (A): `LDA >= max(1, N)`
+     - Input matrices (B): `LDB >= max(1, N)` 
+     - Output matrices (C): `LDC >= max(1, P)`
+     - Feedthrough matrices (D): `LDD >= max(1, P)`
+   - Even for zero-sized matrices, these requirements must be met
+
+2. **Array Allocation**:
+   - Allocate at least one element (never use nullptr) even for zero-sized matrices
+   - For combined systems (e.g., N = N1 + N2), ensure output arrays are large enough
+   ```cpp
+   std::vector<double> A_zero(MAX(1, N1+N2), 0.0);
+   ```
+
+3. **Matrix Format Consistency**:
+   - For zero-dimension tests, explicitly set matrix format (e.g., 0 for column-major)
+   - Don't rely on class variables for this critical parameter
+   - Use explicit constants to make intent clear:
+   ```cpp
+   slicot_function('N', n1_zero, m, p, n2,
+                   /* matrices... */,
+                   0); // Explicitly use column-major (0)
+   ```
+
+4. **Special Handling for Combined Systems**:
+   - For functions dealing with combined systems (like AB05PD where N = N1 + N2):
+     - When N1=0, set output leading dimensions based on N2
+     - When N2=0, set output leading dimensions based on N1
+     - Be explicit about each case rather than using general variables
+
 ## 7. Common Error Cases to Handle
 
 ### 7.1 Input Validation Errors
@@ -546,7 +649,8 @@ for (int i = 0; i < N; ++i) {
 
 5. **Fixture initialization issues**:
    - When fixtures inherit from other fixtures, ensure parent variables are properly initialized
-   - Be careful with variables set in SetUp() that are needed in constructors
+   - Always initialize combined dimensions (e.g., `N = N1 + N2`) at the beginning of the derived class constructor before using them for vector resizing to avoid "vector::_M_default_append" errors
+   - Be careful with variables set in SetUp() that are needed in constructors - these won't be available during constructor execution
    - For edge cases with zero dimensions, ensure proper allocation of dummy arrays with required dimensions
 
 6. **Test design patterns**:
