@@ -39,6 +39,16 @@ target_link_libraries(slicot_c_wrapper_tests PRIVATE
     ${SLICOT_LINK_TARGETS} # Link BLAS/LAPACK found in parent scope
 )
 
+# Add test_utils.cpp to the test sources
+target_sources(slicot_c_wrapper_tests
+    PRIVATE
+        test_utils.cpp
+)
+
+# Copy test data files to build directory
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data 
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/bin)
+
 # Include CTest and GoogleTest modules for testing
 include(GoogleTest)
 enable_testing()
