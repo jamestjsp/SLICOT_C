@@ -2,322 +2,292 @@
 #include <vector>
 #include <cmath>
 #include <algorithm> // For std::max
+#include <iostream>  // For std::cerr
+#include <string>    // For std::string
 
-#include "ib01ad.h"
+#include "ib01ad.h"       // Include the updated wrapper header
 #include "slicot_utils.h" // For transpose functions
-#include "test_utils.h"   // For data loading utilities
+#include "test_utils.h"   // For data loading utilities (contains the updated loader)
 
-// Path to test data file
-const std::string DATA_FILE_PATH = "data/ib01ad.csv";
+// Path to test data file (ensure this path is correct relative to execution)
+// ASSUMPTION: This CSV file has a header row with columns named "U" and "Y".
+const std::string DATA_FILE_PATH = "data/ib01ad.csv"; // Make sure this file exists and has U,Y columns
 
-// Column-major test fixture
+// --- Column-Major Test Fixture ---
 class IB01ADTestColMajor : public ::testing::Test {
 protected:
-    // Parameters from IB01AD.dat example
+    // Parameters from IB01AD.dat example (NSMP might be updated by loader)
     int NOBR = 15;
-    int M = 1;          // Number of inputs (Fortran example reads U if M>0)
-    int L = 1;          // Number of outputs
-    int NSMP = 1000;    // Number of samples
-    double RCOND = 0.0; // Use default tolerance for rank determination
-    double TOL = -1.0;  // Use default tolerance for order detection (-1.0 means largest gap)
-    char METH = 'M';    // MOESP algorithm
-    char ALG = 'C';     // Cholesky algorithm
-    char JOBD = 'N';    // Don't compute B/D using MOESP (from .dat file)
-    char BATCH = 'O';   // One batch only
-    char CONCT = 'N';   // No connection between blocks
-    char CTRL = 'N';    // No user confirmation for order N
-    
+    int M = 1; // Corresponds to {"U"}
+    int L = 1; // Corresponds to {"Y"}
+    int NSMP = 1000; // Default/Expected number of samples
+    double RCOND = 0.0;
+    double TOL = -1.0;
+    char METH = 'M';
+    char ALG = 'C';
+    char JOBD = 'N';
+    char BATCH = 'O';
+    char CONCT = 'N';
+    char CTRL = 'N';
+
+    // Column names to load from CSV - CORRECTED
+    std::vector<std::string> input_columns = {"U"}; // Use actual header name
+    std::vector<std::string> output_columns = {"Y"};// Use actual header name
+
     double check_tol = 1e-4; // Tolerance for checking singular values
 
-    // Input data (U and Y)
-    std::vector<double> U; // Input data (M columns)
-    std::vector<double> Y; // Output data (L columns) - from IB01AD.dat
+    // Input data (U and Y) - Column Major - Loaded from CSV
+    std::vector<double> U;
+    std::vector<double> Y;
 
     // Expected results from IB01AD.res
-    int expected_N = 4; 
+    int expected_N = 4;
     std::vector<double> SV_expected = {
         69.8841, 14.9963, 3.6675, 1.9677, 0.3000, 0.2078, 0.1651, 0.1373,
         0.1133,  0.1059,  0.0856, 0.0784, 0.0733, 0.0678, 0.0571
     };
 
     // Output arrays
-    std::vector<double> R;   // Triangular factor
-    std::vector<double> SV;  // Singular values
-
-    // Workspace arrays
-    std::vector<int> IWORK;
-    std::vector<double> DWORK;
-    int LDWORK = 100000; // Use large workspace size to avoid query issues
+    std::vector<double> R;
+    std::vector<double> SV;
 
     // Result variables
     int n_result = -1;
     int iwarn_result = -1;
-    
+
+    // Calculated leading dimensions (based on potentially updated NSMP)
+    int ldu = 1;
+    int ldy = 1;
+    int ldr = 1;
+
     void SetUp() override {
-        // --- Load data from CSV file ---
-        bool loaded = false;
+        // --- Load data using the updated CSV loader ---
+        int samples_loaded = 0;
+        ASSERT_EQ(input_columns.size(), M) << "Test parameter M doesn't match number of input_columns.";
+        ASSERT_EQ(output_columns.size(), L) << "Test parameter L doesn't match number of output_columns.";
+
         try {
-            loaded = load_test_data_from_csv(DATA_FILE_PATH, U, Y);
-        } catch (const std::exception& e) {
-            std::cerr << "Exception loading CSV: " << e.what() << std::endl;
-            loaded = false;
-        }
-        
-        // If loading fails, use hardcoded data as fallback
-        if (!loaded || U.size() < NSMP || Y.size() < NSMP) {
-            std::cerr << "Warning: Failed to load data from CSV, using hardcoded data" << std::endl;
-            
-            // Initialize U with hardcoded data from IB01AD.dat
-            U.resize(NSMP);
-            for (int i = 0; i < NSMP; i++) {
-                U[i] = (i % 2 == 0) ? 6.41 : 3.41;
+            // Ensure test_utils.h declares the function with the correct signature
+            bool success = load_test_data_from_csv(
+                DATA_FILE_PATH,
+                input_columns,
+                output_columns,
+                U, // Output U vector
+                Y, // Output Y vector
+                samples_loaded // Output number of samples loaded
+            );
+            ASSERT_TRUE(success) << "CSV loading reported failure."; // Should throw on error, but check bool too
+            ASSERT_GT(samples_loaded, 0) << "No data samples loaded from CSV: " << DATA_FILE_PATH;
+
+            // Update NSMP based on actual data loaded
+            if (samples_loaded != NSMP) {
+                 std::cout << "Note: Loaded " << samples_loaded << " samples, updating NSMP from " << NSMP << "." << std::endl;
+                 NSMP = samples_loaded;
             }
-            
-            // Initialize Y with a simple pattern
-            Y.resize(NSMP);
-            for (int i = 0; i < NSMP; i++) {
-                Y[i] = 4.75 + 1.25 * sin(i * 0.01);
-            }
+
+        } catch (const std::runtime_error& e) {
+            // Fail the test immediately if loading fails
+            FAIL() << "CSV data loading failed: " << e.what();
+        } catch (...) {
+            FAIL() << "Caught unknown exception during CSV data loading.";
         }
-        
-        // --- Array Sizing ---
-        // LDR calculation (Fortran leading dimension for R)
-        int LDR = std::max(1, 2 * (M + L) * NOBR); // Fortran row count
-        
-        // R array size: LDR rows, 2*(M + L)*NOBR columns
-        R.resize((size_t)LDR * 2 * (M + L) * NOBR);
+
+        // --- Array Sizing (using potentially updated NSMP) ---
+        // Leading dimensions (Column Major)
+        ldu = (M > 0) ? NSMP : 1;
+        ldy = (L > 0) ? NSMP : 1; // L must be > 0 per docs
+        int min_ldr_f = (METH == 'M' && JOBD == 'N') ? 2*(M+L)*NOBR :
+                       ((METH == 'M' && JOBD == 'M') ? std::max(2*(M+L)*NOBR, 3*M*NOBR) : 2*(M+L)*NOBR);
+        ldr = std::max(1, min_ldr_f);
+
+        // R array size: ldr rows, 2*(M + L)*NOBR columns
+        R.resize((size_t)ldr * 2 * (M + L) * NOBR);
 
         // SV array size: L*NOBR
         SV.resize((size_t)L * NOBR);
-
-        // IWORK size
-        int LIWORK = std::max(3, (M + L) * NOBR); // Use larger size for safety
-        IWORK.resize(LIWORK);
-
-        // Workspace array
-        DWORK.resize(LDWORK);
     }
 };
 
-// Row-major test fixture
-class IB01ADTestRowMajor : public ::testing::Test {
-protected:
-    // Parameters from IB01AD.dat example
-    int NOBR = 15;
-    int M = 1;          // Number of inputs (Fortran example reads U if M>0)
-    int L = 1;          // Number of outputs
-    int NSMP = 1000;    // Number of samples
-    double RCOND = 0.0; // Use default tolerance for rank determination
-    double TOL = -1.0;  // Use default tolerance for order detection (-1.0 means largest gap)
-    char METH = 'M';    // MOESP algorithm
-    char ALG = 'C';     // Cholesky algorithm
-    char JOBD = 'N';    // Don't compute B/D using MOESP (from .dat file)
-    char BATCH = 'O';   // One batch only
-    char CONCT = 'N';   // No connection between blocks
-    char CTRL = 'N';    // No user confirmation for order N
-    
-    double check_tol = 1e-4; // Tolerance for checking singular values
+// --- Row-Major Test Fixture ---
+class IB01ADTestRowMajor : public IB01ADTestColMajor { // Inherit parameters and expected results
+public:
+    // Input data in row-major format
+    std::vector<double> U_rm;
+    std::vector<double> Y_rm;
 
-    // Input data (U and Y) in row-major format
-    std::vector<double> U; // Input data in row-major format
-    std::vector<double> Y; // Output data in row-major format
+    // Row-major leading dimensions
+    int ldu_rm = 1;
+    int ldy_rm = 1;
+    int ldr_rm = 1;
 
-    // Expected results from IB01AD.res
-    int expected_N = 4; 
-    std::vector<double> SV_expected = {
-        69.8841, 14.9963, 3.6675, 1.9677, 0.3000, 0.2078, 0.1651, 0.1373,
-        0.1133,  0.1059,  0.0856, 0.0784, 0.0733, 0.0678, 0.0571
-    };
-
-    // Output arrays
-    std::vector<double> R;   // Triangular factor
-    std::vector<double> SV;  // Singular values
-
-    // Workspace arrays
-    std::vector<int> IWORK;
-    std::vector<double> DWORK;
-    int LDWORK = 100000; // Use large workspace size to avoid query issues
-
-    // Result variables
-    int n_result = -1;
-    int iwarn_result = -1;
-    
     void SetUp() override {
-        // --- Load column-major data from CSV ---
-        std::vector<double> U_col, Y_col;
-        bool loaded = false;
-        
+        // --- Load column-major data first using the updated CSV loader ---
+        int samples_loaded = 0;
+        ASSERT_EQ(input_columns.size(), M) << "Test parameter M doesn't match number of input_columns.";
+        ASSERT_EQ(output_columns.size(), L) << "Test parameter L doesn't match number of output_columns.";
+
+        std::vector<double> U_col, Y_col; // Temporary column-major storage
         try {
-            loaded = load_test_data_from_csv(DATA_FILE_PATH, U_col, Y_col);
-        } catch (const std::exception& e) {
-            std::cerr << "Exception loading CSV: " << e.what() << std::endl;
-            loaded = false;
-        }
-        
-        // If loading fails, use hardcoded data as fallback
-        if (!loaded || U_col.size() < NSMP || Y_col.size() < NSMP) {
-            std::cerr << "Warning: Failed to load data from CSV, using hardcoded data" << std::endl;
-            
-            // Initialize U with hardcoded data
-            U_col.resize(NSMP);
-            for (int i = 0; i < NSMP; i++) {
-                U_col[i] = (i % 2 == 0) ? 6.41 : 3.41;
+             bool success = load_test_data_from_csv(
+                DATA_FILE_PATH,
+                input_columns, // Use corrected names {"U"}, {"Y"}
+                output_columns,
+                U_col, // Load into temporary col-major U
+                Y_col, // Load into temporary col-major Y
+                samples_loaded
+            );
+            ASSERT_TRUE(success) << "CSV loading reported failure.";
+            ASSERT_GT(samples_loaded, 0) << "No data samples loaded from CSV: " << DATA_FILE_PATH;
+
+            // Update NSMP based on actual data loaded
+             if (samples_loaded != NSMP) {
+                 std::cout << "Note: Loaded " << samples_loaded << " samples, updating NSMP from " << NSMP << "." << std::endl;
+                 NSMP = samples_loaded; // Update base class NSMP as well
             }
-            
-            // Initialize Y with a simple pattern
-            Y_col.resize(NSMP);
-            for (int i = 0; i < NSMP; i++) {
-                Y_col[i] = 4.75 + 1.25 * sin(i * 0.01);
-            }
+
+        } catch (const std::runtime_error& e) {
+            FAIL() << "CSV data loading failed: " << e.what();
+        } catch (...) {
+            FAIL() << "Caught unknown exception during CSV data loading.";
         }
-        
+
         // --- Convert to row-major format ---
-        // Allocate row-major arrays
-        U.resize(U_col.size());
-        Y.resize(Y_col.size());
-        
-        // Convert U and Y to row-major format
-        slicot_transpose_to_c(U_col.data(), U.data(), NSMP, M, sizeof(double));
-        slicot_transpose_to_c(Y_col.data(), Y.data(), NSMP, L, sizeof(double));
-        
-        // --- Array Sizing ---
-        // LDR calculation for row-major
-        int LDR_rm = 2 * (M + L) * NOBR;
-        
-        // R array size: 2*(M + L)*NOBR rows, LDR_rm columns (for row-major)
-        R.resize((size_t)2 * (M + L) * NOBR * LDR_rm);
+        U_rm.resize(U_col.size());
+        Y_rm.resize(Y_col.size());
+        // Use U_col and Y_col for transpose source
+        if (M > 0 && U_col.size() > 0) slicot_transpose_to_c(U_col.data(), U_rm.data(), NSMP, M, sizeof(double));
+        if (L > 0 && Y_col.size() > 0) slicot_transpose_to_c(Y_col.data(), Y_rm.data(), NSMP, L, sizeof(double));
 
-        // SV array size: L*NOBR
+        // --- Array Sizing (using potentially updated NSMP) ---
+        // Leading dimensions (Row Major)
+        ldu_rm = (M > 0) ? M : 1;
+        ldy_rm = (L > 0) ? L : 1;
+        ldr_rm = 2 * (M + L) * NOBR;
+
+        // R array size (based on Fortran requirements)
+        int min_ldr_f = (METH == 'M' && JOBD == 'N') ? 2*(M+L)*NOBR :
+                       ((METH == 'M' && JOBD == 'M') ? std::max(2*(M+L)*NOBR, 3*M*NOBR) : 2*(M+L)*NOBR);
+        int r_rows_f = std::max(1, min_ldr_f);
+        int r_cols_f = 2 * (M + L) * NOBR;
+        R.resize((size_t)r_rows_f * r_cols_f);
+
+        // SV array size
         SV.resize((size_t)L * NOBR);
-
-        // IWORK size
-        int LIWORK = std::max(3, (M + L) * NOBR);
-        IWORK.resize(LIWORK);
-
-        // Workspace array
-        DWORK.resize(LDWORK);
     }
 };
+
+
+// --- Test Cases ---
 
 // Test using data from IB01AD.dat/.res (Column-Major)
 TEST_F(IB01ADTestColMajor, DocExample) {
-    // Run the actual computation with the large workspace
-    int ldu = NSMP;  // Column-major leading dimension
-    int ldy = NSMP;
-    int ldr = 2 * (M + L) * NOBR;
-    int n = 0;  // Auto-detect order
-    
-    int info = slicot_ib01ad(
+    int info;
+    int n = 0; // Auto-detect order
+
+    // Run Actual Computation - Workspace handled internally by wrapper
+    info = slicot_ib01ad(
         METH, ALG, JOBD, BATCH, CONCT, CTRL,
         NOBR, M, L, NSMP,
-        U.data(), ldu, Y.data(), ldy,
+        (M > 0 ? U.data() : nullptr), ldu, (L > 0 ? Y.data() : nullptr), ldy,
         &n, R.data(), ldr, SV.data(), RCOND,
-        TOL, IWORK.data(), DWORK.data(), LDWORK,
-        &iwarn_result, 0  // Column-major
+        TOL, &iwarn_result, 0  // Column-major
     );
 
     // Save result
     n_result = n;
-    
+
     // Verify results
     ASSERT_EQ(info, 0) << "slicot_ib01ad failed with info = " << info;
     EXPECT_EQ(iwarn_result, 0) << "slicot_ib01ad returned warning = " << iwarn_result;
     EXPECT_EQ(n_result, expected_N) << "System order N does not match expected value.";
 
     // Check singular values
-    ASSERT_EQ(SV.size(), SV_expected.size()) << "Output SV size mismatch.";
-    for (size_t i = 0; i < SV.size(); ++i) {
-        EXPECT_NEAR(SV[i], SV_expected[i], check_tol) 
+    ASSERT_GE(SV.size(), SV_expected.size()) << "Output SV vector too small.";
+    for (size_t i = 0; i < SV_expected.size(); ++i) { // Only check the expected number of values
+        EXPECT_NEAR(SV[i], SV_expected[i], check_tol)
             << "Mismatch in singular value at index " << i;
     }
 }
 
 // Test using data from IB01AD.dat/.res (Row-Major)
 TEST_F(IB01ADTestRowMajor, DocExample) {
-    // Run the actual computation with the large workspace
-    int ldu = M;  // Row-major leading dimension
-    int ldy = L;
-    int ldr = 2 * (M + L) * NOBR;
-    int n = 0;  // Auto-detect order
-    
-    int info = slicot_ib01ad(
+    int info;
+    int n = 0; // Auto-detect order
+
+    // Run Actual Computation - Workspace handled internally by wrapper
+    info = slicot_ib01ad(
         METH, ALG, JOBD, BATCH, CONCT, CTRL,
         NOBR, M, L, NSMP,
-        U.data(), ldu, Y.data(), ldy,
-        &n, R.data(), ldr, SV.data(), RCOND,
-        TOL, IWORK.data(), DWORK.data(), LDWORK,
-        &iwarn_result, 1  // Row-major
+        (M > 0 ? U_rm.data() : nullptr), ldu_rm, (L > 0 ? Y_rm.data() : nullptr), ldy_rm,
+        &n, R.data(), ldr_rm, SV.data(), RCOND, // Use ldr_rm for row-major call
+        TOL, &iwarn_result, 1  // Row-major
     );
-    
+
     // Save result
     n_result = n;
-    
+
     // Verify results
     ASSERT_EQ(info, 0) << "slicot_ib01ad failed with info = " << info;
     EXPECT_EQ(iwarn_result, 0) << "slicot_ib01ad returned warning = " << iwarn_result;
     EXPECT_EQ(n_result, expected_N) << "System order N does not match expected value.";
 
     // Check singular values
-    ASSERT_EQ(SV.size(), SV_expected.size()) << "Output SV size mismatch.";
-    for (size_t i = 0; i < SV.size(); ++i) {
-        EXPECT_NEAR(SV[i], SV_expected[i], check_tol) 
+    ASSERT_GE(SV.size(), SV_expected.size()) << "Output SV vector too small.";
+     for (size_t i = 0; i < SV_expected.size(); ++i) { // Only check the expected number of values
+        EXPECT_NEAR(SV[i], SV_expected[i], check_tol)
             << "Mismatch in singular value at index " << i;
     }
 }
 
-// Test parameter validation (using Column-Major fixture)
+
+// Test parameter validation (using Column-Major fixture - doesn't rely on loaded data)
 TEST_F(IB01ADTestColMajor, ParameterValidation) {
+    // This test doesn't need real data, just checks parameter validation in the wrapper
+    std::vector<double> dummy_u(1);
+    std::vector<double> dummy_y(1);
+    std::vector<double> dummy_r(1);
+    std::vector<double> dummy_sv(1);
     int n_out = 0;
     int iwarn = 0;
     int info;
-    int dummy_ldwork = 10; 
-    DWORK.resize(dummy_ldwork);
-    int ldu = NSMP;
-    int ldy = NSMP;
-    int ldr = 2 * (M + L) * NOBR;
-    
+    int dummy_nsmp = 100;
+    int dummy_ld = 100;
+    int dummy_ldr = std::max(1, (METH == 'M' && JOBD == 'N') ? 2*(M+L)*NOBR : ((METH == 'M' && JOBD == 'M') ? std::max(2*(M+L)*NOBR, 3*M*NOBR) : 2*(M+L)*NOBR));
+
     // Test invalid METH parameter
-    info = slicot_ib01ad('X', ALG, JOBD, BATCH, CONCT, CTRL,
-                        NOBR, M, L, NSMP,
-                        U.data(), ldu, Y.data(), ldy,
-                        &n_out, R.data(), ldr, SV.data(), RCOND,
-                        TOL, IWORK.data(), DWORK.data(), dummy_ldwork,
-                        &iwarn, 0);  // Column-major
-    EXPECT_LT(info, 0) << "Invalid METH parameter not detected";
-    
+    info = slicot_ib01ad('X', ALG, JOBD, BATCH, CONCT, CTRL, NOBR, M, L, dummy_nsmp,
+                         dummy_u.data(), dummy_ld, dummy_y.data(), dummy_ld,
+                         &n_out, dummy_r.data(), dummy_ldr, dummy_sv.data(), RCOND, TOL,
+                         &iwarn, 0);
+    EXPECT_EQ(info, -1) << "Invalid METH parameter not detected correctly (expected -1)";
+
     // Test invalid ALG parameter
-    info = slicot_ib01ad(METH, 'X', JOBD, BATCH, CONCT, CTRL,
-                        NOBR, M, L, NSMP,
-                        U.data(), ldu, Y.data(), ldy,
-                        &n_out, R.data(), ldr, SV.data(), RCOND,
-                        TOL, IWORK.data(), DWORK.data(), dummy_ldwork,
-                        &iwarn, 0);  // Column-major
-    EXPECT_LT(info, 0) << "Invalid ALG parameter not detected";
-    
-    // Test invalid NOBR parameter
-    info = slicot_ib01ad(METH, ALG, JOBD, BATCH, CONCT, CTRL,
-                        0, M, L, NSMP,
-                        U.data(), ldu, Y.data(), ldy,
-                        &n_out, R.data(), ldr, SV.data(), RCOND,
-                        TOL, IWORK.data(), DWORK.data(), dummy_ldwork,
-                        &iwarn, 0);  // Column-major
-    EXPECT_LT(info, 0) << "Invalid NOBR parameter not detected";
-    
-    // Test invalid L parameter
-    info = slicot_ib01ad(METH, ALG, JOBD, BATCH, CONCT, CTRL,
-                        NOBR, M, 0, NSMP,
-                        U.data(), ldu, Y.data(), ldy,
-                        &n_out, R.data(), ldr, SV.data(), RCOND,
-                        TOL, IWORK.data(), DWORK.data(), dummy_ldwork,
-                        &iwarn, 0);  // Column-major
-    EXPECT_LT(info, 0) << "Invalid L parameter not detected";
-    
-    // Test invalid NSMP parameter for non-sequential processing
-    info = slicot_ib01ad(METH, ALG, JOBD, 'O', CONCT, CTRL,
-                        NOBR, M, L, 1, // NSMP too small
-                        U.data(), ldu, Y.data(), ldy,
-                        &n_out, R.data(), ldr, SV.data(), RCOND,
-                        TOL, IWORK.data(), DWORK.data(), dummy_ldwork,
-                        &iwarn, 0);  // Column-major
-    EXPECT_LT(info, 0) << "Invalid NSMP parameter not detected";
+    info = slicot_ib01ad(METH, 'X', JOBD, BATCH, CONCT, CTRL, NOBR, M, L, dummy_nsmp,
+                         dummy_u.data(), dummy_ld, dummy_y.data(), dummy_ld,
+                         &n_out, dummy_r.data(), dummy_ldr, dummy_sv.data(), RCOND, TOL,
+                         &iwarn, 0);
+    EXPECT_EQ(info, -2) << "Invalid ALG parameter not detected correctly (expected -2)";
+
+    // Test invalid NOBR parameter (<= 0)
+    info = slicot_ib01ad(METH, ALG, JOBD, BATCH, CONCT, CTRL, 0, M, L, dummy_nsmp,
+                         dummy_u.data(), dummy_ld, dummy_y.data(), dummy_ld,
+                         &n_out, dummy_r.data(), dummy_ldr, dummy_sv.data(), RCOND, TOL,
+                         &iwarn, 0);
+    EXPECT_EQ(info, -7) << "Invalid NOBR parameter not detected correctly (expected -7)";
+
+    // Test invalid L parameter (<= 0)
+    info = slicot_ib01ad(METH, ALG, JOBD, BATCH, CONCT, CTRL, NOBR, M, 0, dummy_nsmp,
+                         dummy_u.data(), dummy_ld, nullptr, 1,
+                         &n_out, dummy_r.data(), dummy_ldr, dummy_sv.data(), RCOND, TOL,
+                         &iwarn, 0);
+    EXPECT_EQ(info, -9) << "Invalid L parameter not detected correctly (expected -9)";
+
+    // Test invalid NSMP parameter for non-sequential processing (BATCH='O')
+    int nsmp_too_small = 2 * NOBR - 1;
+    info = slicot_ib01ad(METH, ALG, JOBD, 'O', CONCT, CTRL, NOBR, M, L, nsmp_too_small,
+                         dummy_u.data(), std::max(1,nsmp_too_small),
+                         dummy_y.data(), std::max(1,nsmp_too_small),
+                         &n_out, dummy_r.data(), dummy_ldr, dummy_sv.data(), RCOND, TOL,
+                         &iwarn, 0);
+    EXPECT_EQ(info, -10) << "Invalid NSMP parameter not detected correctly (expected -10)";
 }
