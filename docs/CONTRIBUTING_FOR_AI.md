@@ -49,7 +49,7 @@ extern void F77_FUNC(function_name, FUNCTION_NAME)(
 );
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_C_WRAPPER_API // Use this macro for DLL export/import handling
 int slicot_function_name(/* C function parameters */)
 {
     // 1. Variable declarations
@@ -620,6 +620,10 @@ When testing SLICOT functions with zero-dimension inputs (e.g., N=0, M=0, P=0), 
    - Document why specific implementation choices were made
    - Note any deviations from the usual patterns
    - Reference similar wrappers that influenced implementation
+
+6. **Use DLL Export Macro**:
+   - Always prefix the C wrapper function definition with `SLICOT_C_WRAPPER_API`.
+   - This macro handles platform-specific details for exporting functions from shared libraries (DLLs on Windows). See `CONTRIBUTING.md` Section 12.5 for details.
 
 ## 10. Troubleshooting Guide
 
