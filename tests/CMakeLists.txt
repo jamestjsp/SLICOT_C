@@ -47,7 +47,7 @@ target_sources(slicot_c_wrapper_tests
 
 # Copy test data files to build directory
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data 
-     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/bin)
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 # Include CTest and GoogleTest modules for testing
 include(GoogleTest)
