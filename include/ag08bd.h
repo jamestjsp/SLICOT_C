@@ -73,7 +73,7 @@ extern "C" {
  * < 0: if info = -i, the i-th argument had an illegal value.
  * Memory allocation errors may also be returned.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ag08bd(char equil, int l, int n, int m, int p,
                   double* a, int lda, double* e, int lde,
                   double* b, int ldb, double* c, int ldc,

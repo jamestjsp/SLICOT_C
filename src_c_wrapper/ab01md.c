@@ -54,7 +54,7 @@ extern void F77_FUNC(dorgqr, DORGQR)(
 );
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab01md(char jobz, int n,
                   double* a, int lda,
                   double* b,

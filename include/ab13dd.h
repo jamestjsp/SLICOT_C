@@ -73,7 +73,7 @@
   * = 4: Algorithm did not converge within tolerance/iterations. Increase TOL.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab13dd(char dico, char jobe, char equil, char jobd,
                    int n, int m, int p, double* fpeak,
                    const double* a, int lda, const double* e, int lde,

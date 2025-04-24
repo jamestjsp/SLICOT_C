@@ -46,7 +46,7 @@ extern "C" {
  * = N+1: delta * norm(A) may be too large (potential overflow).
  * Memory allocation errors may also be returned.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_mb05nd(int n, double delta, const double* a, int lda,
                   double* ex, int ldex, double* exint, int ldexin,
                   double tol, int row_major);

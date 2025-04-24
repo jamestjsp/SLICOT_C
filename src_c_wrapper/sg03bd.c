@@ -55,7 +55,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_sg03bd(char dico, char fact, char trans, int n, int m,
                    double* a, int lda, double* e, int lde,
                    double* q, int ldq, double* z, int ldz,

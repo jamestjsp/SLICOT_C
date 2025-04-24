@@ -55,7 +55,7 @@ extern "C" {
  * = 1: Reduction algorithm failed; T is not numerically positive definite.
  * Memory allocation errors may also be returned.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_mb02ed(char typet, int k, int n, int nrhs,
                   double* t, int ldt, double* b, int ldb,
                   int row_major);

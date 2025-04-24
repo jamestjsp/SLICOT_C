@@ -43,7 +43,7 @@ extern "C" {
  * = 2: QR or SVD algorithm failed to converge.
  * Memory allocation errors may also be returned.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab13fd(int n, const double* a, int lda,
                   double* beta, double* omega, double tol,
                   int row_major);

@@ -66,7 +66,7 @@ extern "C" {
  * > 0: if info = i, QR algorithm failed to compute eigenvalues i+1:ihi.
  * Memory allocation errors may also be returned by the wrapper (though unlikely here).
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_mb03wd(char job, char compz, int n, int p, int ilo, int ihi,
                   int iloz, int ihiz,
                   double* h, int ldh1, int ldh2,

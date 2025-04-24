@@ -65,7 +65,7 @@ extern void F77_FUNC(ab05nd, AB05ND)(
 
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab05nd(char over,
                   int n1, int m1, int p1, int n2, double alpha,
                   const double* a1, int lda1, const double* b1, int ldb1,

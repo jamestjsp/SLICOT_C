@@ -59,7 +59,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_tb03ad(char leri, char equil, int n, int m, int p,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

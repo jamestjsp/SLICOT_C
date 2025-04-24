@@ -40,7 +40,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab07nd(int n, int m,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

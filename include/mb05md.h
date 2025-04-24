@@ -53,7 +53,7 @@ extern "C" {
  * = N+2: Matrix A is defective (possibly due to rounding). Consider MB05ND/OD.
  * Memory allocation errors may also be returned.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_mb05md(char balanc, int n, double delta,
                   double* a, int lda,
                   double* v, int ldv,

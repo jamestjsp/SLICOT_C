@@ -47,7 +47,7 @@ extern void F77_FUNC(ab13md, AB13MD)(
 
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab13md(char fact, int n, const slicot_complex_double* z, int ldz,
                   int m, const int* nblock, const int* itype,
                   double* x, double* bound, double* d, double* g,

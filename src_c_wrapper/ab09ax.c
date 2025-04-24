@@ -55,7 +55,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab09ax(char dico, char job, char ordsel,
                    int n, int m, int p, int* nr,
                    double* a, int lda,

@@ -39,7 +39,7 @@ extern void F77_FUNC(mb02ed, MB02ED)(
 
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_mb02ed(char typet, int k, int n, int nrhs,
                   double* t, int ldt, double* b, int ldb,
                   int row_major)

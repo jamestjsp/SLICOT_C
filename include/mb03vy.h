@@ -48,7 +48,7 @@ extern "C" {
  * < 0: if info = -i, the i-th argument had an illegal value.
  * Memory allocation errors may also be returned by the wrapper.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_mb03vy(int n, int p, int ilo, int ihi,
                   double* a, int lda1, int lda2,
                   const double* tau, int ldtau,

@@ -45,7 +45,7 @@ extern void F77_FUNC(ab04md, AB04MD)(
 );
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab04md(char type, int n, int m, int p,
                  double alpha, double beta,
                  double* a, int lda,

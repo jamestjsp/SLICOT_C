@@ -624,11 +624,11 @@ double real_part = SLICOT_COMPLEX_REAL(z);
 
 ```c
 // In the implementation file
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 void my_exported_function(...)
 ```
 
-The `SLICOT_C_WRAPPER_API` macro handles platform-specific export declarations:
+The `SLICOT_EXPORT` macro handles platform-specific export declarations:
 - On Windows: `__declspec(dllexport)` when building, `__declspec(dllimport)` when using
 - On Linux/macOS with GCC/Clang: `__attribute__((visibility("default")))`
 - When building static library: empty definition
@@ -763,7 +763,7 @@ extern void F77_FUNC(function_name, FUNCTION_NAME)(
 );
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_function_name(/* C function parameters */)
 {
     // 1. Variable declarations

@@ -39,7 +39,7 @@ extern void F77_FUNC(ab13fd, AB13FD)(
 
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab13fd(int n, const double* a, int lda,
                   double* beta, double* omega, double tol,
                   int row_major)

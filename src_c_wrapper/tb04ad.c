@@ -55,7 +55,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_tb04ad(char rowcol, int n, int m, int p,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

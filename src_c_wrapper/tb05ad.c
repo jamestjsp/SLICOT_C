@@ -56,7 +56,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_tb05ad(char baleig, char inita, int n, int m, int p,
                    slicot_complex_double freq, /* C complex type */
                    double* a, int lda, double* b, int ldb,

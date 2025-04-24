@@ -89,13 +89,13 @@
  #define MIN(a,b) (((a) < (b)) ? (a) : (b))
  #endif
  
-#ifndef SLICOT_C_WRAPPER_API // Prevent multiple definitions
+#ifndef SLICOT_EXPORT // Prevent multiple definitions
 
   // Check if building a static library.
   // SLICOT_STATIC should be defined by the build system (e.g., CMake)
   // when BUILD_SHARED_LIBS is OFF.
   #ifdef SLICOT_STATIC
-    #define SLICOT_C_WRAPPER_API
+    #define SLICOT_EXPORT
 
   // Building or using a shared library
   #else
@@ -105,26 +105,26 @@
       // SLICOT_C_WRAPPER_EXPORTS should be defined by the build system (e.g., CMake)
       // when building the shared library (BUILD_SHARED_LIBS is ON).
       #ifdef SLICOT_C_WRAPPER_EXPORTS
-        #define SLICOT_C_WRAPPER_API __declspec(dllexport)
+        #define SLICOT_EXPORT __declspec(dllexport)
       // Using the DLL
       #else
-        #define SLICOT_C_WRAPPER_API __declspec(dllimport)
+        #define SLICOT_EXPORT __declspec(dllimport)
       #endif // SLICOT_C_WRAPPER_EXPORTS
 
     // Non-Windows platforms (Linux, macOS, etc.)
     #else
       // Use GCC/Clang visibility attributes if available for better symbol handling
       #if defined(__GNUC__) && (__GNUC__ >= 4)
-        #define SLICOT_C_WRAPPER_API __attribute__ ((visibility ("default")))
+        #define SLICOT_EXPORT __attribute__ ((visibility ("default")))
       #else
-        #define SLICOT_C_WRAPPER_API // Default: empty definition
+        #define SLICOT_EXPORT // Default: empty definition
       #endif // __GNUC__
 
     #endif // _WIN32
 
   #endif // SLICOT_STATIC
 
-#endif // SLICOT_C_WRAPPER_API
+#endif // SLICOT_EXPORT
 
 
 
@@ -139,7 +139,7 @@
   * @param cols Number of columns in the matrix.
   * @param elem_size Size (in bytes) of a single matrix element.
   */
-  SLICOT_C_WRAPPER_API
+  SLICOT_EXPORT
  void slicot_transpose_to_fortran(const void *src, void *dest, int rows, int cols, size_t elem_size);
  
  /**
@@ -151,7 +151,7 @@
   * @param cols Number of columns in the matrix.
   * @param elem_size Size (in bytes) of a single matrix element.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size_t elem_size);
  
  /**
@@ -163,7 +163,7 @@
   * @param elem_size Size (in bytes) of a single matrix element.
   * @return Returns 0 on success, -1 on error (if rows != cols or memory allocation fails).
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_transpose_inplace(void *matrix, int rows, int cols, size_t elem_size);
 
 /**
@@ -181,7 +181,7 @@
   * = 0: Column-major (Fortran style).
   * = 1: Row-major (C style).
   */
-  SLICOT_C_WRAPPER_API
+  SLICOT_EXPORT
  void set_identity(int n, double* mat, int ld, int row_major);
  
 /**
@@ -200,7 +200,7 @@
  * @param ld Leading dimension of both src and dest.
  * @param elem_size Size (in bytes) of a single matrix element.
  */
-  SLICOT_C_WRAPPER_API
+  SLICOT_EXPORT
 void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, int ld, size_t elem_size);
 
 /**
@@ -213,7 +213,7 @@ void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, i
  * @param uplo Specifies which triangle of src is stored ('U' or 'L').
  * @param elem_size Size (in bytes) of a single matrix element.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, char uplo, size_t elem_size);
 
 /**
@@ -226,7 +226,7 @@ void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, c
  * @param uplo Specifies which triangle of src to copy to dest ('U' or 'L').
  * @param elem_size Size (in bytes) of a single matrix element.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size);
 
 
@@ -241,7 +241,7 @@ void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char up
  * @param ld_dest Leading dimension of the destination matrix (number of columns).
  * @param elem_size Size (in bytes) of a single matrix element.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols, 
                                   int ld_src, int ld_dest, size_t elem_size);
  /*
@@ -258,7 +258,7 @@ void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int co
  * The function prints the matrix in a human-readable format, including the matrix name (if provided),
  * its dimensions, leading dimension, and storage order. Each row of the matrix is printed on a separate line.
  */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
  void printMatrixD(const char* name, const double* data, int rows, int cols, int ld, int rowMajor);
  #ifdef __cplusplus
  }

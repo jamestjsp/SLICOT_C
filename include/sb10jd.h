@@ -55,7 +55,7 @@
   * = 1: SVD algorithm failed to converge.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_sb10jd(int n, int m, int np,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* d, int ldd,

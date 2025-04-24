@@ -87,7 +87,7 @@
   * = M+1: if R is numerically singular.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_sb02mt(char jobg, char jobl, char fact, char uplo,
                    int n, int m,
                    double* a, int lda, double* b, int ldb,

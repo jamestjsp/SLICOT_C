@@ -46,7 +46,7 @@
   * = 2: Stability inconclusive (zeros potentially very close to boundary). NZ not determined.
   * Memory allocation errors may also be returned by the wrapper.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_mc01td(char dico, int* dp, const double* p,
                    int* stable, int* nz, int* iwarn);
  

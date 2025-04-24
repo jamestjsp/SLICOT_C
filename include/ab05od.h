@@ -74,7 +74,7 @@
   * < 0: if info = -i, the i-th argument had an illegal value.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab05od(char over,
                    int n1, int m1, int p1, int n2, int m2, double alpha,
                    const double* a1, int lda1, const double* b1, int ldb1,

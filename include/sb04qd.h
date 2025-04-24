@@ -54,7 +54,7 @@
   * > M: Singular matrix encountered solving for column (info-m) of X.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_sb04qd(int n, int m,
                    double* a, int lda, double* b, int ldb,
                    double* c, int ldc, double* z, int ldz,

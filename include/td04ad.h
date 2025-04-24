@@ -58,7 +58,7 @@
   * > 0: if info = i, the i-th leading coefficient in DCOEFF is near zero (potential overflow).
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_td04ad(char rowcol, int m, int p, const int* index,
                    const double* dcoeff, int lddcoe,
                    const double* ucoeff, int lduco1, int lduco2,

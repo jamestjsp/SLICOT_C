@@ -36,7 +36,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab13ed(int n, const double* a, int lda,
                    double* low, double* high, double tol,
                    int row_major)

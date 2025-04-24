@@ -70,7 +70,7 @@
   * = 4: Attempt to place complex pair on real eigenvalue location. NAP eigenvalues still assigned.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_sb01bd(char dico, int n, int m, int np, double alpha,
                    double* a, int lda, const double* b, int ldb,
                    double* wr, double* wi,

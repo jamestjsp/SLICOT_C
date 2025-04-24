@@ -56,7 +56,7 @@ extern void F77_FUNC(ab01od, AB01OD)(
 
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab01od(char stages, char jobu, char jobv,
                   int n, int m,
                   double* a, int lda,

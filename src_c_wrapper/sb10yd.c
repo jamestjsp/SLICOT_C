@@ -47,7 +47,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_sb10yd(int discfl, int flag, int lendat,
                    const double* rfrdat, const double* ifrdat, const double* omega,
                    int* n, double* a, int lda, double* b, double* c, double* d,

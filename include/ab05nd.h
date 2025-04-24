@@ -72,7 +72,7 @@
   * > 0: if info = i (1 <= i <= P1), the matrix (I + ALPHA*D1*D2) is singular.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab05nd(char over,
                    int n1, int m1, int p1, int n2, double alpha,
                    const double* a1, int lda1, const double* b1, int ldb1,

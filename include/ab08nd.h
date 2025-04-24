@@ -103,7 +103,7 @@
   * Memory allocation errors may also be returned.
   * Special codes -20, -22 may be returned if ldaf/ldbf are too small for computed nu.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab08nd(char equil, int n, int m, int p,
                    double* a, int lda,
                    double* b, int ldb,

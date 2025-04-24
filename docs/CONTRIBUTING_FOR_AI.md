@@ -87,7 +87,7 @@ extern void F77_FUNC(function_name, FUNCTION_NAME)(
 );
 
 * C wrapper function definition */  
-SLICOT_C_WRAPPER_API // Macro for DLL export/import handling  
+SLICOT_EXPORT // Macro for DLL export/import handling  
 int slicot_function_name(* C function parameters, excluding workspace */  
                          // const char* job, int n, ..., double* a, int lda, ..., int row_major  
                         )  
@@ -231,7 +231,7 @@ cleanup:
 #ifndef SLICOT_WRAPPER_FUNCTION_NAME_H // Use unique guard  
 #define SLICOT_WRAPPER_FUNCTION_NAME_H
 
-#include "slicot_defs.h" // Provides SLICOT_C_WRAPPER_API macro
+#include "slicot_defs.h" // Provides SLICOT_EXPORT macro
 
 #ifdef __cplusplus  
 extern "C" {  
@@ -263,7 +263,7 @@ extern "C" {
  * > 0: Fortran routine specific error (see SLICOT documentation for FUNCTION_NAME)  
  * = SLICOT_MEMORY_ERROR (-1010): internal memory allocation failed.  
  */  
-SLICOT_C_WRAPPER_API  
+SLICOT_EXPORT  
 int slicot_function_name(* C function parameters matching .c file, excluding workspace */  
                          // char job, int n, double* a, int lda, ..., int* x, int row_major  
                         );

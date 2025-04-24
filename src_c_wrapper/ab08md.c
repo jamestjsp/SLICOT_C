@@ -32,7 +32,7 @@ extern void F77_FUNC(ab08md, AB08MD)(
     int equil_len /* Hidden length argument for equil */);
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_ab08md(char equil, int n, int m, int p,
                   double* a, int lda,
                   double* b, int ldb,

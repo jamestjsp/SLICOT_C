@@ -61,7 +61,7 @@
   * = 1: P(s) is not row/column proper (leading coefficient matrix is singular).
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_tc04ad(char leri, int m, int p, const int* index,
                    const double* pcoeff, int ldpco1, int ldpco2,
                    const double* qcoeff, int ldqco1, int ldqco2,

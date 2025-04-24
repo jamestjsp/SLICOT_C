@@ -78,7 +78,7 @@
   * = 3: Hankel singular value computation failed.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab09bd(char dico, char job, char equil, char ordsel,
                    int n, int m, int p, int* nr,
                    double* a, int lda,

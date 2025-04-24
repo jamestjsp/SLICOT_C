@@ -12,7 +12,7 @@
  #define SLICOT_WRAPPER_IB01BD_H
  
  #include <stdbool.h>      // Include for bool type (though not directly used in signature)
- #include "slicot_utils.h" // Provides SLICOT_C_WRAPPER_API macro
+ #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
  
  #ifdef __cplusplus
  extern "C" {
@@ -111,7 +111,7 @@
   * > 0: Fortran routine specific error (see SLICOT documentation for IB01BD)
   * = SLICOT_MEMORY_ERROR (-1010): internal memory allocation failed.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ib01bd(char meth, char job, char jobck, int nobr, int n, int m, int l,
                    int nsmpl, double *r, int ldr,
                    double *a, int lda, double *c, int ldc,

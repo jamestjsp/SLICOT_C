@@ -35,7 +35,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_mc01td(char dico, int* dp, const double* p,
                    int* stable, int* nz, int* iwarn)
                    // No row_major parameter needed

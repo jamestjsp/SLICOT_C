@@ -43,7 +43,7 @@
   * = 1: QR algorithm failed to converge.
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab13ed(int n, const double* a, int lda,
                    double* low, double* high, double tol,
                    int row_major);

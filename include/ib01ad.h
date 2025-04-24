@@ -14,7 +14,7 @@
  #ifndef SLICOT_WRAPPER_IB01AD_H
  #define SLICOT_WRAPPER_IB01AD_H
  
- #include "slicot_utils.h" // For SLICOT_C_WRAPPER_API macro
+ #include "slicot_utils.h" // For SLICOT_EXPORT macro
  
  #ifdef __cplusplus
  extern "C" {
@@ -60,7 +60,7 @@
   * positive value indicates a computational error (see Fortran docs),
   * SLICOT_MEMORY_ERROR (-1010) if internal memory allocation failed.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ib01ad(char meth, char alg, char jobd, char batch, char conct, char ctrl,
                    int nobr, int m, int l, int nsmp,
                    double *u, int ldu, double *y, int ldy,

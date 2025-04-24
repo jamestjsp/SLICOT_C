@@ -45,7 +45,7 @@ extern void F77_FUNC(mb03rd, MB03RD)(
 
 
 /* C wrapper function definition */
-SLICOT_C_WRAPPER_API
+SLICOT_EXPORT
 int slicot_mb03rd(char jobx, char sort, int n, double pmax,
                   double* a, int lda, double* x, int ldx,
                   int* nblcks, int* blsize, double* wr, double* wi,

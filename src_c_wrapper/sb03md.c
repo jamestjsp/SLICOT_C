@@ -52,7 +52,7 @@
 
 
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_sb03md(char dico, char job, char fact, char trana, int n,
                    double* a, int lda, double* u, int ldu,
                    double* c, int ldc, double* scale, double* sep, double* ferr,

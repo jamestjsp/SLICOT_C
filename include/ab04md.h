@@ -65,7 +65,7 @@
   * = 2: if the matrix (BETA*I - A) is singular (TYPE='C').
   * Memory allocation errors may also be returned.
   */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ab04md(char type, int n, int m, int p,
                    double alpha, double beta,
                    double* a, int lda,

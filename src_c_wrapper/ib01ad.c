@@ -127,7 +127,7 @@
  
  
  /* C wrapper function definition */
- SLICOT_C_WRAPPER_API
+ SLICOT_EXPORT
  int slicot_ib01ad(char meth, char alg, char jobd, char batch, char conct, char ctrl,
                    int nobr, int m, int l, int nsmp,
                    double *u, int ldu, double *y, int ldy,
