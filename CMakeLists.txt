@@ -9,7 +9,8 @@ cmake_minimum_required(VERSION 3.15)
 
 # Project definition
 project(SLICOT VERSION 5.9.0 LANGUAGES Fortran C CXX) # Add CXX language
-
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Options
 option(SLICOT_BUILD_SHARED_LIBS "Build shared libraries" ON) # Default to shared for DLLs
 option(SLICOT_BUILD_EXAMPLES "Build the SLICOT example programs and tests" OFF)
