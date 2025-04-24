@@ -295,6 +295,12 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/SLICOTConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SLICOT)
 
+# Install header files
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
+
 # Conditionally install example documentation
 if(SLICOT_BUILD_EXAMPLES)
     # The actual installation command is inside examples/CMakeLists.txt

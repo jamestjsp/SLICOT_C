@@ -21,7 +21,7 @@ if(SLICOT_BUILD_SHARED_LIBS)
     endif()
 else()
     # Define SLICOT_STATIC when building a static library
-    target_compile_definitions(slicot_c_wrapper_obj PRIVATE SLICOT_STATIC)
+    target_compile_definitions(slicot_c_wrapper_obj PUBLIC SLICOT_STATIC)
 endif()
 
 # Set target properties if needed, e.g., include directories

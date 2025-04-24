@@ -26,12 +26,14 @@ target_link_libraries(slicot
         ${BLAS_LIBRARIES}
 )
 
-# Install the library targets
+# Install the library target
 install(TARGETS slicot
-        EXPORT SLICOTTargets # Add target to the export set defined in parent CMakeLists.txt
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Libraries
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Libraries
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT RuntimeLibraries) # For DLLs on Windows
+    EXPORT SLICOTTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 # Install C wrapper headers from include/ if enabled
 if(SLICOT_BUILD_C_WRAPPERS)

@@ -29,6 +29,15 @@ target_include_directories(slicot_c_wrapper_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/include  # For SLICOT headers
 )
 
+# Define macros for export/import or static build based on SLICOT_BUILD_SHARED_LIBS
+if(NOT SLICOT_BUILD_SHARED_LIBS)
+    # Define SLICOT_STATIC when linking against a static library
+    target_compile_definitions(slicot_c_wrapper_tests PRIVATE SLICOT_STATIC)
+    message(STATUS "Test build: Using static linking (SLICOT_STATIC defined)")
+else()
+    message(STATUS "Test build: Using dynamic linking")
+endif()
+
 # Link against the main SLICOT library (which includes the C wrappers),
 # GoogleTest libraries, and BLAS/LAPACK
 target_link_libraries(slicot_c_wrapper_tests PRIVATE

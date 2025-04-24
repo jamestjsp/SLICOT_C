@@ -13,7 +13,6 @@
  #include <stdlib.h> // For size_t, malloc (used in CHECK_ALLOC context)
  #include <stddef.h> // For size_t
  
- #include "slicot_utils.h"  /* Complex number support */
  #ifdef __cplusplus
  /* Use C++ complex types when compiling with C++ */
  #include <complex>
