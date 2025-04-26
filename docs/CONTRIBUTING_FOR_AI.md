@@ -231,7 +231,7 @@ cleanup:
 #ifndef SLICOT_WRAPPER_FUNCTION_NAME_H // Use unique guard  
 #define SLICOT_WRAPPER_FUNCTION_NAME_H
 
-#include "slicot_defs.h" // Provides SLICOT_EXPORT macro
+#include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
 #ifdef __cplusplus  
 extern "C" {  
