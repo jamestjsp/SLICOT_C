@@ -128,7 +128,7 @@ set(SLICOT_C_WRAPPER_SOURCES
     sb10fd.c   sb10hd.c   sb10jd.c   sb10yd.c   sg02ad.c   sg03ad.c
     sg03bd.c   tb01id.c   tb01pd.c   tb03ad.c   tb04ad.c   tb05ad.c
     tc01od.c   tc04ad.c   td04ad.c   tf01md.c   tf01rd.c   tg01ad.c
-    tg01fd.c   ib01ad.c   ib01bd.c   dg01nd.c   slicot_utils.c
+    tg01fd.c   ib01ad.c   ib01bd.c   dg01nd.c   dk01md.c   slicot_utils.c
 )
 
 # All SLICOT sources
