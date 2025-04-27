@@ -12,10 +12,10 @@
 #include "ib01bd.h"
 #include "slicot_utils.h"
 #include "test_utils.h" // For load_test_data_from_csv
+#include "test_config.h" // Include the new test configuration
 
 // Using ib01ad.csv as it contains the U,Y inputs needed to generate R for IB01BD
-const std::filesystem::path csv_file_path = "data/ib01ad.csv";
-const std::string DATA_FILE_PATH = csv_file_path.string();
+const std::string DATA_FILE_PATH = TEST_DATA_DIR "ib01ad.csv";
 
 
 // --- Column-Major Test Fixture for IB01BD ---

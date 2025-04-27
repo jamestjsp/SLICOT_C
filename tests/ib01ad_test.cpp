@@ -8,10 +8,11 @@
 #include "ib01ad.h"       // Include the updated wrapper header
 #include "slicot_utils.h" // For transpose functions
 #include "test_utils.h"   // For data loading utilities (contains the updated loader)
+#include "test_config.h"  // Include the new test configuration
 
 // Path to test data file (ensure this path is correct relative to execution)
 // ASSUMPTION: This CSV file has a header row with columns named "U" and "Y".
-const std::string DATA_FILE_PATH = "data/ib01ad.csv"; // Make sure this file exists and has U,Y columns
+const std::string DATA_FILE_PATH = TEST_DATA_DIR "ib01ad.csv";
 
 // --- Column-Major Test Fixture ---
 class IB01ADTestColMajor : public ::testing::Test {

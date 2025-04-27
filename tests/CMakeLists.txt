@@ -54,7 +54,22 @@ target_sources(slicot_c_wrapper_tests
         test_utils.cpp
 )
 
-# Copy test data files to build directory
+# Handle test data in a more elegant way
+# Define a preprocessor macro that points to the test data directory
+# This allows tests to find data files regardless of working directory
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_config.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/test_config.h
+)
+
+# Add the binary directory to include paths to find the generated config
+target_include_directories(slicot_c_wrapper_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/include  # For SLICOT headers
+    ${CMAKE_CURRENT_BINARY_DIR}  # For generated test_config.h
+)
+
+# No need to copy data if using absolute paths from test_config.h
+# But keep it for backward compatibility or just in case
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data 
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -62,7 +77,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data
 include(GoogleTest)
 enable_testing()
 
-# Discover tests in the executable with more explicit options
+# Make sure the test working directory is set correctly
 gtest_discover_tests(slicot_c_wrapper_tests
     PROPERTIES
         TIMEOUT 120  # Set a timeout for each test

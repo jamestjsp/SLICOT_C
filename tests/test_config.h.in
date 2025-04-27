@@ -1,0 +1,15 @@
+/**
+ * @file test_config.h
+ * @brief Runtime configuration for tests
+ */
+
+#ifndef SLICOT_TEST_CONFIG_H
+#define SLICOT_TEST_CONFIG_H
+
+// Absolute path to test data directory
+#define TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/"
+
+// Relative path to test data directory (relative to build dir)
+#define TEST_DATA_DIR_RELATIVE "data/"
+
+#endif // SLICOT_TEST_CONFIG_H

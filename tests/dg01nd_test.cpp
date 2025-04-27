@@ -8,9 +8,10 @@
 #include "dg01nd.h"
 #include "slicot_utils.h"
 #include "test_utils.h"
+#include "test_config.h" // Include the new test configuration
 
 // Path to the CSV test data file  
-const std::string DATA_FILE_PATH = "data/dg01nd.csv";
+const std::string DATA_FILE_PATH = TEST_DATA_DIR "dg01nd.csv";
 
 // --- Column-Major Test Fixture ---  
 class DG01NDTestColMajor : public ::testing::Test {  

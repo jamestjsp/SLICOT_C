@@ -18,22 +18,28 @@ This document provides structured guidelines for AI coding agents to efficiently
   * **Row-Major C:** LDA, LDB, etc., passed to the C wrapper refer to the number of **columns** allocated for the matrix in memory. The wrapper must calculate the required Fortran LDA (rows) internally.  
 * **Testing:**  
   * Use GTest fixtures (ColMajor, RowMajor).  
-  * Load test data from a **CSV file** in the data/ directory using the load_test_data_from_csv utility.  
+  * Load test data from a **CSV file** in the tests/data/ directory using the load_test_data_from_csv utility.  
   * The **CSV header names MUST exactly match** the input_columns/output_columns specified in the test fixture.  
   * SetUp loads data, updates NSMP (number of samples), calculates LDs, and sizes output vectors.  
   * Tests call the C wrapper, ASSERT_EQ the info code, and EXPECT_NEAR the numerical results.  
+* **Filenames:** All C source and header files **must use lowercase naming** (e.g., ab05od.c, not AB05OD.c).
 * **Error Handling:** Use CHECK_ALLOC after malloc. Implement goto cleanup for error exits. Free all allocated memory in the cleanup block. Return appropriate info codes (negative for wrapper errors, Fortran info otherwise).
 
 ## **1. Project Structure**
 ```
-SLICOT-Reference/  
+SLICOT_C/  
+├── benchmark_data/   # Performance benchmarking data
+├── build/            # Build artifacts (generated)
+├── cmake/            # CMake build configuration files
 ├── doc/              # SLICOT function documentation (HTML)  
+├── docs/             # Project documentation
 ├── examples/         # Original example data (*.dat, *.res) and Fortran programs (*.f)  
-├── include/          # Public C header files for wrappers (*.h)  
+├── include/          # Public C header files for wrappers (*.h, lowercase naming)  
 ├── src/              # Original SLICOT Fortran source code  
-├── src_c_wrapper/    # C wrapper implementation files (*.c)  
+├── src_aux/          # Auxiliary source files
+├── src_c_wrapper/    # C wrapper implementation files (*.c, lowercase naming)  
 └── tests/            # C++ Test files (*_test.cpp, test_utils.h/cpp)
-   └──data/           # Test data files (*.csv) derived from examples
+   └── data/          # Test data files (*.csv) derived from examples
 ```
 ## **2. Implementation Workflow**
 
@@ -42,7 +48,7 @@ Follow this sequence precisely:
 1. **Analyze Documentation:** Review the function's HTML documentation (e.g., doc/AB05OD.html) and the corresponding Fortran example files (examples*.dat, examples*.res, examples/T*.f). Understand parameters, dimensions, constraints, and **workspace formulas**.  
 2. **Prepare Test Data CSV:**  
    * Locate the .dat file in examples/.  
-   * Create a corresponding CSV file in data/ (e.g., data/function_name.csv).  
+   * Create a corresponding CSV file in tests/data/ (e.g., tests/data/function_name.csv). Use lowercase for the filename.
    * The **first row MUST be a header**. Choose clear, unique names (e.g., "U1", "Y1", "A11", "A12"). **These names are critical** for test data loading.  
    * Copy the numerical data from the .dat file into subsequent rows of the CSV.  
 3. **Extract Key Information:** Note parameters, types, dimensions, LD rules, and **exact workspace formulas**.  
@@ -290,7 +296,7 @@ int slicot_function_name(* C function parameters matching .c file, excluding wor
 #include "test_utils.h"    // For load_test_data_from_csv
 
 // Path to the CSV test data file  
-const std::string DATA_FILE_PATH = "data/function_name.csv"; // Adjust function_name
+const std::string DATA_FILE_PATH = "tests/data/function_name.csv"; // Note: Using tests/data path
 
 // --- Column-Major Test Fixture ---  
 class FunctionNameTestColMajor : public ::testing::Test {  
@@ -757,7 +763,7 @@ cleanup:
 ### **6.1 Data Preparation (CSV)**
 
 1. **Locate Examples:** Find .dat (input) and .res (output) files in examples/. Check T*.f file to understand data layout if .dat is unclear.  
-2. **Create CSV:** Create data/function_name.csv.  
+2. **Create CSV:** Create tests/data/function_name.csv.  
    * **Header Row:** First row **must** be a header with unique column names (e.g., "U1", "Y1"). **These names MUST exactly match the test fixture's input_columns/output_columns vectors.**  
    * **Data Rows:** Add numerical data, usually one row per time step or sample.  
 3. **Extract Expected Results:** Get expected outputs from the .res file and hardcode them into the test fixture (e.g., A_expected, expected_info).
@@ -774,7 +780,7 @@ std::vector<double> U_loaded, Y_loaded; // Output vectors (will be column-major)
 
 try {  
     bool success = load_test_data_from_csv(  
-        "data/my_function.csv", // Path to CSV file  
+        "tests/data/my_function.csv", // Path to CSV file (must be in tests/data directory)  
         inputs_to_load, outputs_to_load,  
         U_loaded, Y_loaded, samples_loaded  
     );  
@@ -821,7 +827,7 @@ try {
    * Row-major SetUp transposes loaded/initialized inputs into _rm members after loading column-major data.  
 3. **Test Types**:  
    * DocExample (ColMajor & RowMajor): Verify info == expected_info and numerical results.  
-   * ParameterValidation: Use TEST_F to call the wrapper with specific invalid inputs and EXPECT_EQ the returned negative info code to test wrapper validation.  
+   * ParameterValidation: Use TEST_F to call the wrapper with specific invalid inputs and EXPECT_EQ the returned negative info code expected from the wrapper validation.  
 4. **Verification**:  
    * ASSERT_EQ(info_result, expected_info) first.  
    * Use EXPECT_NEAR for float comparisons with tolerance (check_tol).  
@@ -831,11 +837,12 @@ try {
 
 1. **Analyze Similar Wrappers**: Prioritize wrappers in the same SLICOT category (AB, SB, etc.). Copy patterns for validation, **internal workspace calculation**, and row_major handling.  
 2. **Verify Workspace Formulas**: **Crucial Step.** Check liwork/ldwork formulas against Fortran source comments (src*.f) or reliable documentation. Implement these formulas accurately in the wrapper.  
-3. **Handle row_major Meticulously**: Ensure correct pointer (_ptr, _cm) usage, correct Fortran LD (_f = rows), and proper calls to slicot_transpose_to_fortran and slicot_transpose_to_c[_with_ld].  
-4. **Test Wrapper Logic**: The ParameterValidation test is vital for ensuring the wrapper itself correctly handles bad inputs before calling Fortran.  
-5. **Document Clearly**: Use Doxygen in .h files. Explain parameters, row_major behavior, internal workspace, and return codes. Comment .c file logic.  
-6. **Use CHECK_ALLOC**: Mandatory after every malloc. Ensure it jumps to cleanup and sets info = SLICOT_MEMORY_ERROR.  
-7. **Log Reasoning**: Note workspace formula sources or any complex logic decisions.
+3. **Use Lowercase Filenames**: All C source files (.c) and header files (.h) **must** use lowercase filenames, even if the corresponding Fortran routines use uppercase (e.g., use ab05od.c for AB05OD routine).
+4. **Handle row_major Meticulously**: Ensure correct pointer (_ptr, _cm) usage, correct Fortran LD (_f = rows), and proper calls to slicot_transpose_to_fortran and slicot_transpose_to_c[_with_ld].  
+5. **Test Wrapper Logic**: The ParameterValidation test is vital for ensuring the wrapper itself correctly handles bad inputs before calling Fortran.  
+6. **Document Clearly**: Use Doxygen in .h files. Explain parameters, row_major behavior, internal workspace, and return codes. Comment .c file logic.  
+7. **Use CHECK_ALLOC**: Mandatory after every malloc. Ensure it jumps to cleanup and sets info = SLICOT_MEMORY_ERROR.  
+8. **Log Reasoning**: Note workspace formula sources or any complex logic decisions.
 
 ## **10. Troubleshooting Guide**
 
