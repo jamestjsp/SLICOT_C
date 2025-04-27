@@ -294,9 +294,10 @@ int slicot_function_name(* C function parameters matching .c file, excluding wor
 #include "function_name.h" // Include the wrapper header  
 #include "slicot_utils.h"  // For transpose functions if needed for setup/verification  
 #include "test_utils.h"    // For load_test_data_from_csv
+#include "test_config.h"   // Include CMake-generated configuration for data path
 
-// Path to the CSV test data file  
-const std::string DATA_FILE_PATH = "tests/data/function_name.csv"; // Note: Using tests/data path
+// Use the TEST_DATA_DIR macro defined in test_config.h
+const std::string DATA_FILE_PATH = TEST_DATA_DIR "function_name.csv";
 
 // --- Column-Major Test Fixture ---  
 class FunctionNameTestColMajor : public ::testing::Test {  
@@ -347,6 +348,7 @@ protected:
         ASSERT_EQ(output_columns.size(), P) << "Fixture P != output_columns size";
 
         try {  
+            // Use DATA_FILE_PATH which now uses TEST_DATA_DIR
             bool success = load_test_data_from_csv(  
                 DATA_FILE_PATH, input_columns, output_columns,  
                 U, Y, samples_loaded // U, Y are populated here  
@@ -400,6 +402,7 @@ protected:
 
         std::vector<double> U_col, Y_col; // Temporary column-major storage  
         try {  
+             // Use DATA_FILE_PATH which now uses TEST_DATA_DIR
              bool success = load_test_data_from_csv(  
                 DATA_FILE_PATH, input_columns, output_columns,  
                 U_col, Y_col, samples_loaded  
@@ -770,8 +773,14 @@ cleanup:
 
 ### **6.2 Using the CSV Loader in Tests**
 
-Use load_test_data_from_csv from test_utils.h within the test fixture's SetUp method.
+Use `load_test_data_from_csv` from `test_utils.h` within the test fixture's `SetUp` method. Ensure `test_config.h` is included and `TEST_DATA_DIR` is used to construct the file path.
 ```cpp
+// Include the CMake-generated configuration header
+#include "test_config.h"
+
+// Define the path using the macro
+const std::string DATA_FILE_PATH = TEST_DATA_DIR "my_function.csv";
+
 // Inside test fixture SetUp:  
 std::vector<std::string> inputs_to_load = {"U1", "U2"}; // **MUST match CSV header**  
 std::vector<std::string> outputs_to_load = {"Y1"};     // **MUST match CSV header**  
@@ -779,13 +788,14 @@ int samples_loaded = 0;
 std::vector<double> U_loaded, Y_loaded; // Output vectors (will be column-major)
 
 try {  
+    // Pass the constructed DATA_FILE_PATH
     bool success = load_test_data_from_csv(  
-        "tests/data/my_function.csv", // Path to CSV file (must be in tests/data directory)  
+        DATA_FILE_PATH,
         inputs_to_load, outputs_to_load,  
         U_loaded, Y_loaded, samples_loaded  
     );  
-    ASSERT_TRUE(success) << "CSV loading function reported failure.";  
-    ASSERT_GT(samples_loaded, 0) << "No data samples loaded from CSV.";  
+    ASSERT_TRUE(success) << "CSV loading function reported failure for " << DATA_FILE_PATH;  
+    ASSERT_GT(samples_loaded, 0) << "No data samples loaded from CSV: " << DATA_FILE_PATH;  
     // **CRITICAL: Update NSMP for dimension calculations**  
     NSMP = samples_loaded;  
 } catch (const std::runtime_error& e) {  
