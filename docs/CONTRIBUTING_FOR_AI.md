@@ -1,29 +1,33 @@
 # **SLICOT_C Contribution Guidelines for AI Coding Agents**
 
-**Version 5**
+**Version 6**
 
 This document provides structured guidelines for AI coding agents to efficiently implement C wrappers and corresponding C++ tests for the SLICOT library, focusing on consistency, clarity, and reducing misinterpretations.
 
 ## **0. Key Principles (TL;DR for AI Agents)**
 
-* **Goal:** Create a C wrapper function (e.g., slicot_function_name) that calls the corresponding SLICOT Fortran routine (F77_FUNC(function_name, FUNCTION_NAME)).  
-* **Workspace:** The C wrapper **must allocate and free workspace arrays (iwork, dwork) internally** using malloc/free. Calculate sizes based on formulas in SLICOT documentation. Do **not** expect the caller to provide workspace.  
-* **Row-Major Handling:** The wrapper must accept a row_major flag. If row_major is true (1), the wrapper must:  
-  * Allocate temporary column-major buffers (_cm) for input/output matrices passed by the C caller.  
+* **Goal:** Create a C wrapper function (e.g., `slicot_function_name`) that calls the corresponding SLICOT Fortran routine (`F77_FUNC(function_name, FUNCTION_NAME)`).  
+* **Workspace:** The C wrapper **must allocate and free workspace arrays (`iwork`, `dwork`) internally** using `malloc`/`free`. Calculate sizes based on formulas in SLICOT documentation. Do **not** expect the caller to provide workspace.  
+* **Row-Major Handling:** The wrapper must accept a `row_major` flag. If `row_major` is true (1), the wrapper must:  
+  * Allocate temporary column-major buffers (`_cm`) for input/output matrices passed by the C caller.  
   * Transpose row-major C input matrices into the temporary column-major buffers before calling Fortran.  
   * Pass the *column-major buffers* and corresponding *Fortran-style leading dimensions* (number of **rows**) to the Fortran routine.  
-  * If the Fortran routine modifies inputs or computes outputs, transpose results from column-major buffers back to the original C row-major arrays after the Fortran call (if info == 0).  
+  * If the Fortran routine modifies inputs or computes outputs, transpose results from column-major buffers back to the original C row-major arrays after the Fortran call (if `info == 0`).  
 * **Leading Dimensions (LD):**  
-  * **Fortran (and Column-Major C):** LDA, LDB, etc., always refer to the number of **rows** allocated for the matrix in memory.  
-  * **Row-Major C:** LDA, LDB, etc., passed to the C wrapper refer to the number of **columns** allocated for the matrix in memory. The wrapper must calculate the required Fortran LDA (rows) internally.  
+  * **Fortran (and Column-Major C):** `LDA`, `LDB`, etc., always refer to the number of **rows** allocated for the matrix in memory.  
+  * **Row-Major C:** `LDA`, `LDB`, etc., passed to the C wrapper refer to the number of **columns** allocated for the matrix in memory. The wrapper must calculate the required Fortran LDA (rows) internally.  
 * **Testing:**  
-  * Use GTest fixtures (ColMajor, RowMajor).  
-  * Load test data from a **CSV file** in the tests/data/ directory using the load_test_data_from_csv utility.  
-  * The **CSV header names MUST exactly match** the input_columns/output_columns specified in the test fixture.  
-  * SetUp loads data, updates NSMP (number of samples), calculates LDs, and sizes output vectors.  
-  * Tests call the C wrapper, ASSERT_EQ the info code, and EXPECT_NEAR the numerical results.  
-* **Filenames:** All C source and header files **must use lowercase naming** (e.g., ab05od.c, not AB05OD.c).
-* **Error Handling:** Use CHECK_ALLOC after malloc. Implement goto cleanup for error exits. Free all allocated memory in the cleanup block. Return appropriate info codes (negative for wrapper errors, Fortran info otherwise).
+  * Use GTest fixtures (`ColMajor`, `RowMajor`).  
+  * **For small datasets** (e.g., ~10 samples), **embed data directly** in the test fixture.
+  * **For larger datasets**, create a CSV file in the `tests/data/` directory and use the `load_test_data_from_csv` utility.
+  * **CSV Data Format:** The `load_test_data_from_csv` utility reads the specified columns (e.g., "U1", "U2") and concatenates them into a flat vector (e.g., `[U1(1..NY), U2(1..NY), ...]`).
+  * **Data Rearrangement:** For multi-column time-series data loaded via CSV (like input `U` or expected output `Y`), the test fixture **must explicitly rearrange** the loaded flat vector into the **true Fortran column-major order** (`[val(1,1), ..., val(rows,1), val(1,2), ..., val(rows,2), ...]`) before passing it to the wrapper or using it for comparison.
+  * The **CSV header names MUST exactly match** the `input_columns`/`output_columns` specified in the test fixture.
+  * `SetUp` loads/defines data, **performs necessary rearrangements**, updates `NSMP` (number of samples), calculates LDs, and sizes output vectors.
+  * Tests call the C wrapper, `ASSERT_EQ` the `info` code, and `EXPECT_NEAR` the numerical results.
+  * **Verify Expected Results:** Double-check expected results (`.res` files, documentation examples) against independent simulations (e.g., using Python control libraries) if possible, as documentation examples may contain errors. Use the verified results in the test fixture.
+* **Filenames:** All C source and header files **must use lowercase naming** (e.g., `ab05od.c`, not `AB05OD.c`).
+* **Error Handling:** Use `CHECK_ALLOC` after `malloc`. Implement `goto cleanup` for error exits. Free all allocated memory in the `cleanup` block. Return appropriate `info` codes (negative for wrapper errors, Fortran `info` otherwise).
 
 ## **1. Project Structure**
 ```
@@ -45,19 +49,23 @@ SLICOT_C/
 
 Follow this sequence precisely:
 
-1. **Analyze Documentation:** Review the function's HTML documentation (e.g., doc/AB05OD.html) and the corresponding Fortran example files (examples*.dat, examples*.res, examples/T*.f). Understand parameters, dimensions, constraints, and **workspace formulas**.  
-2. **Prepare Test Data CSV:**  
-   * Locate the .dat file in examples/.  
-   * Create a corresponding CSV file in tests/data/ (e.g., tests/data/function_name.csv). Use lowercase for the filename.
-   * The **first row MUST be a header**. Choose clear, unique names (e.g., "U1", "Y1", "A11", "A12"). **These names are critical** for test data loading.  
-   * Copy the numerical data from the .dat file into subsequent rows of the CSV.  
+1. **Analyze Documentation:** Review the function's HTML documentation (e.g., `doc/AB05OD.html`) and the corresponding Fortran example files (`examples/*.dat`, `examples/*.res`, `examples/T*.f`). Understand parameters, dimensions, constraints, and **workspace formulas**.  
+2. **Prepare/Verify Test Data:**
+   * **Option A (For larger datasets):**
+     * Locate the `.dat` file in `examples/`.
+     * Create a corresponding CSV file in `tests/data/` (e.g., `tests/data/function_name.csv`). Use lowercase for the filename.
+     * The **first row MUST be a header**. Choose clear, unique names (e.g., "U1", "Y1", "A11", "A12"). **These names are critical** for test data loading.
+     * Copy the numerical data from the `.dat` file into subsequent rows of the CSV.
+   * **Option B (Preferred for small datasets ~10 samples):** Define the test data directly within the C++ test fixture as `std::vector<double>`.
+   * **Verification:** **Crucially, verify the expected output data** (from `.res` file or documentation) against an independent source (e.g., Python simulation using control or harold libraries). **If there are discrepancies between expected outputs and simulation results, trust the simulation results** and document this in the test code. Document the source of verified data if it differs from the SLICOT example.
 3. **Extract Key Information:** Note parameters, types, dimensions, LD rules, and **exact workspace formulas**.  
-4. **Identify Similar Wrappers:** Find wrappers in src_c_wrapper/ for similar routines (e.g., AB05xx) as a reference.  
-5. **Create C Wrapper:** Implement the .c file using the **Internal Workspace Allocation** template (Section 3). Ensure it correctly handles row_major and calculates workspace based on formulas.  
-6. **Create Header File:** Implement the .h file in include/ using the template (Section 3.1). Document parameters clearly, especially row_major handling.  
-7. **Create Test Cases:** Implement the _test.cpp file using the GTest template (Section 4).  
-   * Define input_columns and output_columns in the fixture to **exactly match the header names** created in the CSV file.  
-   * Use load_test_data_from_csv in SetUp.  
+4. **Identify Similar Wrappers:** Find wrappers in `src_c_wrapper/` for similar routines (e.g., AB05xx) as a reference.  
+5. **Create C Wrapper:** Implement the `.c` file using the **Internal Workspace Allocation** template (Section 3). Ensure it correctly handles `row_major` and calculates workspace based on formulas.  
+6. **Create Header File:** Implement the `.h` file in `include/` using the template (Section 3.1). Document parameters clearly, especially `row_major` handling.  
+7. **Create Test Cases:** Implement the `_test.cpp` file using the GTest template (Section 4).  
+   * **If using CSV:** Define `input_columns` and `output_columns` in the fixture to **exactly match the header names** created in the CSV file. Use `load_test_data_from_csv` in `SetUp`.
+   * **Data Rearrangement (Important!):** If loading multi-column time-series data (e.g., inputs `U(M, NY)`, expected outputs `Y(P, NY)`) via CSV, **explicitly rearrange** the data loaded by `load_test_data_from_csv` from its concatenated format (e.g., `[U1(1..NY), U2(1..NY)]`) into the **true Fortran column-major order** (e.g., `[U(1,1), U(2,1), ..., U(M,1), U(1,2), ...]`) within the `SetUp` method. This rearranged data should be used for comparisons and passed to the wrapper (for inputs).
+   * **If embedding data (preferred for small datasets):** Define the input and **verified** expected output data directly in the test fixture, preferably already in Fortran column-major order.
    * Implement tests for column-major, row-major, and parameter validation.
 
 ## **3. C Wrapper Template (Internal Workspace Allocation)**
@@ -534,21 +542,13 @@ double *a_cm = NULL, *b_cm = NULL;
 
 // 2. Calculate size with zero dimension handling (after input validation)  
 size_t a_size = (size_t)n * n; if (n == 0) a_size = 0;  
-size_t b_size = (size_t)n * m; if (n == 0 || m == 0) b_size = 0;
-
-// 3. Allocate memory for copies only if row_major and size > 0  
+size_t b_size = (size_t)n * m; if (n == 0 || m == 0) b_size = 0;  
 if (row_major) {  
-    if (a_size > 0) {  
-        a_cm = (double*)malloc(a_size * sizeof(double));  
-        CHECK_ALLOC(a_cm); // Jumps to cleanup on failure  
-    }  
-    if (b_size > 0) {  
-        b_cm = (double*)malloc(b_size * sizeof(double));  
-        CHECK_ALLOC(b_cm); // Jumps to cleanup on failure  
-    }  
+    if (a_size > 0) { a_cm = (double*)malloc(a_size * sizeof(double)); CHECK_ALLOC(a_cm); }  
+    if (b_size > 0) { b_cm = (double*)malloc(b_size * sizeof(double)); CHECK_ALLOC(b_cm); }  
 }
 
-// 4. Set pointers for Fortran call (a_ptr, b_ptr) and Fortran LDs (lda_f, ldb_f)  
+// 3. Set pointers for Fortran call (a_ptr, b_ptr) and Fortran LDs (lda_f, ldb_f)  
 double* a_ptr = a; // Default to original C pointer  
 double* b_ptr = b; // Default to original C pointer  
 int lda_f = lda;   // Default to original C LDA  
@@ -567,7 +567,7 @@ if (row_major) {
     if (b_size == 0) b_ptr = NULL;  
 }
 
-// 5. Perform conversion before Fortran call (copy data into _cm buffers)  
+// 4. Perform conversion before Fortran call (copy data into _cm buffers)  
 if (row_major) {  
     if (a_size > 0) {  
         slicot_transpose_to_fortran(a, a_cm, n, n, sizeof(double));  
@@ -629,7 +629,7 @@ if (info != 0) { goto cleanup; }
 ```c
 // --- Inside the C wrapper function ---
 
-// 1. Allocate column-major temporary storage (if row_major)  
+// 1. Allocate column-major temporary storage (if row_major)
 double *a_cm = NULL, *x_cm = NULL; // a is input (n x n), x is output (p x q)  
 size_t a_size = (size_t)n * n; if (n == 0) a_size = 0;  
 size_t x_size = (size_t)p * q; if (p == 0 || q == 0) x_size = 0;  
@@ -658,22 +658,22 @@ if (row_major) {
 }
 
 // 3. Convert C row-major INPUT 'a' to column-major 'a_cm' (before Fortran call)  
-if (row_major && a_size > 0) {  
-    slicot_transpose_to_fortran(a, a_cm, n, n, sizeof(double));  
+if (row_major && a_size > 0) { 
+    // IMPORTANT: Use the _with_ld variant when matrices have leading dimensions
+    // different from their actual dimensions (common case)
+    slicot_transpose_to_fortran_with_ld(a, a_cm, n, n, lda, lda_f, sizeof(double));
+    
+    // Use the basic transpose function only when the matrix is tightly packed
+    // slicot_transpose_to_fortran(a, a_cm, n, n, sizeof(double));
 }
 
 // --- Call Fortran routine with a_ptr, lda_f, x_ptr, ldx_f ---  
 // Fortran computes output and writes to x_ptr (which is x_cm if row_major, or x if col-major)
 
 // 4. Convert Fortran column-major OUTPUT 'x_cm' back to C row-major 'x' (after Fortran call)  
-if (row_major && info == 0) {  
-    // Example: Input 'a' was modified by Fortran routine (e.g., EQUIL='S')  
-    // if (job_upper == 'S' && a_size > 0) {  
-    //     slicot_transpose_to_c(a_cm, a, n, n, sizeof(double));  
-    // }
-
-    // Example: Output matrix 'x' (p x q) was computed into x_cm (ldx_f rows)  
-    // C array 'x' has ldx columns.  
+if (row_major && info == 0) {
+    // Convert output matrix 'x' (p x q) from column-major x_cm to row-major x
+    // Handle leading dimensions properly with _with_ld variant 
     if (x_size > 0) {  
         slicot_transpose_to_c_with_ld(x_cm, x, p, q, ldx_f, ldx, sizeof(double));  
     }  
@@ -686,123 +686,25 @@ cleanup:
     return info;
 ```
 
-### **5.4 Workspace Handling (Internal Allocation)**
+**Important:** Always use the leading-dimension-aware transpose functions (`slicot_transpose_to_fortran_with_ld` and `slicot_transpose_to_c_with_ld`) when matrices have non-standard leading dimensions or when the wrapper permits custom leading dimensions. These functions ensure data is correctly transposed even when matrices are not tightly packed in memory.
 
-```c
-// --- Inside the C wrapper function ---
-
-// 1. Declare internal workspace pointers  
-int *iwork = NULL;  
-double *dwork = NULL;  
-int liwork = 0;  
-int ldwork = 0;
-
-// 2. Calculate required sizes (AFTER input validation)  
-// **Use formulas from documentation or Fortran source comments.**  
-// Ensure MAX/MIN macros/functions are available.  
-liwork = MAX(1, * formula for liwork based on n, m, p etc. */);  
-ldwork = MAX(1, * formula for ldwork based on n, m, job etc. */);
-
-// 3. Allocate memory using calculated sizes  
-iwork = (int*)malloc((size_t)liwork * sizeof(int));  
-// CHECK_ALLOC sets info=SLICOT_MEMORY_ERROR and jumps to cleanup on failure  
-CHECK_ALLOC(iwork);
-
-dwork = (double*)malloc((size_t)ldwork * sizeof(double));  
-CHECK_ALLOC(dwork);
-
-// --- Call Fortran routine, passing iwork, dwork, and ldwork ---  
-F77_FUNC(function_name, FUNCTION_NAME)(  
-    // ... other parameters ...  
-    iwork, dwork, \&ldwork, // Pass internally allocated workspace pointers and size  
-    \&info  
-    // ... maybe hidden string lengths ...  
-);
-
-// --- Cleanup Section ---  
-cleanup:  
-    // **Free workspace memory BEFORE freeing other temporary arrays**  
-    free(iwork); // Safe to call free on NULL  
-    free(dwork); // Safe to call free on NULL  
-    // ... free _cm arrays ...  
-    return info;
-```
-
-### **5.5 Character Parameter Handling**
-
-```c
-// Convert character parameter to uppercase  
-char dico_upper = toupper(dico);  
-// Define the hidden length argument (usually 1 for single characters)  
-const int dico_len = 1;
-
-// Pass address of char and length in Fortran call  
-F77_FUNC(routine, ROUTINE)(\&dico_upper, ..., dico_len);
-```
-
-### **5.6 Cleanup Pattern**
-
-```c
-cleanup:  
-    * --- Cleanup --- */  
-    // **Free internally allocated workspace FIRST**  
-    free(dwork);  
-    free(iwork);  
-    // Free temporary column-major copies  
-    free(a_cm); free(b_cm); free(c_cm); free(d_cm);  
-    // ... free any other allocated memory ...
-
-    // Check if info was set by CHECK_ALLOC during any allocation  
-    if (info == SLICOT_MEMORY_ERROR) {  
-       // Optionally log or print an error message  
-       fprintf(stderr, "Error: Memory allocation failed in slicot_%s.\\n", "function_name");  
-    }  
-    // Return the final status code  
-    return info;
-```
+Example use cases:
+- Input matrices with leading dimensions > rows/columns
+- Submatrices extracted from larger matrices
+- Output matrices that must be written with specific stride requirements
 
 ## **6. Finding and Extracting Test Data**
 
-### **6.1 Data Preparation (CSV)**
+### **6.1 Data Preparation (CSV or Embedded)**
 
-1. **Locate Examples:** Find .dat (input) and .res (output) files in examples/. Check T*.f file to understand data layout if .dat is unclear.  
-2. **Create CSV:** Create tests/data/function_name.csv.  
-   * **Header Row:** First row **must** be a header with unique column names (e.g., "U1", "Y1"). **These names MUST exactly match the test fixture's input_columns/output_columns vectors.**  
-   * **Data Rows:** Add numerical data, usually one row per time step or sample.  
-3. **Extract Expected Results:** Get expected outputs from the .res file and hardcode them into the test fixture (e.g., A_expected, expected_info).
-
-### **6.2 Using the CSV Loader in Tests**
-
-Use `load_test_data_from_csv` from `test_utils.h` within the test fixture's `SetUp` method. Ensure `test_config.h` is included and `TEST_DATA_DIR` is used to construct the file path.
-```cpp
-// Include the CMake-generated configuration header
-#include "test_config.h"
-
-// Define the path using the macro
-const std::string DATA_FILE_PATH = TEST_DATA_DIR "my_function.csv";
-
-// Inside test fixture SetUp:  
-std::vector<std::string> inputs_to_load = {"U1", "U2"}; // **MUST match CSV header**  
-std::vector<std::string> outputs_to_load = {"Y1"};     // **MUST match CSV header**  
-int samples_loaded = 0;  
-std::vector<double> U_loaded, Y_loaded; // Output vectors (will be column-major)
-
-try {  
-    // Pass the constructed DATA_FILE_PATH
-    bool success = load_test_data_from_csv(  
-        DATA_FILE_PATH,
-        inputs_to_load, outputs_to_load,  
-        U_loaded, Y_loaded, samples_loaded  
-    );  
-    ASSERT_TRUE(success) << "CSV loading function reported failure for " << DATA_FILE_PATH;  
-    ASSERT_GT(samples_loaded, 0) << "No data samples loaded from CSV: " << DATA_FILE_PATH;  
-    // **CRITICAL: Update NSMP for dimension calculations**  
-    NSMP = samples_loaded;  
-} catch (const std::runtime_error& e) {  
-    FAIL() << "CSV data loading failed: " << e.what();  
-}  
-// U_loaded and Y_loaded now contain column-major data.
-```
+1. **Locate Examples:** Find `.dat` (input) and `.res` (output) files in `examples/`. Check `T*.f` file to understand data layout if `.dat` is unclear.
+2. **Verify Expected Results:** Crucially, attempt to verify the expected output data (from `.res` file or documentation example) against an independent source (e.g., Python simulation using control or harold, MATLAB, another trusted library). **Documentation examples occasionally contain errors**. When discrepancies occur, prefer the results from verified simulations. Use the verified data as the ground truth in your test, and document any differences from the SLICOT examples.
+3. **Choose Data Source:**
+   * **Option A (CSV - For larger datasets):** Create `tests/data/function_name.csv`.
+     * **Header Row:** First row **must** be a header with unique column names (e.g., "U1", "Y1"). **These names MUST exactly match the test fixture's input_columns/output_columns vectors.**
+     * **Data Rows:** Add numerical data, usually one row per time step or sample.
+     * **Loader Format:** Remember `load_test_data_from_csv` reads columns sequentially and concatenates them (e.g., `[U1(1..N), U2(1..N), ...]`).
+   * **Option B (Embedded - Preferred for small datasets ~10 samples):** For small datasets or if documentation data is suspect, define the input data and verified expected output data directly in the C++ test fixture as `std::vector<double>`, preferably already arranged in Fortran column-major order. This avoids CSV parsing and potential rearrangement complexities.
 
 ## **7. Common Error Cases to Handle**
 
@@ -856,16 +758,16 @@ try {
 
 ## **10. Troubleshooting Guide**
 
-1. **Test Failures (ASSERT_EQ(info_result, ...)):**  
+1. **Test Failures (`ASSERT_EQ(info_result, ...)`):**  
    * **Negative info:** Wrapper validation failed. Check test inputs against wrapper checks (Section 5.2). Verify LDs, NULLs, option chars.  
-   * **Positive info:** Fortran error. Check SLICOT docs for the info code's meaning. Input data might be problematic.  
+   * **Positive info:** Fortran error. Check SLICOT docs for the info code's meaning. Input data might be problematic (check constraints).  
    * **-1010 (SLICOT_MEMORY_ERROR):** Internal malloc failed. Check workspace/copy size calculations in the wrapper (Section 5.4, 5.1).  
-2. **Test Failures (EXPECT_NEAR(...)):**  
-   * **Data Loading:** Check CSV header vs. input_columns/output_columns. Check CSV data format. Debug load_test_data_from_csv call.  
-   * **Transposition:** Debug row_major logic in wrapper and test. Ensure correct LDs (_f vs. C LD) are used. Verify comparison logic (are you comparing col-major actual to col-major expected, or row-major actual to row-major expected?).  
-   * **Indexing/Loops:** Check verification loop bounds and array indexing.  
-   * **Expected Values:** Double-check values copied from .res file.  
-3. **CSV Loader Errors (std::runtime_error):** Read the error message carefully - it usually indicates a missing file, header mismatch, or bad data format in the CSV.  
+2. **Test Failures (`EXPECT_NEAR(...)`):**  
+   * **Expected Values:** Verify the _expected data used in the test fixture. Documentation examples (`.res` files) may contain errors. Compare against independent simulations (Python control/harold, MATLAB) if possible. If discrepancies exist, trust the simulations over the documentation and update the test fixture with the verified results.
+   * **Data Loading/Rearrangement (CSV):** If using `load_test_data_from_csv` for multi-column time-series data (U, Y_expected), double-check the rearrangement logic in `SetUp` that converts the loaded flat vector to Fortran column-major order. Ensure CSV header matches `input_columns`/`output_columns`. Check CSV data format. Debug `load_test_data_from_csv` call.
+   * **Transposition (Wrapper/Test):** Debug `row_major` logic in the C wrapper and the RowMajor test fixture's `SetUp`. Ensure correct LDs (_f vs. C LD) are used in transpose calls. Verify comparison logic (are you comparing col-major actual to col-major expected, or row-major actual to row-major expected?).  
+   * **Indexing/Loops:** Check verification loop bounds and array indexing in the test body.  
+   * **Expected Values:** Double-check values copied from `.res` file.  
+3. **CSV Loader Errors (`std::runtime_error`):** Read the error message carefully - it usually indicates a missing file, header mismatch, or bad data format in the CSV.  
 4. **Parameter Validation Test Failures:** Ensure the test provides the *specific* invalid input being tested and asserts the *correct* negative info code expected from the wrapper.
-
-By following these structured guidelines, AI coding agents can efficiently implement consistent, high-quality C wrappers and tests for the SLICOT library, using the internal workspace allocation pattern where appropriate.
+5. **Result Discrepancies:** If discrepancies are found between your test outputs and the expected values from the documentation, verify using independent libraries (Python control/harold or MATLAB). If multiple implementations agree but differ from the documentation, document this in the test file and use the verified results. Ask the user to confirm the correct values if needed.
