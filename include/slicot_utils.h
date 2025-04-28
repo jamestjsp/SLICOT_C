@@ -9,10 +9,10 @@
 
  #ifndef SLICOT_UTILS_H
  #define SLICOT_UTILS_H
- 
+
  #include <stdlib.h> // For size_t, malloc (used in CHECK_ALLOC context)
  #include <stddef.h> // For size_t
- 
+
  #ifdef __cplusplus
  /* Use C++ complex types when compiling with C++ */
  #include <complex>
@@ -24,7 +24,7 @@
      double real;
      double imag;
  } slicot_complex_double;
- 
+
  typedef struct {
      float real;
      float imag;
@@ -39,7 +39,7 @@
  #ifdef __cplusplus
  extern "C" {
  #endif
- 
+
  /* Macro to get the real part of slicot_complex_double */
  #ifdef __STDC_NO_COMPLEX__
  #define SLICOT_COMPLEX_REAL(z) ((z).real)
@@ -47,16 +47,16 @@
  #include <complex.h> // Ensure creal is available
  #define SLICOT_COMPLEX_REAL(z) (creal(z))
  #endif
- 
+
  /* Error Codes */
  /**
   * @brief Error code for memory allocation failure within SLICOT wrappers.
   * Chosen to be distinct from standard SLICOT INFO codes.
   */
  #define SLICOT_MEMORY_ERROR -1010
- 
+
  /* Utility Macros */
- 
+
  /**
   * @brief Macro to check the result of a memory allocation (e.g., malloc).
   *
@@ -77,17 +77,17 @@
              goto cleanup;           /* Jump to cleanup label */ \
          }                                                    \
      } while (0)
- 
+
  /* MAX macro */
  #ifndef MAX
  #define MAX(a,b) (((a) > (b)) ? (a) : (b))
  #endif
- 
+
  /* MIN macro */
  #ifndef MIN
  #define MIN(a,b) (((a) < (b)) ? (a) : (b))
  #endif
- 
+
 #ifndef SLICOT_EXPORT // Prevent multiple definitions
 
   // Check if building a static library.
@@ -128,9 +128,10 @@
 
 
  /* Function Declarations for Transpose Utilities */
- 
+
  /**
   * @brief Transpose a matrix from C (row-major) to Fortran (column-major) order.
+  * Assumes source and destination have compatible default leading dimensions.
   *
   * @param src Pointer to the source matrix (row-major).
   * @param dest Pointer to the destination matrix (column-major).
@@ -140,9 +141,10 @@
   */
   SLICOT_EXPORT
  void slicot_transpose_to_fortran(const void *src, void *dest, int rows, int cols, size_t elem_size);
- 
+
  /**
   * @brief Transpose a matrix from Fortran (column-major) to C (row-major) order.
+  * Assumes source and destination have compatible default leading dimensions.
   *
   * @param src Pointer to the source matrix (column-major).
   * @param dest Pointer to the destination matrix (row-major).
@@ -152,7 +154,37 @@
   */
  SLICOT_EXPORT
  void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size_t elem_size);
- 
+
+ /**
+  * @brief Transpose a matrix from C (row-major) to Fortran (column-major) order with custom leading dimensions.
+  *
+  * @param src Pointer to the source matrix (row-major).
+  * @param dest Pointer to the destination matrix (column-major).
+  * @param rows Number of rows to copy.
+  * @param cols Number of columns to copy.
+  * @param ld_src Leading dimension of the source matrix (number of columns in C).
+  * @param ld_dest Leading dimension of the destination matrix (number of rows for Fortran).
+  * @param elem_size Size (in bytes) of a single matrix element.
+  */
+ SLICOT_EXPORT
+ void slicot_transpose_to_fortran_with_ld(const void *src, void *dest, int rows, int cols,
+                                         int ld_src, int ld_dest, size_t elem_size);
+
+ /**
+  * @brief Transpose a matrix from Fortran (column-major) to C (row-major) order with custom leading dimensions.
+  *
+  * @param src Pointer to the source matrix (column-major).
+  * @param dest Pointer to the destination matrix (row-major).
+  * @param rows Number of rows to copy.
+  * @param cols Number of columns to copy.
+  * @param ld_src Leading dimension of the source matrix (number of rows for Fortran).
+  * @param ld_dest Leading dimension of the destination matrix (number of columns in C).
+  * @param elem_size Size (in bytes) of a single matrix element.
+  */
+ SLICOT_EXPORT
+ void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols,
+                                   int ld_src, int ld_dest, size_t elem_size);
+
  /**
   * @brief In-place transpose of a square matrix (assumes row-major indexing for swap).
   *
@@ -175,14 +207,14 @@
   * @param n Order of the square matrix.
   * @param mat Pointer to the matrix (assumed to be allocated with sufficient size).
   * @param ld Leading dimension of the matrix (number of rows for column-major,
-  *          number of columns for row-major).
+  * number of columns for row-major).
   * @param row_major Integer flag indicating storage order:
   * = 0: Column-major (Fortran style).
   * = 1: Row-major (C style).
   */
   SLICOT_EXPORT
  void set_identity(int n, double* mat, int ld, int row_major);
- 
+
 /**
  * @brief Copies the relevant triangle of a symmetric matrix to a full matrix.
  *
@@ -229,21 +261,7 @@ SLICOT_EXPORT
 void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size);
 
 
-/**
- * @brief Transpose a matrix from Fortran (column-major) to C (row-major) order with custom leading dimensions.
- *
- * @param src Pointer to the source matrix (column-major).
- * @param dest Pointer to the destination matrix (row-major).
- * @param rows Number of rows to copy.
- * @param cols Number of columns to copy.
- * @param ld_src Leading dimension of the source matrix (number of rows).
- * @param ld_dest Leading dimension of the destination matrix (number of columns).
- * @param elem_size Size (in bytes) of a single matrix element.
- */
-SLICOT_EXPORT
-void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols, 
-                                  int ld_src, int ld_dest, size_t elem_size);
- /*
+ // Removed extra /* here to fix comment warning
 /**
  * @brief Prints a matrix of doubles to the standard output with formatting.
  *
@@ -259,9 +277,9 @@ void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int co
  */
 SLICOT_EXPORT
  void printMatrixD(const char* name, const double* data, int rows, int cols, int ld, int rowMajor);
+
  #ifdef __cplusplus
  }
  #endif
- 
+
  #endif /* SLICOT_UTILS_H */
- 
