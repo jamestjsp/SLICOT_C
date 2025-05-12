@@ -14,3 +14,6 @@ env/
 
 # ignore temp doc
 _doc/
+
+# ignore .DS_Store at all levels
+.DS_Store
