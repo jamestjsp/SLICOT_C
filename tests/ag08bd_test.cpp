@@ -38,16 +38,14 @@ protected:
     std::vector<int> INFE;  // Multiplicities of infinite eigenvalues
     std::vector<int> KRONL; // Left Kronecker indices
 
-    // Expected results from example
-    // Original values were incorrect, updating to match documentation example
-    // and actual computation results
-    int expected_nfz = 0;    // Expected number of finite zeros
-    int expected_nrank = 12; // Expected normal rank
-    int expected_niz = 6;    // Expected number of infinite zeros
-    int expected_dinfz = 3;  // Expected max multiplicity of infinite zeros
-    int expected_nkror = 0;  // Expected number of right Kronecker indices
-    int expected_ninfe = 6;  // Expected number of infinite eigenvalue blocks
-    int expected_nkrol = 0;  // Expected number of left Kronecker indices
+    // Expected results from actual computation results
+    int expected_nfz = 0;    // Number of finite zeros
+    int expected_nrank = 12; // Normal rank
+    int expected_niz = 6;    // Number of infinite zeros
+    int expected_dinfz = 3;  // Max multiplicity of infinite zeros
+    int expected_nkror = 0;  // Number of right Kronecker indices
+    int expected_ninfe = 6;  // Number of infinite eigenvalue blocks
+    int expected_nkrol = 0;  // Number of left Kronecker indices
 
     // Result variable
     int info_result = -999;
@@ -208,12 +206,12 @@ TEST_F(AG08BDTestColMajor, BasicFunctionality) {
     EXPECT_EQ(NKROL, expected_nkrol);
     
     // Check Kronecker indices
-    EXPECT_EQ(KRONR[0], 0); // Based on actual results 
+    EXPECT_EQ(KRONR[0], 0); // Based on actual results
     EXPECT_EQ(KRONL[0], 0); // Based on actual results
     
     // Check infinite zero structure
     EXPECT_EQ(INFZ[1], 1);  // Based on actual results
-    EXPECT_EQ(INFZ[2], 1);  // Corrected from 3 to 1 based on actual results
+    EXPECT_EQ(INFZ[2], 1);  // Based on actual results
     
     // Check the reduced pencil (Af-lambda*Ef) by examining its size and values
     std::cout << "NFZ = " << NFZ << " (size of the reduced pencil)" << std::endl;
@@ -272,8 +270,8 @@ TEST_F(AG08BDTestRowMajor, BasicFunctionality) {
     EXPECT_EQ(NKROL, expected_nkrol);
     
     // Check for consistent Kronecker structure
-    EXPECT_EQ(KRONR[0], 0);
-    EXPECT_EQ(KRONL[0], 0);
+    EXPECT_EQ(KRONR[0], 0); // Based on actual results
+    EXPECT_EQ(KRONL[0], 0); // Based on actual results
     
     // Display the reduced pencil for row-major format
     if (NFZ > 0) {
