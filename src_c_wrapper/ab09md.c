@@ -113,9 +113,10 @@
          if (p > 0 && n > 0 && ldc < n) { info = -15; goto cleanup; }
      } else {
          // For column-major C, LDA is the number of rows (Fortran style)
-         if (lda < min_lda_f) { info = -11; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -13; goto cleanup; }
-         if (ldc < min_ldc_f) { info = -15; goto cleanup; }
+         // Only check if dimensions are positive - critical for zero-dimension case
+         if (n > 0 && lda < min_lda_f) { info = -11; goto cleanup; }
+         if (n > 0 && ldb < min_ldb_f) { info = -13; goto cleanup; }
+         if (p > 0 && n > 0 && ldc < min_ldc_f) { info = -15; goto cleanup; }
      }
 
      /* --- Workspace Allocation --- */
@@ -123,8 +124,12 @@
      // Allocate IWORK (size N if JOB='N', 0 otherwise)
      if (job_upper == 'N') {
          iwork_size = MAX(1, n);
-         iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-         CHECK_ALLOC(iwork);
+         if (n > 0) {  // Only allocate if n > 0
+             iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
+             CHECK_ALLOC(iwork);
+         } else {
+             iwork = NULL;  // For n=0, pass NULL to Fortran
+         }
      } else {
          iwork = NULL; // Pass NULL for size 0
      }

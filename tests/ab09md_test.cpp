@@ -25,8 +25,8 @@ protected:
     char EQUIL = 'N';
     char ORDSEL = 'A';
 
-    // Verification tolerance - increased to accommodate implementation differences
-    double check_tol = 0.5; // Relaxed tolerance for numerical stability
+    // Verification tolerance - adjusted based on the implementation behavior
+    double check_tol = 1e-6; // Relaxed tolerance for numerical stability
 
     // Input data (column-major)
     std::vector<double> A = {
@@ -302,6 +302,8 @@ TEST_F(AB09MDTestColMajor, ZeroDimension) {
     int zero_iwarn = 0;
     
     // Call wrapper with zero dimensions
+    // Note: For zero dimensions, any leading dimension value ≥ 1 is valid
+    // but we still pass 1 for all leading dimensions
     int zero_info = slicot_ab09md(
         DICO, JOB, EQUIL, ORDSEL,
         zero_n, M, P, &zero_nr, ALPHA,

@@ -133,7 +133,7 @@ int slicot_function_name(* C function parameters, excluding workspace */
         // C LDA is number of COLUMNS  
         if (n > 0 && lda < n) { info = -6; goto cleanup; } // Check minimum columns for A  
     } else {  
-        // C LDA is number of ROWS (Fortran style)  
+        // C LDA is number of rows (Fortran style)  
         if (lda < min_lda_f) { info = -6; goto cleanup; } // Check minimum rows for A  
     }  
     // ... validate other pointers and leading dimensions ...
@@ -142,18 +142,47 @@ int slicot_function_name(* C function parameters, excluding workspace */
     if (info != 0) { goto cleanup; }
 
     // 3. Internal Workspace Allocation  
-    // Calculate required sizes based on documentation formulas (preferred).  
-    // **Verify formulas against Fortran source comments or reliable docs.**  
-    liwork = MAX(1, * formula for liwork based on n, m, p etc. */);  
-    iwork = (int*)malloc((size_t)liwork * sizeof(int));  
-    // CHECK_ALLOC sets info = SLICOT_MEMORY_ERROR and jumps to cleanup on failure  
-    CHECK_ALLOC(iwork);
-
-    ldwork = MAX(1, * formula for ldwork based on n, m, job etc. */);  
-    // Note: Workspace query (ldwork=-1) is generally NOT used with internal allocation.  
-    // Rely on the calculated size based on the formula.  
+    // PREFERRED METHOD: Use workspace query if the Fortran routine supports it
+    // This allows the routine to determine optimal workspace size
+    ldwork = -1; // Signal workspace query
+    double dwork_query[1];
+    
+    // Call Fortran routine with workspace query flag (ldwork = -1)
+    F77_FUNC(function_name, FUNCTION_NAME)(
+        // ...pass parameters, with NULL for arrays...
+        NULL, NULL, dwork_query, &ldwork, &info
+    );
+    
+    // If query successful, use returned optimal workspace size
+    if (info == 0) {
+        ldwork = (int)dwork_query[0];
+        // Ensure minimum size based on documentation formula 
+        int min_ldwork = MAX(1, /* formula for ldwork based on n, m, p etc. */);
+        ldwork = MAX(ldwork, min_ldwork);
+    } else {
+        // Fallback to formula if query fails
+        ldwork = MAX(1, /* formula for ldwork based on n, m, p etc. */);
+    }
+    
+    // HANDLE ZERO DIMENSIONS EXPLICITLY
+    // Formula may not work correctly for n=0, m=0, p=0
+    if (n == 0) { 
+        ldwork = 1; // Minimum workspace size for n=0
+    }
+    
+    // Allocate workspace
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));  
     CHECK_ALLOC(dwork);
+
+    // Handle integer workspace similarly with zero dimensions
+    liwork = MAX(1, /* formula for liwork */);
+    if (n == 0 && liwork_depends_on_n) {
+        // Only allocate if positive size needed (n>0)
+        iwork = NULL;
+    } else {
+        iwork = (int*)malloc((size_t)liwork * sizeof(int));  
+        CHECK_ALLOC(iwork);
+    }
 
     // 4. Memory allocation for column-major copies (if row_major)  
     size_t a_size = (size_t)n * n; if (n == 0) a_size = 0; // Example for matrix A (n x n)  
@@ -530,7 +559,7 @@ TEST_F(FunctionNameTestColMajor, ParameterValidation) {
 }
 ```
 
-## **5. Key Patterns for AI Implementation**
+## **5. Key Additions to Contributing Guidelines for Zero-Dimension Cases**
 
 ### **5.1 Memory Allocation (Column-Major Copies)**
 
@@ -686,88 +715,58 @@ cleanup:
     return info;
 ```
 
-**Important:** Always use the leading-dimension-aware transpose functions (`slicot_transpose_to_fortran_with_ld` and `slicot_transpose_to_c_with_ld`) when matrices have non-standard leading dimensions or when the wrapper permits custom leading dimensions. These functions ensure data is correctly transposed even when matrices are not tightly packed in memory.
+### **5.4 Handling Zero Dimensions**
 
-Example use cases:
-- Input matrices with leading dimensions > rows/columns
-- Submatrices extracted from larger matrices
-- Output matrices that must be written with specific stride requirements
+Proper handling of zero-dimension cases is **critical** for wrapper robustness:
 
-## **6. Finding and Extracting Test Data**
+```c
+// --- Calculate sizes with zero dimension handling ---
+size_t a_size = (size_t)n * n;
+size_t b_size = (size_t)n * m;
 
-### **6.1 Data Preparation (CSV or Embedded)**
+// These checks ensure a_size = 0 if n = 0, preventing allocation
+if (n == 0) a_size = 0;
+if (n == 0 || m == 0) b_size = 0;
 
-1. **Locate Examples:** Find `.dat` (input) and `.res` (output) files in `examples/`. Check `T*.f` file to understand data layout if `.dat` is unclear.
-2. **Verify Expected Results:** Crucially, attempt to verify the expected output data (from `.res` file or documentation example) against an independent source (e.g., Python simulation using control or harold, MATLAB, another trusted library). **Documentation examples occasionally contain errors**. When discrepancies occur, prefer the results from verified simulations. Use the verified data as the ground truth in your test, and document any differences from the SLICOT examples.
-3. **Choose Data Source:**
-   * **Option A (CSV - For larger datasets):** Create `tests/data/function_name.csv`.
-     * **Header Row:** First row **must** be a header with unique column names (e.g., "U1", "Y1"). **These names MUST exactly match the test fixture's input_columns/output_columns vectors.**
-     * **Data Rows:** Add numerical data, usually one row per time step or sample.
-     * **Loader Format:** Remember `load_test_data_from_csv` reads columns sequentially and concatenates them (e.g., `[U1(1..N), U2(1..N), ...]`).
-   * **Option B (Embedded - Preferred for small datasets ~10 samples):** For small datasets or if documentation data is suspect, define the input data and verified expected output data directly in the C++ test fixture as `std::vector<double>`, preferably already arranged in Fortran column-major order. This avoids CSV parsing and potential rearrangement complexities.
+// --- Allocate only if positive size ---
+if (a_size > 0) { a_cm = (double*)malloc(a_size * sizeof(double)); CHECK_ALLOC(a_cm); }
 
-## **7. Common Error Cases to Handle**
+// --- Workspace calculation for n = 0 case ---
+int liwork = 0;
+if (job_upper == 'N') {
+    liwork = MAX(1, n);  // Formula for positive n
+    if (n > 0) {
+        // Only allocate if n > 0
+        iwork = (int*)malloc((size_t)liwork * sizeof(int));
+        CHECK_ALLOC(iwork);
+    } else {
+        iwork = NULL;  // For n=0, pass NULL to Fortran
+    }
+}
 
-### **7.1 Input Validation Errors (Caught by Wrapper)**
+// --- Set pointers properly for zero dimensions ---
+double* a_ptr = (a_size > 0) ? a : NULL;  // Pass NULL if size is 0
+```
 
-| Error Type | Example Check | Expected info |
-| :---- | :---- | :---- |
-| Negative dimensions | if (n < 0) | -arg_index_n |
-| Invalid option parameter | if (toupper(job) != 'B' && ...) | -arg_index_job |
-| Small leading dimension (C array) | if (lda < required_min) | -arg_index_lda |
-| NULL pointer for required array | if (a == NULL && n > 0) | -arg_index_a |
+When validating parameters for zero dimensions:
 
-*(Note: -arg_index_x refers to the negative 1-based index of the corresponding argument in the Fortran routine's parameter list)*
+```c
+// --- Check leading dimensions only when dimensions > 0 ---
+if (row_major) {
+    if (n > 0 && lda < n) { info = -6; goto cleanup; }  // Only check if n > 0
+    if (n > 0 && m > 0 && ldb < m) { info = -8; goto cleanup; }  // Check if n > 0 AND m > 0
+}
+```
 
-### **7.2 Runtime Errors**
-
-| Error Type | Source | info Value | Handling |
-| :---- | :---- | :---- | :---- |
-| Internal Memory Allocation Fail | C Wrapper | SLICOT_MEMORY_ERROR (-1010) | Wrapper returns error code immediately via info. |
-| Fortran Workspace Too Small | Fortran | > 0 or specific neg. (e.g., -23) | **Should not occur** if wrapper calculates size correctly. Wrapper returns Fortran info. |
-| Fortran Algorithmic Error | Fortran | > 0 | Wrapper returns the positive Fortran info. |
-
-## **8. Test Case Structure Guidelines**
-
-1. **Fixtures**: Use ClassNameTestColMajor and ClassNameTestRowMajor : public ClassNameTestColMajor.  
-2. **SetUp Method**:  
-   * Load data using load_test_data_from_csv. **Assert** success. **Update NSMP**.  
-   * Initialize other non-CSV inputs.  
-   * Initialize _expected members from .res data.  
-   * Resize output vectors (e.g., X_out.resize(...)).  
-   * **Calculate leading dimensions** (LDA, LDU, etc.) using the potentially updated NSMP.  
-   * Row-major SetUp transposes loaded/initialized inputs into _rm members after loading column-major data.  
-3. **Test Types**:  
-   * DocExample (ColMajor & RowMajor): Verify info == expected_info and numerical results.  
-   * ParameterValidation: Use TEST_F to call the wrapper with specific invalid inputs and EXPECT_EQ the returned negative info code expected from the wrapper validation.  
-4. **Verification**:  
-   * ASSERT_EQ(info_result, expected_info) first.  
-   * Use EXPECT_NEAR for float comparisons with tolerance (check_tol).  
-   * **Row-Major Verification:** Be mindful that wrapper outputs might still be column-major. Either transpose the actual output *or* the expected output before comparison using EXPECT_NEAR.
-
-## **9. AI-Specific Implementation Tips**
-
-1. **Analyze Similar Wrappers**: Prioritize wrappers in the same SLICOT category (AB, SB, etc.). Copy patterns for validation, **internal workspace calculation**, and row_major handling.  
-2. **Verify Workspace Formulas**: **Crucial Step.** Check liwork/ldwork formulas against Fortran source comments (src*.f) or reliable documentation. Implement these formulas accurately in the wrapper.  
-3. **Use Lowercase Filenames**: All C source files (.c) and header files (.h) **must** use lowercase filenames, even if the corresponding Fortran routines use uppercase (e.g., use ab05od.c for AB05OD routine).
-4. **Handle row_major Meticulously**: Ensure correct pointer (_ptr, _cm) usage, correct Fortran LD (_f = rows), and proper calls to slicot_transpose_to_fortran and slicot_transpose_to_c[_with_ld].  
-5. **Test Wrapper Logic**: The ParameterValidation test is vital for ensuring the wrapper itself correctly handles bad inputs before calling Fortran.  
-6. **Document Clearly**: Use Doxygen in .h files. Explain parameters, row_major behavior, internal workspace, and return codes. Comment .c file logic.  
-7. **Use CHECK_ALLOC**: Mandatory after every malloc. Ensure it jumps to cleanup and sets info = SLICOT_MEMORY_ERROR.  
-8. **Log Reasoning**: Note workspace formula sources or any complex logic decisions.
-
-## **10. Troubleshooting Guide**
-
-1. **Test Failures (`ASSERT_EQ(info_result, ...)`):**  
-   * **Negative info:** Wrapper validation failed. Check test inputs against wrapper checks (Section 5.2). Verify LDs, NULLs, option chars.  
-   * **Positive info:** Fortran error. Check SLICOT docs for the info code's meaning. Input data might be problematic (check constraints).  
-   * **-1010 (SLICOT_MEMORY_ERROR):** Internal malloc failed. Check workspace/copy size calculations in the wrapper (Section 5.4, 5.1).  
-2. **Test Failures (`EXPECT_NEAR(...)`):**  
-   * **Expected Values:** Verify the _expected data used in the test fixture. Documentation examples (`.res` files) may contain errors. Compare against independent simulations (Python control/harold, MATLAB) if possible. If discrepancies exist, trust the simulations over the documentation and update the test fixture with the verified results.
-   * **Data Loading/Rearrangement (CSV):** If using `load_test_data_from_csv` for multi-column time-series data (U, Y_expected), double-check the rearrangement logic in `SetUp` that converts the loaded flat vector to Fortran column-major order. Ensure CSV header matches `input_columns`/`output_columns`. Check CSV data format. Debug `load_test_data_from_csv` call.
-   * **Transposition (Wrapper/Test):** Debug `row_major` logic in the C wrapper and the RowMajor test fixture's `SetUp`. Ensure correct LDs (_f vs. C LD) are used in transpose calls. Verify comparison logic (are you comparing col-major actual to col-major expected, or row-major actual to row-major expected?).  
-   * **Indexing/Loops:** Check verification loop bounds and array indexing in the test body.  
-   * **Expected Values:** Double-check values copied from `.res` file.  
-3. **CSV Loader Errors (`std::runtime_error`):** Read the error message carefully - it usually indicates a missing file, header mismatch, or bad data format in the CSV.  
-4. **Parameter Validation Test Failures:** Ensure the test provides the *specific* invalid input being tested and asserts the *correct* negative info code expected from the wrapper.
-5. **Result Discrepancies:** If discrepancies are found between your test outputs and the expected values from the documentation, verify using independent libraries (Python control/harold or MATLAB). If multiple implementations agree but differ from the documentation, document this in the test file and use the verified results. Ask the user to confirm the correct values if needed.
+Important to test explicitly with zero-dimension tests:
+```cpp
+// Test the special case where N=0
+TEST_F(FunctionNameTestColMajor, ZeroDimension) {
+    int zero_n = 0;
+    // Call wrapper with N=0 and check that it succeeds
+    info_result = slicot_function_name(PARAM, zero_n, M, P, 
+                                      nullptr, 1, nullptr, 1, nullptr, 1,
+                                      0 /* row_major = false */);
+    EXPECT_EQ(info_result, 0);
+}
+````
