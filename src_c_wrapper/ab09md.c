@@ -66,11 +66,10 @@
  {
      /* Local variables */
      int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
-     double* dwork = NULL;
      int* iwork = NULL;
+     double* dwork = NULL;
      int iwork_size = 0;
+     int ldwork = -1; /* Use -1 for workspace query */
      const int dico_len = 1, job_len = 1, equil_len = 1, ordsel_len = 1;
 
      char dico_upper = toupper(dico);
@@ -109,12 +108,9 @@
 
      if (row_major) {
          // For row-major C, LDA is the number of columns
-         int min_lda_rm_cols = n;
-         int min_ldb_rm_cols = m;
-         int min_ldc_rm_cols = n;
-         if (n > 0 && lda < min_lda_rm_cols) { info = -11; goto cleanup; }
-         if (n > 0 && ldb < min_ldb_rm_cols) { info = -13; goto cleanup; }
-         if (p > 0 && ldc < min_ldc_rm_cols) { info = -15; goto cleanup; }
+         if (n > 0 && lda < n) { info = -11; goto cleanup; }
+         if (n > 0 && m > 0 && ldb < m) { info = -13; goto cleanup; }
+         if (p > 0 && n > 0 && ldc < n) { info = -15; goto cleanup; }
      } else {
          // For column-major C, LDA is the number of rows (Fortran style)
          if (lda < min_lda_f) { info = -11; goto cleanup; }
@@ -133,32 +129,39 @@
          iwork = NULL; // Pass NULL for size 0
      }
 
-     // Allocate DWORK based on query
+     // Call Fortran routine for DWORK workspace query
      ldwork = -1; // Query mode
-     // Use dummy LDs for query if dimensions are 0
+     double dwork_query[1]; /* Use array for workspace query */
+     
+     // Use dummy LDs for query
      int lda_q = row_major ? MAX(1, n) : lda;
      int ldb_q = row_major ? MAX(1, n) : ldb;
      int ldc_q = row_major ? MAX(1, p) : ldc;
-
+     int nr_q = *nr;  // Save original value
+     int ns_q = 0;    // Dummy output variable
+     int iwarn_q = 0; // Dummy output variable
+     
      F77_FUNC(ab09md, AB09MD)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
-                              &n, &m, &p, nr, &alpha,
-                              NULL, &lda_q, NULL, &ldb_q, NULL, &ldc_q, // NULL arrays
-                              ns, NULL, &tol, iwork, &dwork_query, &ldwork, // NULL hsv
-                              iwarn, &info,
+                              &n, &m, &p, &nr_q, &alpha,
+                              NULL, &lda_q, NULL, &ldb_q, NULL, &ldc_q,
+                              &ns_q, NULL, &tol, iwork, dwork_query, &ldwork,
+                              &iwarn_q, &info,
                               dico_len, job_len, equil_len, ordsel_len);
 
-     if (info != 0) { goto cleanup; } // Query failed
-
+     if (info != 0) {
+         // Query failed
+         goto cleanup;
+     }
+     
      // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX(1, N*(2*N+MAX(N,M,P)+5)+N*(N+1)/2)
-     int min_ldwork = 1;
-     int max_nmp = MAX(n, MAX(m,p));
-     min_ldwork = MAX(min_ldwork, n * (2 * n + max_nmp + 5) + n * (n + 1) / 2);
-     ldwork = MAX(ldwork, min_ldwork);
+     ldwork = (int)dwork_query[0];
+     
+     // Ensure minimum size based on documentation formula
+     int min_ldwork_doc = MAX(1, n*(2*n+MAX(n,MAX(m,p))+5) + n*(n+1)/2);
+     ldwork = MAX(ldwork, min_ldwork_doc);
 
      dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
+     CHECK_ALLOC(dwork);
 
      /* --- Prepare Arrays and Call Fortran Routine --- */
      size_t elem_size = sizeof(double);
@@ -186,12 +189,22 @@
          ldc_f = MAX(1, c_rows);
 
          /* Set pointers for Fortran call */
-         a_ptr = a_cm; b_ptr = b_cm; c_ptr = c_cm;
+         a_ptr = a_size > 0 ? a_cm : NULL;
+         b_ptr = b_size > 0 ? b_cm : NULL;
+         c_ptr = c_size > 0 ? c_cm : NULL;
 
      } else {
          /* --- Column-Major Case --- */
          lda_f = lda; ldb_f = ldb; ldc_f = ldc;
-         a_ptr = a; b_ptr = b; c_ptr = c;
+         
+         // Set pointers - pass NULL if dimensions are zero
+         size_t a_size = (size_t)n * n;
+         size_t b_size = (size_t)n * m;
+         size_t c_size = (size_t)p * n;
+         
+         a_ptr = (a_size > 0) ? a : NULL;
+         b_ptr = (b_size > 0) ? b : NULL;
+         c_ptr = (c_size > 0) ? c : NULL;
      }
 
      /* Call the computational routine */
@@ -208,14 +221,35 @@
      if (row_major && info == 0) {
          int nr_val = *nr; // Get the final reduced order
          // Copy back only the reduced portions
-         if (nr_val >= 0) { // Check nr_val is valid before using as dimension
-             size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-             size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-             size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
+         if (nr_val > 0) { // Only copy if we have a positive reduced order
+             size_t ar_rows = nr_val; size_t ar_cols = nr_val;
+             size_t br_rows = nr_val; size_t br_cols = m;
+             size_t cr_rows = p; size_t cr_cols = nr_val;
 
-             if (a_size > 0) slicot_transpose_to_c(a_cm, a, nr_val, nr_val, elem_size);
-             if (b_size > 0) slicot_transpose_to_c(b_cm, b, nr_val, m, elem_size);
-             if (c_size > 0) slicot_transpose_to_c(c_cm, c, p, nr_val, elem_size);
+             // Make sure the destination array has enough space
+             if (ar_rows * ar_cols > 0) { 
+                 if (lda < nr_val) {
+                     info = -11; // Insufficient columns in row-major A
+                     goto cleanup;
+                 }
+                 slicot_transpose_to_c_with_ld(a_cm, a, ar_rows, ar_cols, ar_rows, lda, elem_size);
+             }
+             
+             if (br_rows * br_cols > 0) { 
+                 if (ldb < m) {
+                     info = -13; // Insufficient columns in row-major B
+                     goto cleanup;
+                 }
+                 slicot_transpose_to_c_with_ld(b_cm, b, br_rows, br_cols, br_rows, ldb, elem_size);
+             }
+             
+             if (cr_rows * cr_cols > 0) { 
+                 if (ldc < nr_val) {
+                     info = -15; // Insufficient columns in row-major C
+                     goto cleanup;
+                 }
+                 slicot_transpose_to_c_with_ld(c_cm, c, cr_rows, cr_cols, cr_rows, ldc, elem_size);
+             }
          }
          // NS and HSV were filled directly.
      }
