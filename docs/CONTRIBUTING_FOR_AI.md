@@ -142,19 +142,23 @@ int slicot_function_name(* C function parameters, excluding workspace */
     if (info != 0) { goto cleanup; }
 
     // 3. Internal Workspace Allocation  
-    // PREFERRED METHOD: Use workspace query if the Fortran routine supports it
-    // This allows the routine to determine optimal workspace size
+    // STEP 1: Check if the routine supports workspace query
+    // Look in the documentation for: "On exit, if INFO = 0, DWORK(1) returns the optimal value of LDWORK"
+    // If that text exists, the routine supports workspace query
+    
+    // METHOD A: FOR ROUTINES SUPPORTING WORKSPACE QUERY
+    // Use workspace query to get optimal workspace size
     ldwork = -1; // Signal workspace query
     double dwork_query[1];
     
     // Call Fortran routine with workspace query flag (ldwork = -1)
     F77_FUNC(function_name, FUNCTION_NAME)(
-        // ...pass parameters, with NULL for arrays...
+        // ...pass parameters, with NULL for arrays that have size formulas...
         NULL, NULL, dwork_query, &ldwork, &info
     );
     
     // If query successful, use returned optimal workspace size
-    if (info == 0) {
+    if (info == 0 || info == -19) { // -19 is often returned for workspace query
         ldwork = (int)dwork_query[0];
         // Ensure minimum size based on documentation formula 
         int min_ldwork = MAX(1, /* formula for ldwork based on n, m, p etc. */);
@@ -163,6 +167,10 @@ int slicot_function_name(* C function parameters, excluding workspace */
         // Fallback to formula if query fails
         ldwork = MAX(1, /* formula for ldwork based on n, m, p etc. */);
     }
+    
+    // METHOD B: FOR ROUTINES NOT SUPPORTING WORKSPACE QUERY
+    // Skip the query and directly use the formula from documentation
+    ldwork = MAX(1, /* formula for ldwork based on n, m, p etc. */);
     
     // HANDLE ZERO DIMENSIONS EXPLICITLY
     // Formula may not work correctly for n=0, m=0, p=0
@@ -769,4 +777,4 @@ TEST_F(FunctionNameTestColMajor, ZeroDimension) {
                                       0 /* row_major = false */);
     EXPECT_EQ(info_result, 0);
 }
-````
+```
