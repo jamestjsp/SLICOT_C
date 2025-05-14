@@ -6,22 +6,22 @@
  * which computes a reduced order model (Ar,Br,Cr) for a stable system
  * (A,B,C) using Balance & Truncate methods, where A is already in
  * real Schur form. It also returns the truncation matrices T and TI.
- * Refactored to align with ab01nd.c structure.
+ * Workspace (IWORK, DWORK) is allocated internally by this wrapper.
  */
 
- #include <stdlib.h>
+ #include <stdlib.h> // For malloc, free
  #include <ctype.h>  // For toupper
  #include <stddef.h> // For size_t
-
+ #include <math.h>   // For MAX/MIN if needed
+ 
  // Include the header file for this wrapper
  #include "ab09ax.h"
  // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
+ #include "slicot_utils.h" // Provides CHECK_ALLOC, SLICOT_MEMORY_ERROR, MAX, MIN, transpose functions
  #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
-
+ 
  /*
   * Declare the external Fortran routine using the F77_FUNC macro.
-  * Note A, B, C are input/output. NR is input/output. T, TI are output.
   */
  extern void F77_FUNC(ab09ax, AB09AX)(
      const char* dico,       // CHARACTER*1 DICO
@@ -52,226 +52,255 @@
      int job_len,            // Hidden length
      int ordsel_len          // Hidden length
  );
-
-
+ 
+ 
  /* C wrapper function definition */
  SLICOT_EXPORT
- int slicot_ab09ax(char dico, char job, char ordsel,
-                   int n, int m, int p, int* nr,
-                   double* a, int lda,
-                   double* b, int ldb,
-                   double* c, int ldc,
-                   double* hsv,
-                   double* t, int ldt,
-                   double* ti, int ldti,
-                   double tol, int* iwarn,
+ int slicot_ab09ax(char dico_in, char job_in, char ordsel_in,
+                   int n_in, int m_in, int p_in, int* nr_io,
+                   double* a_io, int lda_in,
+                   double* b_io, int ldb_in,
+                   double* c_io, int ldc_in,
+                   double* hsv_out,
+                   double* t_out, int ldt_in,
+                   double* ti_out, int ldti_in,
+                   double tol_in, int* iwarn_out,
                    int row_major)
  {
      /* Local variables */
      int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
-     double* dwork = NULL;
-     int* iwork = NULL;
-     int iwork_size = 0;
+     int ldwork_for_query = -1; /* Use -1 for DWORK workspace query */
+     int ldwork_actual = 0;
+     double dwork_val_from_query_arr[1]; /* SLICOT expects DWORK(1) as an array */
+     double* dwork_allocated_buffer = NULL;
+     int* iwork_allocated_buffer = NULL;
+     int liwork_actual_size = 0;
+ 
      const int dico_len = 1, job_len = 1, ordsel_len = 1;
-
-     char dico_upper = toupper(dico);
-     char job_upper = toupper(job);
-     char ordsel_upper = toupper(ordsel);
-
+ 
+     char dico_upper = toupper(dico_in);
+     char job_upper = toupper(job_in);
+     char ordsel_upper = toupper(ordsel_in);
+ 
      /* Pointers for column-major copies if needed */
      double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL;
-     double *t_cm = NULL, *ti_cm = NULL; // For output matrices T, TI
-
+     double *t_cm = NULL, *ti_cm = NULL; 
+ 
      /* Pointers to pass to Fortran */
      double *a_ptr, *b_ptr, *c_ptr;
+     double *hsv_ptr;
      double *t_ptr, *ti_ptr;
      int lda_f, ldb_f, ldc_f;
      int ldt_f, ldti_f;
-
+ 
      /* --- Input Parameter Validation --- */
-
-     if (n < 0) { info = -4; goto cleanup; }
-     if (m < 0) { info = -5; goto cleanup; }
-     if (p < 0) { info = -6; goto cleanup; }
+     /* Parameter indices for error reporting match Fortran routine's 1-based indexing */
      if (dico_upper != 'C' && dico_upper != 'D') { info = -1; goto cleanup; }
      if (job_upper != 'B' && job_upper != 'N') { info = -2; goto cleanup; }
      if (ordsel_upper != 'F' && ordsel_upper != 'A') { info = -3; goto cleanup; }
-     if (ordsel_upper == 'F' && (*nr < 0 || *nr > n) ) { info = -7; goto cleanup; }
-     // Optional: Check TOL range if necessary
-     // if (tol < 0.0) { info = -19; goto cleanup; }
-
-     // Check leading dimensions based on storage order
-     int min_lda_f = MAX(1, n);
-     int min_ldb_f = MAX(1, n);
-     int min_ldc_f = MAX(1, p);
-     int min_ldt_f = MAX(1, n); // T is N x NR
-     // LDTI depends on NR, check >= 1 initially, more specific check later
-     int min_ldti_f = 1; // TI is NR x N
-
+     if (n_in < 0) { info = -4; goto cleanup; }
+     if (m_in < 0) { info = -5; goto cleanup; }
+     if (p_in < 0) { info = -6; goto cleanup; }
+     if (nr_io == NULL) { info = -7; goto cleanup; } // NR pointer itself
+     if (ordsel_upper == 'F' && (*nr_io < 0 || *nr_io > n_in) ) { info = -7; goto cleanup; }
+ 
+     // Check for NULL pointers for matrices if dimensions are non-zero
+     // A, B, C, T, TI can be NULL if N=0. HSV also.
+     if (n_in > 0 && a_io == NULL) { info = -8; goto cleanup; }
+     if (n_in > 0 && m_in > 0 && b_io == NULL) { info = -10; goto cleanup; }
+     if (p_in > 0 && n_in > 0 && c_io == NULL) { info = -12; goto cleanup; }
+     if (n_in > 0 && hsv_out == NULL) { info = -14; goto cleanup; }
+     // T and TI are outputs; pointers must be valid if NR (on exit) > 0.
+     // This check is tricky before NR is known. Assume non-NULL if N > 0 for now.
+     if (n_in > 0 && t_out == NULL) { info = -15; goto cleanup; }
+     if (n_in > 0 && ti_out == NULL) { info = -17; goto cleanup; }
+     if (iwarn_out == NULL) { info = -23; goto cleanup; } // IWARN pointer
+ 
+     // Validate leading dimensions
+     int min_lda_f_val = MAX(1, n_in);
+     int min_ldb_f_val = MAX(1, n_in);
+     int min_ldc_f_val = MAX(1, p_in);
+     int min_ldt_f_val = MAX(1, n_in); 
+     // LDTI depends on NR (output). For input validation, if N>0, LDTI must be at least 1.
+     // A more precise check for LDTI against NR (output) will be done after the Fortran call.
+     int min_ldti_f_val = (ordsel_upper == 'F' && *nr_io > 0) ? MAX(1, *nr_io) : 1;
+ 
+ 
      if (row_major) {
-         // For row-major C, LDA is the number of columns
-         int min_lda_rm_cols = n;
-         int min_ldb_rm_cols = m;
-         int min_ldc_rm_cols = n;
-         int min_ldt_rm_cols = n; // T is N x NR -> C needs N cols
-         int min_ldti_rm_cols = n; // TI is NR x N -> C needs N cols
-         if (n > 0 && lda < min_lda_rm_cols) { info = -9; goto cleanup; }
-         if (n > 0 && ldb < min_ldb_rm_cols) { info = -11; goto cleanup; }
-         if (p > 0 && ldc < min_ldc_rm_cols) { info = -13; goto cleanup; }
-         if (n > 0 && ldt < min_ldt_rm_cols) { info = -16; goto cleanup; }
-         if (n > 0 && ldti < min_ldti_rm_cols) { info = -18; goto cleanup; } // Check against N initially
-     } else {
-         // For column-major C, LDA is the number of rows (Fortran style)
-         if (lda < min_lda_f) { info = -9; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -11; goto cleanup; }
-         if (ldc < min_ldc_f) { info = -13; goto cleanup; }
-         if (ldt < min_ldt_f) { info = -16; goto cleanup; }
-         if (ldti < min_ldti_f) { info = -18; goto cleanup; } // Check against 1 initially
+         if (n_in > 0 && lda_in < n_in) { info = -9; goto cleanup; }
+         if (n_in > 0 && m_in > 0 && ldb_in < m_in) { info = -11; goto cleanup; }
+         if (p_in > 0 && n_in > 0 && ldc_in < n_in) { info = -13; goto cleanup; }
+         if (n_in > 0 && ldt_in < n_in) { info = -16; goto cleanup; } // T is N x NR, C LDA is N cols
+         // TI is NR x N. For row-major, C LDTI is N cols.
+         if (n_in > 0 && ldti_in < n_in) { info = -18; goto cleanup; }
+     } else { // Column-major
+         if (lda_in < min_lda_f_val) { info = -9; goto cleanup; }
+         if (ldb_in < min_ldb_f_val) { info = -11; goto cleanup; }
+         if (ldc_in < min_ldc_f_val) { info = -13; goto cleanup; }
+         if (ldt_in < min_ldt_f_val) { info = -16; goto cleanup; }
+         if (ldti_in < min_ldti_f_val && n_in > 0 && !(ordsel_upper == 'F' && *nr_io == 0) ) { info = -18; goto cleanup; }
      }
-
+ 
+ 
      /* --- Workspace Allocation --- */
-
-     // Allocate IWORK (size N if JOB='N', 0 otherwise)
+     // IWORK allocation based on documentation: LIWORK = N if JOB='N', 0 if JOB='B'.
      if (job_upper == 'N') {
-         iwork_size = MAX(1, n);
-         iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-         CHECK_ALLOC(iwork);
-     } else {
-         iwork = NULL; // Pass NULL for size 0
+         if (n_in > 0) {
+             liwork_actual_size = n_in;
+             iwork_allocated_buffer = (int*)malloc((size_t)liwork_actual_size * sizeof(int));
+             CHECK_ALLOC(iwork_allocated_buffer);
+         } else { // N_IN == 0
+             liwork_actual_size = 0;
+             iwork_allocated_buffer = NULL;
+         }
+     } else { // JOB_UPPER == 'B'
+         liwork_actual_size = 0; // LIWORK = 0
+         iwork_allocated_buffer = NULL;
      }
-
-     // Allocate DWORK based on query
-     ldwork = -1; // Query mode
-     // Use dummy LDs for query if dimensions are 0
-     int lda_q = row_major ? MAX(1, n) : lda;
-     int ldb_q = row_major ? MAX(1, n) : ldb;
-     int ldc_q = row_major ? MAX(1, p) : ldc;
-     int ldt_q = row_major ? MAX(1, n) : ldt;
-     int ldti_q = row_major ? MAX(1, n) : ldti; // Use N for query check
-
+ 
+     // DWORK workspace query
+     // Use dummy pointers for query if N=0, as actual pointers might be NULL.
+     double dummy_double_for_query = 0.0;
+     int dummy_nr_for_query = (ordsel_upper == 'F' ? *nr_io : 0); // Use input NR for fixed order query
+ 
+     double* q_a_ptr = (n_in > 0) ? a_io : &dummy_double_for_query;
+     int q_lda_f = row_major ? MAX(1, n_in) : ( (n_in > 0) ? lda_in : 1 );
+     double* q_b_ptr = (n_in > 0 && m_in > 0) ? b_io : &dummy_double_for_query;
+     int q_ldb_f = row_major ? MAX(1, n_in) : ( (n_in > 0 && m_in > 0) ? ldb_in : 1 );
+     double* q_c_ptr = (p_in > 0 && n_in > 0) ? c_io : &dummy_double_for_query;
+     int q_ldc_f = row_major ? MAX(1, p_in) : ( (p_in > 0 && n_in > 0) ? ldc_in : 1 );
+     double* q_hsv_ptr = (n_in > 0) ? hsv_out : &dummy_double_for_query;
+     double* q_t_ptr = (n_in > 0) ? t_out : &dummy_double_for_query;
+     int q_ldt_f = row_major ? MAX(1, n_in) : ( (n_in > 0) ? ldt_in : 1 );
+     double* q_ti_ptr = (n_in > 0) ? ti_out : &dummy_double_for_query;
+     // For query, LDTI_F can be based on N, as NR is not yet determined for ORDSEL='A'
+     int q_ldti_f = row_major ? MAX(1, n_in) : ( (n_in > 0) ? ldti_in : 1 );
+ 
+ 
      F77_FUNC(ab09ax, AB09AX)(&dico_upper, &job_upper, &ordsel_upper,
-                              &n, &m, &p, nr,
-                              NULL, &lda_q, NULL, &ldb_q, NULL, &ldc_q, // NULL arrays
-                              NULL, // NULL hsv
-                              NULL, &ldt_q, NULL, &ldti_q, // NULL t, ti
-                              &tol, iwork, &dwork_query, &ldwork,
-                              iwarn, &info,
-                              dico_len, job_len, ordsel_len);
-
-     if (info != 0) { goto cleanup; } // Query failed
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX(1, N*(MAX(N,M,P)+5) + N*(N+1)/2)
-     int min_ldwork = 1;
-     min_ldwork = MAX(min_ldwork, n * (MAX(n, MAX(m, p)) + 5) + n * (n + 1) / 2);
-     ldwork = MAX(ldwork, min_ldwork);
-
-     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
-
-     /* --- Prepare Arrays and Call Fortran Routine --- */
+                               &n_in, &m_in, &p_in, &dummy_nr_for_query,
+                               q_a_ptr, &q_lda_f, q_b_ptr, &q_ldb_f, q_c_ptr, &q_ldc_f,
+                               q_hsv_ptr, q_t_ptr, &q_ldt_f, q_ti_ptr, &q_ldti_f,
+                               &tol_in, iwork_allocated_buffer, 
+                               dwork_val_from_query_arr, &ldwork_for_query, /* Query DWORK */
+                               iwarn_out, &info,
+                               dico_len, job_len, ordsel_len);
+ 
+     // LDWORK is parameter 22. Expect INFO = -22 for successful query.
+     if (info == -22) { // Successful query
+         ldwork_actual = (int)dwork_val_from_query_arr[0];
+         info = 0; // Reset info
+     } else if (info == 0) { // Also successful if Fortran routine handles LDWORK=-1 and returns INFO=0
+          ldwork_actual = (int)dwork_val_from_query_arr[0];
+     }
+     else { // Query failed for other reasons
+         goto cleanup; 
+     }
+ 
+     // Ensure minimum documented size for DWORK
+     int min_ldwork_formula = 1; // Default for N=0
+     if (n_in > 0) {
+         min_ldwork_formula = MAX(1, n_in * (MAX(n_in, MAX(m_in, p_in)) + 5) + (n_in * (n_in + 1)) / 2);
+     }
+     ldwork_actual = MAX(ldwork_actual, min_ldwork_formula);
+     
+     dwork_allocated_buffer = (double*)malloc((size_t)ldwork_actual * sizeof(double));
+     CHECK_ALLOC(dwork_allocated_buffer);
+ 
+ 
+     /* --- Prepare Arrays for Computational Call --- */
      size_t elem_size = sizeof(double);
-     int nr_in = *nr; // Save input NR if needed for validation later
-
      if (row_major) {
-         /* --- Row-Major Case --- */
-
-         /* Allocate memory for column-major copies */
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-         // T(N, NR), TI(NR, N) - Allocate based on N initially
-         size_t t_rows = n; size_t t_cols = n; size_t t_size = t_rows * t_cols;
-         size_t ti_rows = n; size_t ti_cols = n; size_t ti_size = ti_rows * ti_cols;
-
+         /* --- Row-Major Case: Allocate CM buffers and transpose inputs --- */
+         size_t a_size = (size_t)n_in * n_in;
+         size_t b_size = (size_t)n_in * m_in;
+         size_t c_size = (size_t)p_in * n_in;
+         // T is N x NR_out, TI is NR_out x N. For allocation, use N for NR_out initially.
+         size_t t_alloc_cols = n_in; // Max possible NR is N
+         size_t ti_alloc_rows = n_in; 
+         size_t t_size = (size_t)n_in * t_alloc_cols; 
+         size_t ti_size = (size_t)ti_alloc_rows * n_in;
+ 
          if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
          if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
          if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
-         if (t_size > 0) { t_cm = (double*)malloc(t_size * elem_size); CHECK_ALLOC(t_cm); }
-         if (ti_size > 0) { ti_cm = (double*)malloc(ti_size * elem_size); CHECK_ALLOC(ti_cm); }
-
+         if (t_size > 0) { t_cm = (double*)malloc(t_size * elem_size); CHECK_ALLOC(t_cm); } // T is output
+         if (ti_size > 0) { ti_cm = (double*)malloc(ti_size * elem_size); CHECK_ALLOC(ti_cm); } // TI is output
+ 
          /* Transpose C (row-major) inputs to Fortran (column-major) copies */
-         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-         if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-         if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
-
-         /* Fortran leading dimensions */
-         lda_f = MAX(1, a_rows);
-         ldb_f = MAX(1, b_rows);
-         ldc_f = MAX(1, c_rows);
-         ldt_f = MAX(1, t_rows); // LDT >= N
-         ldti_f = MAX(1, ti_rows); // LDTI >= N initially
-
-         /* Set pointers for Fortran call */
-         a_ptr = a_cm; b_ptr = b_cm; c_ptr = c_cm;
-         t_ptr = t_cm; ti_ptr = ti_cm;
-
+         if (a_size > 0) slicot_transpose_to_fortran_with_ld(a_io, a_cm, n_in, n_in, lda_in, MAX(1,n_in), elem_size);
+         if (b_size > 0) slicot_transpose_to_fortran_with_ld(b_io, b_cm, n_in, m_in, ldb_in, MAX(1,n_in), elem_size);
+         if (c_size > 0) slicot_transpose_to_fortran_with_ld(c_io, c_cm, p_in, n_in, ldc_in, MAX(1,p_in), elem_size);
+ 
+         lda_f = MAX(1, n_in); ldb_f = MAX(1, n_in); ldc_f = MAX(1, p_in);
+         ldt_f = MAX(1, n_in); ldti_f = MAX(1, n_in); // Initial LDTI_F based on N, will be checked against NR_out
+ 
+         a_ptr = (n_in > 0) ? a_cm : NULL; 
+         b_ptr = (n_in > 0 && m_in > 0) ? b_cm : NULL; 
+         c_ptr = (p_in > 0 && n_in > 0) ? c_cm : NULL;
+         t_ptr = (n_in > 0) ? t_cm : NULL;   // Fortran writes to t_cm
+         ti_ptr = (n_in > 0) ? ti_cm : NULL; // Fortran writes to ti_cm
      } else {
          /* --- Column-Major Case --- */
-         lda_f = lda; ldb_f = ldb; ldc_f = ldc;
-         ldt_f = ldt; ldti_f = ldti;
-         a_ptr = a; b_ptr = b; c_ptr = c;
-         t_ptr = t; ti_ptr = ti;
+         lda_f = lda_in; ldb_f = ldb_in; ldc_f = ldc_in;
+         ldt_f = ldt_in; ldti_f = ldti_in;
+         a_ptr = (n_in > 0) ? a_io : NULL;
+         b_ptr = (n_in > 0 && m_in > 0) ? b_io : NULL;
+         c_ptr = (p_in > 0 && n_in > 0) ? c_io : NULL;
+         t_ptr = (n_in > 0) ? t_out : NULL;
+         ti_ptr = (n_in > 0) ? ti_out : NULL;
      }
-
-     /* Call the computational routine */
+     hsv_ptr = (n_in > 0) ? hsv_out : NULL;
+ 
+     /* --- Call the computational routine --- */
      F77_FUNC(ab09ax, AB09AX)(&dico_upper, &job_upper, &ordsel_upper,
-                              &n, &m, &p, nr, // Pass pointer to nr
-                              a_ptr, &lda_f,           // Pass A ptr
-                              b_ptr, &ldb_f,           // Pass B ptr
-                              c_ptr, &ldc_f,           // Pass C ptr
-                              hsv,                    // Pass hsv pointer
-                              t_ptr, &ldt_f,           // Pass T ptr
-                              ti_ptr, &ldti_f,         // Pass TI ptr
-                              &tol, iwork, dwork, &ldwork,
-                              iwarn, &info,
-                              dico_len, job_len, ordsel_len);
-
-     /* Copy back results from column-major temps to original row-major arrays */
+                               &n_in, &m_in, &p_in, nr_io, 
+                               a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f,
+                               hsv_ptr, t_ptr, &ldt_f, ti_ptr, &ldti_f,
+                               &tol_in, iwork_allocated_buffer, dwork_allocated_buffer, &ldwork_actual,
+                               iwarn_out, &info,
+                               dico_len, job_len, ordsel_len);
+ 
+     /* --- Copy back results from column-major temps to original row-major arrays if row_major --- */
      if (row_major && info == 0) {
-         int nr_val = *nr; // Get the final reduced order
-
-         // Check LDTI again now that NR is known
-         int min_ldti_f_final = MAX(1, nr_val);
-         if (ldti_f < min_ldti_f_final) {
-              info = -18; // LDTI is too small for computed NR
-              goto cleanup;
+         int nr_val = *nr_io; // Get the final reduced order
+ 
+         // Validate LDTI for row-major C array: ldti_in (cols) must be >= N
+         // And Fortran LDTI_F (rows) must be >= NR_val
+         if (nr_val > 0) {
+             if (ldti_f < nr_val) { info = -18; goto cleanup; } // Fortran LDTI too small
+             if (ldti_in < n_in)  { info = -18; goto cleanup; } // C LDTI too small
          }
-         // Also check C row-major LDTI (number of columns) >= N
-         if (ldti < n) {
-             info = -18; // C LDTI too small
-             goto cleanup;
+ 
+ 
+         if (nr_val >= 0) { 
+             if (n_in > 0) { // Only transpose if original dimension was > 0
+                 // A is overwritten with Ar (nr_val x nr_val)
+                 if (a_cm != NULL) slicot_transpose_to_c_with_ld(a_cm, a_io, nr_val, nr_val, lda_f, lda_in, elem_size);
+                 // B is overwritten with Br (nr_val x m_in)
+                 if (m_in > 0 && b_cm != NULL) slicot_transpose_to_c_with_ld(b_cm, b_io, nr_val, m_in, ldb_f, ldb_in, elem_size);
+                 // C is overwritten with Cr (p_in x nr_val)
+                 if (p_in > 0 && c_cm != NULL) slicot_transpose_to_c_with_ld(c_cm, c_io, p_in, nr_val, ldc_f, ldc_in, elem_size);
+             
+                 // T is N x NR_val
+                 if (t_cm != NULL && t_out != NULL) slicot_transpose_to_c_with_ld(t_cm, t_out, n_in, nr_val, ldt_f, ldt_in, elem_size);
+                 // TI is NR_val x N
+                 if (ti_cm != NULL && ti_out != NULL) slicot_transpose_to_c_with_ld(ti_cm, ti_out, nr_val, n_in, ldti_f, ldti_in, elem_size);
+             }
          }
-
-         // Copy back reduced A, B, C and computed T, TI
-         if (nr_val >= 0) { // Check nr_val is valid before using as dimension
-             size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-             size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-             size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-             size_t t_rows = n; size_t t_cols = n; size_t t_size = t_rows * t_cols;
-             size_t ti_rows = n; size_t ti_cols = n; size_t ti_size = ti_rows * ti_cols;
-
-             if (a_size > 0) slicot_transpose_to_c(a_cm, a, nr_val, nr_val, elem_size);
-             if (b_size > 0) slicot_transpose_to_c(b_cm, b, nr_val, m, elem_size);
-             if (c_size > 0) slicot_transpose_to_c(c_cm, c, p, nr_val, elem_size);
-             if (t_size > 0) slicot_transpose_to_c(t_cm, t, n, nr_val, elem_size); // T is N x NR
-             if (ti_size > 0) slicot_transpose_to_c(ti_cm, ti, nr_val, n, elem_size); // TI is NR x N
-         }
-         // HSV was filled directly.
      }
-
+     // HSV is 1D, filled directly.
+ 
  cleanup:
      /* --- Cleanup --- */
-     free(dwork);
-     free(iwork); // Safe even if NULL
+     free(dwork_allocated_buffer);
+     free(iwork_allocated_buffer); 
      free(a_cm);
      free(b_cm);
      free(c_cm);
      free(t_cm);
      free(ti_cm);
-
+ 
      return info;
  }
+ 
