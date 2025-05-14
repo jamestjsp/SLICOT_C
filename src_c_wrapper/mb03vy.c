@@ -47,65 +47,106 @@ int slicot_mb03vy(int n, int p, int ilo, int ihi,
 {
     /* Local variables */
     int info = 0;
-    int ldwork = -1; /* Use -1 for workspace query */
-    double dwork_query;
+    int ldwork_val; // Renamed to avoid conflict with ldwork parameter if it existed
     double* dwork = NULL;
     // No _cm pointers needed as 'a' is assumed column-major and row_major is ignored.
     // No iwork needed for this routine.
 
     /* --- Input Parameter Validation --- */
 
-    if (n < 0) { info = -1; goto cleanup; }
-    if (p < 1) { info = -2; goto cleanup; }
-    if (ilo < 1 || ilo > MAX(1, n)) { info = -3; goto cleanup; }
-    if (ihi < MIN(ilo, n) || ihi > n) { info = -4; goto cleanup; }
-    // NOTE: LDA1, LDA2, LDTAU checks assume 'a' and 'tau' are column-major.
+    if (n < 0) { info = -1; goto cleanup; } // N
+    if (p < 1) { info = -2; goto cleanup; } // P
+    // ILO (arg 3)
+    if (n == 0) { // Special case for N=0
+        if (ilo != 1) { info = -3; goto cleanup; }
+    } else { // N > 0
+        if (ilo < 1 || ilo > n) { info = -3; goto cleanup; }
+    }
+    // IHI (arg 4)
+    if (n == 0) { // Special case for N=0
+         if (ihi != 0) { info = -4; goto cleanup; }
+    } else { // N > 0
+        if (ihi < MIN(ilo, n) || ihi > n) { info = -4; goto cleanup; }
+    }
+    
+    // A (arg 5) - NULL check
+    if (n > 0 && p > 0 && a == NULL) { info = -5; goto cleanup; }
+
+    // LDA1 (arg 6)
     if (lda1 < MAX(1, n)) { info = -6; goto cleanup; }
+    // LDA2 (arg 7)
     if (lda2 < MAX(1, n)) { info = -7; goto cleanup; }
-    if (ldtau < MAX(1, n - 1)) { info = -9; goto cleanup; }
+
+    // TAU (arg 8) - NULL check
+    // TAU is dimensioned (LDTAU, P). It's required if P > 0.
+    // N-1 part of LDTAU matters if N > 1 for actual reflector data.
+    if (p > 0 && tau == NULL) { info = -8; goto cleanup; }
+    
+    // LDTAU (arg 9)
+    if (ldtau < MAX(1, (n > 0 ? n - 1 : 0) )) { info = -9; goto cleanup; }
     // The 'row_major' flag is intentionally ignored for validation here due to the 3D array 'a'.
 
     /* --- Workspace Allocation --- */
 
     // Allocate a small DWORK array for the workspace query
-    double dwork_temp[1];
-    ldwork = -1; // Query mode
+    double dwork_temp_query[1];
+    int ldwork_query_flag = -1; // Query mode
     
     // Perform workspace query
-    F77_FUNC(mb03vy, MB03VY)(&n, &p, &ilo, &ihi, a, &lda1, &lda2, tau, &ldtau,
-                             dwork_temp, &ldwork, &info);
+    // For query, pass potentially NULL 'a' and 'tau' if they were NULL and N=0 (already handled by validation if N>0)
+    // Or if the routine is robust to NULL for query when dimensions are zero.
+    // However, if N>0, 'a' and 'tau' have been validated to be non-NULL.
+    double* a_for_query = (n > 0 && p > 0) ? a : NULL; // Use actual 'a' if valid, else NULL if N=0 or P=0 (though P>=1)
+    const double* tau_for_query = (p > 0) ? tau : NULL; // Use actual 'tau' if P>=1
+    int lda1_for_query = lda1;
+    int lda2_for_query = lda2;
+    int ldtau_for_query = ldtau;
+    if (n == 0) { // If N=0, LDs must be >=1 for Fortran
+        lda1_for_query = MAX(1, lda1_for_query);
+        lda2_for_query = MAX(1, lda2_for_query);
+        ldtau_for_query = MAX(1, ldtau_for_query);
+    }
 
-    if (info < 0) { goto cleanup; } // Query failed due to invalid argument
+
+    F77_FUNC(mb03vy, MB03VY)(&n, &p, &ilo, &ihi, 
+                             a_for_query, &lda1_for_query, &lda2_for_query, 
+                             tau_for_query, &ldtau_for_query,
+                             dwork_temp_query, &ldwork_query_flag, &info);
+
+    if (info < 0 && info != SLICOT_MEMORY_ERROR) { // If query itself returns error (e.g. -1 to -9 due to other params)
+        goto cleanup; 
+    }
+    info = 0; // Reset info if query was "successful" in terms of not erroring on other params
     
     // Get the optimal workspace size from the query result
-    ldwork = (int)dwork_temp[0];
+    ldwork_val = (int)dwork_temp_query[0];
     
     // Check against minimum documented size: MAX(1, N)
-    int min_ldwork = MAX(1, n);
-    ldwork = MAX(ldwork, min_ldwork);
+    int min_ldwork_formula = MAX(1, n);
+    ldwork_val = MAX(ldwork_val, min_ldwork_formula);
 
     // Allocate the workspace
-    dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-    CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
+    if (ldwork_val > 0) {
+        dwork = (double*)malloc((size_t)ldwork_val * sizeof(double));
+        CHECK_ALLOC(dwork); // Sets info to SLICOT_MEMORY_ERROR and jumps to cleanup on failure
+    } else { // Should not happen as ldwork_val is MAX(..., 1)
+        dwork = NULL; 
+    }
+
 
     /* --- Call the computational routine --- */
-
-    // NOTE: Assuming 'a' is already in column-major (Fortran) layout.
-    // No transposition is performed for the 3D array 'a'.
-    // 'row_major' flag is ignored. 'tau' is input-only, no copy-back needed.
+    // 'a' and 'tau' are used directly as they are assumed column-major.
+    // If N=0, pointers a and tau might be NULL but should not be dereferenced by Fortran.
+    // If N>0, they've been checked to be non-NULL.
     F77_FUNC(mb03vy, MB03VY)(&n, &p, &ilo, &ihi,
-                             a, &lda1, &lda2,
-                             tau, &ldtau,
-                             dwork, &ldwork, &info);
+                             a, &lda1, &lda2, // Pass original 'a'
+                             tau, &ldtau,     // Pass original 'tau'
+                             dwork, &ldwork_val, &info);
     // A is modified in place.
-
-    /* --- Copy results back to row-major format if needed --- */
-    // No copy-back needed as 'a' is assumed column-major and modified in-place.
 
 cleanup:
     /* --- Cleanup --- */
     free(dwork);
 
-    /* Return the info code from the Fortran routine or SLICOT_MEMORY_ERROR */
     return info;
 }
