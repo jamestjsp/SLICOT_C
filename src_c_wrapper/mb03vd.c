@@ -57,8 +57,11 @@ int slicot_mb03vd(int n, int p, int ilo, int ihi,
     if (p < 1) { info = -2; goto cleanup; }
     if (ilo < 1 || ilo > MAX(1, n)) { info = -3; goto cleanup; }
     if (ihi < MIN(ilo, n) || ihi > n) { info = -4; goto cleanup; }
+    // Add NULL pointer checks
+    if (a == NULL && n > 0) { info = -5; goto cleanup; }
     if (lda1 < MAX(1, n)) { info = -6; goto cleanup; }
     if (lda2 < MAX(1, n)) { info = -7; goto cleanup; }
+    if (tau == NULL && n > 1) { info = -8; goto cleanup; }
     if (ldtau < MAX(1, n - 1)) { info = -9; goto cleanup; }
 
     /* --- Workspace Allocation --- */
