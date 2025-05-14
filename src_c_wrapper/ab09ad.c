@@ -5,18 +5,21 @@
  * This file provides a C wrapper implementation for the SLICOT routine AB09AD,
  * which computes a reduced order model (Ar,Br,Cr) for a stable original
  * state-space representation (A,B,C) using Balance & Truncate methods.
+ * Workspace (IWORK, DWORK) is allocated internally by this wrapper.
+ * Input/output matrix format is handled via the row_major parameter.
  */
 
- #include <stdlib.h>
- #include <ctype.h>
+ #include <stdlib.h> // For malloc, free
+ #include <ctype.h>  // For toupper
  #include <stddef.h> // For size_t
-
+ #include <math.h>   // For fabs if needed for TOL comparison, though MAX/MIN are from slicot_utils
+ 
  // Include the header file for this wrapper
  #include "ab09ad.h"
  // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
+ #include "slicot_utils.h" // Provides CHECK_ALLOC, SLICOT_MEMORY_ERROR, MAX, MIN, transpose functions
  #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
-
+ 
  /*
   * Declare the external Fortran routine using the F77_FUNC macro.
   * Note A, B, C are input/output. NR is input/output.
@@ -48,172 +51,240 @@
      int equil_len,          // Hidden length
      int ordsel_len          // Hidden length
  );
-
-
+ 
+ 
  /* C wrapper function definition */
  SLICOT_EXPORT
- int slicot_ab09ad(char dico, char job, char equil, char ordsel,
-                   int n, int m, int p, int* nr,
-                   double* a, int lda,
-                   double* b, int ldb,
-                   double* c, int ldc,
-                   double* hsv, double tol, int* iwarn,
+ int slicot_ab09ad(char dico_in, char job_in, char equil_in, char ordsel_in,
+                   int n_in, int m_in, int p_in, int* nr_io,
+                   double* a_io, int lda_in,
+                   double* b_io, int ldb_in,
+                   double* c_io, int ldc_in,
+                   double* hsv_out, double tol_in, int* iwarn_out,
                    int row_major)
  {
      /* Local variables */
      int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
+     int ldwork_query = -1; /* Use -1 for DWORK workspace query */
+     int ldwork_actual = 0;
+     double dwork_val_query; /* To retrieve optimal DWORK size */
      double* dwork = NULL;
      int* iwork = NULL;
-     int iwork_size = 0;
+     int liwork_actual = 0;
+ 
      const int dico_len = 1, job_len = 1, equil_len = 1, ordsel_len = 1;
-
-     char dico_upper = toupper(dico);
-     char job_upper = toupper(job);
-     char equil_upper = toupper(equil);
-     char ordsel_upper = toupper(ordsel);
-
+ 
+     char dico_upper = toupper(dico_in);
+     char job_upper = toupper(job_in);
+     char equil_upper = toupper(equil_in);
+     char ordsel_upper = toupper(ordsel_in);
+ 
      /* Pointers for column-major copies if needed */
      double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL;
      double *a_ptr, *b_ptr, *c_ptr;
-     int lda_f, ldb_f, ldc_f;
-
+     int lda_f, ldb_f, ldc_f; // Fortran leading dimensions
+ 
      /* --- Input Parameter Validation --- */
-
+     /* Parameter indices for error reporting match Fortran routine's 1-based indexing */
      if (dico_upper != 'C' && dico_upper != 'D') { info = -1; goto cleanup; }
      if (job_upper != 'B' && job_upper != 'N') { info = -2; goto cleanup; }
      if (equil_upper != 'S' && equil_upper != 'N') { info = -3; goto cleanup; }
      if (ordsel_upper != 'F' && ordsel_upper != 'A') { info = -4; goto cleanup; }
-     if (n < 0) { info = -5; goto cleanup; }
-     if (m < 0) { info = -6; goto cleanup; }
-     if (p < 0) { info = -7; goto cleanup; }
-     if (ordsel_upper == 'F' && (*nr < 0 || *nr > n) ) { info = -8; goto cleanup; }
-
-     // Check leading dimensions based on storage order
-     int min_lda_f = MAX(1, n);
-     int min_ldb_f = MAX(1, n);
-     int min_ldc_f = MAX(1, p);
-
+     if (n_in < 0) { info = -5; goto cleanup; }
+     if (m_in < 0) { info = -6; goto cleanup; }
+     if (p_in < 0) { info = -7; goto cleanup; }
+     if (nr_io == NULL) { info = -8; goto cleanup; } // NR pointer itself
+     if (ordsel_upper == 'F' && (*nr_io < 0 || *nr_io > n_in) ) { info = -8; goto cleanup; }
+ 
+     // Check for NULL pointers for matrices if dimensions are non-zero
+     if (n_in > 0 && a_io == NULL) { info = -9; goto cleanup; }
+     if (n_in > 0 && m_in > 0 && b_io == NULL) { info = -11; goto cleanup; }
+     if (p_in > 0 && n_in > 0 && c_io == NULL) { info = -13; goto cleanup; }
+     if (n_in > 0 && hsv_out == NULL) { info = -15; goto cleanup; } // HSV is always output if N > 0
+     if (iwarn_out == NULL) { info = -20; goto cleanup; } // IWARN pointer
+ 
+     // Validate leading dimensions
+     // Fortran LDA is number of rows
+     int min_lda_f_val = MAX(1, n_in);
+     int min_ldb_f_val = MAX(1, n_in);
+     int min_ldc_f_val = MAX(1, p_in);
+ 
      if (row_major) {
-         // For row-major C, LDA is the number of columns
-         int min_lda_rm_cols = n;
-         int min_ldb_rm_cols = m;
-         int min_ldc_rm_cols = n;
-         if (lda < min_lda_rm_cols) { info = -10; goto cleanup; }
-         if (ldb < min_ldb_rm_cols) { info = -12; goto cleanup; }
-         if (ldc < min_ldc_rm_cols) { info = -14; goto cleanup; }
+         // C LDA is number of columns for row-major
+         if (n_in > 0 && lda_in < n_in) { info = -10; goto cleanup; } // A is N x N, so LDA (cols) >= N
+         if (m_in > 0 && ldb_in < m_in) { info = -12; goto cleanup; } // B is N x M, so LDB (cols) >= M
+         if (n_in > 0 && ldc_in < n_in) { info = -14; goto cleanup; } // C is P x N, so LDC (cols) >= N
      } else {
-         // For column-major C, LDA is the number of rows (Fortran style)
-         if (lda < min_lda_f) { info = -10; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -12; goto cleanup; }
-         if (ldc < min_ldc_f) { info = -14; goto cleanup; }
+         // C LDA is number of rows for column-major (Fortran style)
+         if (lda_in < min_lda_f_val) { info = -10; goto cleanup; }
+         if (ldb_in < min_ldb_f_val) { info = -12; goto cleanup; }
+         if (ldc_in < min_ldc_f_val) { info = -14; goto cleanup; }
      }
-
+ 
+     /* --- Workspace Allocation --- */
+ 
+     // Calculate IWORK size
+     if (job_upper == 'N') {
+         liwork_actual = MAX(1, n_in); // As per documentation: N for JOB='N'
+     } else { // JOB == 'B'
+         liwork_actual = 1; // Minimal size for JOB='B' (Fortran requires at least 1 for dummy)
+                            // SLICOT doc says LIWORK = 0 if JOB = 'B'.
+                            // Fortran often expects a valid pointer even if size is 0,
+                            // so allocating 1 is safer unless NULL is explicitly allowed for size 0 workspace.
+                            // Given it's an array, a valid pointer to size 1 is safest.
+                            // If n_in = 0, then liwork_actual will be 1.
+     }
+     if (n_in == 0 && job_upper == 'B') { // Specifically for JOB='B' and N=0, LIWORK=0
+         liwork_actual = 0; // SLICOT documentation for AB09AD: LIWORK = 0 if JOB='B'
+         iwork = NULL; // Pass NULL if size is 0
+     } else {
+         iwork = (int*)malloc((size_t)liwork_actual * sizeof(int));
+         CHECK_ALLOC(iwork);
+     }
+ 
+ 
+     // Perform DWORK workspace query
+     // For query, pass dummy arrays for A, B, C, HSV if N=0, or actual pointers if they might be inspected
+     // However, typically, only dimensions and options are used for workspace calculation.
+     // The Fortran routine expects valid pointers for A, B, C even in query mode if N > 0.
+     // For N=0, it's safer to pass NULL or dummy 1-element pointers.
+     // The current wrapper logic already handles a_ptr, b_ptr, c_ptr before this.
+     // We will use temporary pointers for the query call to avoid issues if N=0 and original pointers are NULL.
+     
+     double dummy_scalar_for_query = 0.0;
+     int dummy_nr_for_query = (ordsel_upper == 'F' ? *nr_io : 0);
+ 
+     // Set up temporary pointers for the query call, especially for N=0 case
+     double* query_a_ptr = (n_in > 0) ? a_io : &dummy_scalar_for_query;
+     int query_lda = (n_in > 0) ? lda_in : 1;
+     double* query_b_ptr = (n_in > 0 && m_in > 0) ? b_io : &dummy_scalar_for_query;
+     int query_ldb = (n_in > 0 && m_in > 0) ? ldb_in : 1;
+     double* query_c_ptr = (n_in > 0 && p_in > 0) ? c_io : &dummy_scalar_for_query;
+     int query_ldc = (n_in > 0 && p_in > 0) ? ldc_in : 1;
+     double* query_hsv_ptr = (n_in > 0) ? hsv_out : &dummy_scalar_for_query;
+ 
+     // If row_major, the query still needs Fortran-style LDs
+     int query_lda_f = row_major ? MAX(1, n_in) : query_lda;
+     int query_ldb_f = row_major ? MAX(1, n_in) : query_ldb;
+     int query_ldc_f = row_major ? MAX(1, p_in) : query_ldc;
+ 
+ 
+     F77_FUNC(ab09ad, AB09AD)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
+                               &n_in, &m_in, &p_in, &dummy_nr_for_query, /* Use temp NR for query */
+                               query_a_ptr, &query_lda_f,
+                               query_b_ptr, &query_ldb_f,
+                               query_c_ptr, &query_ldc_f,
+                               query_hsv_ptr, &tol_in,
+                               iwork, /* iwork already allocated or NULL */
+                               &dwork_val_query, &ldwork_query, /* Query DWORK */
+                               iwarn_out, &info,
+                               dico_len, job_len, equil_len, ordsel_len);
+ 
+     if (info < 0 && info != -19) { /* Allow INFO = -19 (LDWORK too small for query) */
+         goto cleanup;
+     }
+     info = 0; // Reset info after successful or expected query "failure"
+ 
+     ldwork_actual = (int)dwork_val_query;
+     // Ensure minimum documented size for DWORK
+     int min_ldwork_formula = 1;
+     if (n_in > 0) {
+         int max_nmp = MAX(n_in, MAX(m_in, p_in));
+         min_ldwork_formula = MAX(1, n_in * (2 * n_in + max_nmp + 5) + (n_in * (n_in + 1)) / 2);
+     }
+     ldwork_actual = MAX(ldwork_actual, min_ldwork_formula);
+     
+     dwork = (double*)malloc((size_t)ldwork_actual * sizeof(double));
+     CHECK_ALLOC(dwork);
+ 
+ 
      /* --- Prepare arrays for column-major format if using row-major --- */
      size_t elem_size = sizeof(double);
      if (row_major) {
-         /* Allocate and convert A, B, C from row-major to column-major */
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-
-         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
-         if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
-         if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
-
-         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-         if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-         if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
-
-         lda_f = (a_rows > 0) ? a_rows : 1; // Column-major LDA for Fortran
-         ldb_f = (b_rows > 0) ? b_rows : 1; // Column-major LDB for Fortran
-         ldc_f = (c_rows > 0) ? c_rows : 1; // Column-major LDC for Fortran
-         a_ptr = a_cm;
-         b_ptr = b_cm;
-         c_ptr = c_cm;
+         size_t a_rows_orig = n_in; size_t a_cols_orig = n_in; size_t a_size_orig = a_rows_orig * a_cols_orig;
+         size_t b_rows_orig = n_in; size_t b_cols_orig = m_in; size_t b_size_orig = b_rows_orig * b_cols_orig;
+         size_t c_rows_orig = p_in; size_t c_cols_orig = n_in; size_t c_size_orig = c_rows_orig * c_cols_orig;
+ 
+         lda_f = MAX(1, n_in); // Fortran LDA is number of rows of A
+         ldb_f = MAX(1, n_in); // Fortran LDB is number of rows of B
+         ldc_f = MAX(1, p_in); // Fortran LDC is number of rows of C
+ 
+         if (a_size_orig > 0) {
+             a_cm = (double*)malloc(a_size_orig * elem_size); CHECK_ALLOC(a_cm);
+             slicot_transpose_to_fortran_with_ld(a_io, a_cm, a_rows_orig, a_cols_orig, lda_in, lda_f, elem_size);
+             a_ptr = a_cm;
+         } else {
+             a_ptr = NULL; // Pass NULL if N=0
+         }
+ 
+         if (b_size_orig > 0) {
+             b_cm = (double*)malloc(b_size_orig * elem_size); CHECK_ALLOC(b_cm);
+             slicot_transpose_to_fortran_with_ld(b_io, b_cm, b_rows_orig, b_cols_orig, ldb_in, ldb_f, elem_size);
+             b_ptr = b_cm;
+         } else {
+             b_ptr = NULL; // Pass NULL if N=0 or M=0
+         }
+ 
+         if (c_size_orig > 0) {
+             c_cm = (double*)malloc(c_size_orig * elem_size); CHECK_ALLOC(c_cm);
+             slicot_transpose_to_fortran_with_ld(c_io, c_cm, c_rows_orig, c_cols_orig, ldc_in, ldc_f, elem_size);
+             c_ptr = c_cm;
+         } else {
+             c_ptr = NULL; // Pass NULL if P=0 or N=0
+         }
      } else {
-         /* Column-major case - use original arrays */
-         lda_f = lda;
-         ldb_f = ldb;
-         ldc_f = ldc;
-         a_ptr = a;
-         b_ptr = b;
-         c_ptr = c;
+         /* Column-major case - use original arrays and LDs */
+         lda_f = lda_in;
+         ldb_f = ldb_in;
+         ldc_f = ldc_in;
+         a_ptr = (n_in > 0) ? a_io : NULL;
+         b_ptr = (n_in > 0 && m_in > 0) ? b_io : NULL;
+         c_ptr = (p_in > 0 && n_in > 0) ? c_io : NULL;
      }
-
-     /* --- Workspace allocation --- */
-
-     // Allocate IWORK (size N if JOB='N', 0 otherwise)
-     if (job_upper == 'N') {
-         iwork_size = MAX(1, n); // Fortran arrays are 1-based, ensure size >= 1
-         iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-         CHECK_ALLOC(iwork);
-     } else {
-         iwork_size = 0; // Fortran expects size 0, pass NULL? Or size 1 dummy?
-         iwork = NULL;   // Passing NULL might be safer if allowed by Fortran interface
-                         // SLICOT library usually handles NULL for size 0 workspace gracefully.
-                         // If not, allocate size 1:
-                         // iwork_size = 1; iwork = (int*)malloc(sizeof(int)); CHECK_ALLOC(iwork);
-     }
-
-     // Perform workspace query for DWORK
-     ldwork = -1; // Query mode
-     F77_FUNC(ab09ad, AB09AD)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
-                              &n, &m, &p, nr,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f,
-                              hsv, &tol, iwork, &dwork_query, &ldwork,
-                              iwarn, &info,
-                              dico_len, job_len, equil_len, ordsel_len);
-
-     if (info < 0 && info != -19) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-19 from query)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_query;
-     // Check against minimum documented size: MAX(1,N*(2*N+MAX(N,M,P)+5)+N*(N+1)/2)
-     int min_ldwork = 1;
-     int max_nmp = MAX(n, MAX(m,p));
-     min_ldwork = MAX(min_ldwork, n * (2 * n + max_nmp + 5) + n * (n + 1) / 2);
-     ldwork = MAX(ldwork, min_ldwork);
-
-     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
-
+     
+     double* hsv_ptr = (n_in > 0) ? hsv_out : NULL;
+ 
+ 
      /* --- Call the computational routine --- */
      F77_FUNC(ab09ad, AB09AD)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
-                              &n, &m, &p, nr,
-                              a_ptr, &lda_f,
-                              b_ptr, &ldb_f,
-                              c_ptr, &ldc_f,
-                              hsv, &tol, iwork, dwork, &ldwork,
-                              iwarn, &info,
-                              dico_len, job_len, equil_len, ordsel_len);
-
+                               &n_in, &m_in, &p_in, nr_io,
+                               a_ptr, &lda_f,
+                               b_ptr, &ldb_f,
+                               c_ptr, &ldc_f,
+                               hsv_ptr, &tol_in,
+                               iwork, dwork, &ldwork_actual, /* Pass actual DWORK size */
+                               iwarn_out, &info,
+                               dico_len, job_len, equil_len, ordsel_len);
+ 
      /* --- Copy results back to row-major format if needed --- */
      if (row_major && info == 0) {
-         int nr_val = *nr; // Get the final reduced order
-         // Copy back only the reduced portions
-         if (nr_val > 0) {
-             size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-             size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-             size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-
-             if (a_size > 0) slicot_transpose_to_c_with_ld(a_cm, a, nr_val, nr_val, n, lda, elem_size);
-             if (b_size > 0) slicot_transpose_to_c_with_ld(b_cm, b, nr_val, m, n, ldb, elem_size);
-             if (c_size > 0) slicot_transpose_to_c_with_ld(c_cm, c, p, nr_val, p, ldc, elem_size);
+         int nr_val = *nr_io; // Get the final reduced order
+ 
+         // A is overwritten with Ar (NR x NR)
+         if (nr_val > 0 && a_cm != NULL) {
+             slicot_transpose_to_c_with_ld(a_cm, a_io, nr_val, nr_val, lda_f, lda_in, elem_size);
          }
-         // HSV was filled directly.
+         // B is overwritten with Br (NR x M)
+         if (nr_val > 0 && m_in > 0 && b_cm != NULL) {
+             slicot_transpose_to_c_with_ld(b_cm, b_io, nr_val, m_in, ldb_f, ldb_in, elem_size);
+         }
+         // C is overwritten with Cr (P x NR)
+         if (p_in > 0 && nr_val > 0 && c_cm != NULL) {
+             slicot_transpose_to_c_with_ld(c_cm, c_io, p_in, nr_val, ldc_f, ldc_in, elem_size);
+         }
+         // HSV is 1D, filled directly by Fortran, no transpose needed.
      }
      // In column-major case, A, B, C, HSV are modified in place by the Fortran call.
-
+ 
  cleanup:
      /* --- Cleanup --- */
      free(dwork);
-     free(iwork); // Safe even if NULL
+     free(iwork); 
      free(a_cm);
      free(b_cm);
      free(c_cm);
-
+ 
+     // If info was SLICOT_MEMORY_ERROR from CHECK_ALLOC, it's already set.
+     // Otherwise, info contains the Fortran routine's status.
      return info;
  }
