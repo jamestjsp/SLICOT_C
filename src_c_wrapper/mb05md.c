@@ -230,16 +230,39 @@ int slicot_mb05md(char balanc, int n, double delta,
     CHECK_ALLOC(iwork);
     if (iwork) memset(iwork, 0, (size_t)iwork_size * sizeof(int)); 
 
-    // Calculate LDWORK: Use documented minimum MAX(1,4*N) and add an empirical buffer
-    // as MAX(1,4*N) alone seems insufficient from C, despite Python tests.
-    // This aims to ensure LDWORK is always somewhat larger, especially for N=0.
-    // Example: MAX(5, 5*N) would give LDWORK=5 for N=0, LDWORK=10 for N=1, LDWORK=25 for N=4.
-    // This is an attempt to find a working value.
-    int min_ldwork_formula = MAX(1, 4 * n);
-    ldwork_val = MAX(min_ldwork_formula + 5, 5 * n); // Add a buffer of 5, and ensure it scales with 5*N
-    ldwork_val = MAX(1, ldwork_val); // Final safety check, though the above should make it >= 5.
+    // First, perform a workspace query to get optimal workspace size
+    ldwork_val = -1;  // Signal for workspace query
+    double query_dwork[2] = {0.0, 0.0};
+    int query_info = 0;
 
+    // Call with minimal arguments for query
+    if (n > 0) {
+        F77_FUNC(mb05md, MB05MD)(&balanc_upper, &n, &delta,
+                                a_ptr, &lda_f,
+                                v_ptr, &ldv_f,
+                                y_ptr, &ldy_f,
+                                valr_ptr, vali_ptr,
+                                iwork, query_dwork, &ldwork_val, &query_info,
+                                balanc_len);
 
+        // Get optimal workspace size (adding a small safety margin)
+        if (query_info == 0) {
+            // DWORK(1) contains the optimal size
+            ldwork_val = (int)query_dwork[1] + 5;  // Add a small safety margin
+        } else {
+            // Fallback in case query fails (should be rare)
+            int min_ldwork_formula = MAX(1, 4 * n);
+            ldwork_val = MAX(min_ldwork_formula + 5, 5 * n);
+        }
+    } else {
+        // For n=0 case
+        ldwork_val = 1;
+    }
+
+    // Ensure LDWORK is at least the minimum required
+    ldwork_val = MAX(ldwork_val, MAX(1, 4 * n));
+
+    // Allocate workspace with optimal size
     if (ldwork_val > 0) {
         dwork = (double*)malloc((size_t)ldwork_val * sizeof(double)); 
         CHECK_ALLOC(dwork); 
@@ -277,7 +300,7 @@ int slicot_mb05md(char balanc, int n, double delta,
     valr_ptr = (n > 0) ? valr : NULL;
     vali_ptr = (n > 0) ? vali : NULL;
 
-    /* Call the computational routine */
+    /* Call the computational routine with optimal workspace */
     F77_FUNC(mb05md, MB05MD)(&balanc_upper, &n, &delta,
                              a_ptr, &lda_f,      
                              v_ptr, &ldv_f,      
