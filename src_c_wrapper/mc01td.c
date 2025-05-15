@@ -36,55 +36,42 @@
 
  /* C wrapper function definition */
  SLICOT_EXPORT
- int slicot_mc01td(char dico, int* dp, const double* p,
-                   int* stable, int* nz, int* iwarn)
-                   // No row_major parameter needed
- {
+ int slicot_mc01td(char dico, int dp, const double* p,
+                   int* stable, int* nz, int* iwarn) {
      /* Local variables */
      int info = 0;
-     int ldwork = 0; // Size calculated directly
-     double* dwork = NULL; // Workspace
-     // No iwork needed for this routine
+     int ldwork_actual = 0; // Size calculated directly
+     double* dwork_allocated_buffer = NULL; // Workspace
      const int dico_len = 1;
-     int dp_val = (dp != NULL) ? *dp : -1; // Get degree value for validation/workspace
 
      char dico_upper = toupper(dico);
-     // No _cm pointers needed.
 
      /* --- Input Parameter Validation --- */
 
      if (dico_upper != 'C' && dico_upper != 'D') { info = -1; goto cleanup; }
      // Check for NULL pointers for essential arguments AFTER checking DICO
-     if (dp == NULL || p == NULL || stable == NULL || nz == NULL || iwarn == NULL) {
-         // Assign a custom error code for NULL pointers if needed, or let info=-2 handle dp==NULL
+     if (p == NULL || stable == NULL || nz == NULL || iwarn == NULL) {
          info = -99; // Example custom error code
          goto cleanup;
      }
-     if (dp_val < 0) { info = -2; goto cleanup; }
+     if (dp < 0) { info = -2; goto cleanup; }
 
 
      /* --- Workspace Allocation --- */
 
      // Allocate DWORK (size 2*DP+2) - No query needed
-     // Use dp_val (degree on entry) for allocation size
-     ldwork = MAX(1, 2 * dp_val + 2); // Ensure minimum size 1
-     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
+     ldwork_actual = 2 * dp + 2; // Ensure minimum size
+     dwork_allocated_buffer = (double*)malloc((size_t)ldwork_actual * sizeof(double));
+     CHECK_ALLOC(dwork_allocated_buffer);
 
      /* --- Call the computational routine --- */
 
-     // Array P is 1D input. DP, STABLE, NZ, IWARN are scalar outputs.
-     // No row-major conversion needed.
-     F77_FUNC(mc01td, MC01TD)(&dico_upper, dp, p, stable, nz,
-                              dwork, iwarn, &info, dico_len);
-     // DP, STABLE, NZ, IWARN are modified in place.
-
-     /* --- Copy results back to row-major format if needed --- */
-     // Not applicable for this routine.
+     F77_FUNC(mc01td, MC01TD)(&dico_upper, &dp, p, stable, nz,
+                              dwork_allocated_buffer, iwarn, &info, dico_len);
 
  cleanup:
      /* --- Cleanup --- */
-     free(dwork);
+     free(dwork_allocated_buffer);
 
      /* Return the info code from the Fortran routine or SLICOT_MEMORY_ERROR */
      return info;
