@@ -110,31 +110,28 @@ int slicot_ab09md(char dico_in, char job_in, char equil_in, char ordsel_in,
     int min_ldc_f_val = MAX(1, p_in); // LDC is P-by-N, so leading dim depends on P
 
     if (row_major) {
-        // For row-major C, input lda_in is number of columns of A (which is N)
-        if (n_in > 0 && lda_in < n_in) { info = -11; goto cleanup; }
-        // For row-major C, input ldb_in is number of columns of B (which is M)
-        if (n_in > 0 && m_in > 0 && ldb_in < m_in) { info = -13; goto cleanup; }
-        // For row-major C, input ldc_in is number of columns of C (which is N)
-        if (p_in > 0 && n_in > 0 && ldc_in < n_in) { info = -15; goto cleanup; }
+        // For row-major C, input lda_in is number of columns of A (which is N for A, M for B, N for C in test)
+        if (n_in > 0 && lda_in < n_in) { info = -11; goto cleanup; } // A is N x N, C lda is N
+        if (n_in > 0 && m_in > 0 && ldb_in < m_in) { info = -13; goto cleanup; } // B is N x M, C ldb is M
+        if (p_in > 0 && n_in > 0 && ldc_in < n_in) { info = -15; goto cleanup; } // C is P x N, C ldc is N
         else if (p_in > 0 && n_in == 0 && ldc_in < 1) {info = -15; goto cleanup;} // LDC must be >=1 if N=0, P>0
     } else { // Column-major C
         if (n_in > 0 && lda_in < min_lda_f_val) { info = -11; goto cleanup; }
-        if (n_in > 0 && m_in > 0 && ldb_in < min_ldb_f_val) { info = -13; goto cleanup; } // Check if M_in > 0 as well
-        if (p_in > 0 && n_in > 0 && ldc_in < min_ldc_f_val) { info = -15; goto cleanup; } // Check if N_in > 0 as well
-        else if (p_in > 0 && n_in == 0 && ldc_in < min_ldc_f_val ) {info = -15; goto cleanup;} // LDC must be >=P if N=0, P>0
+        if (n_in > 0 && m_in > 0 && ldb_in < min_ldb_f_val) { info = -13; goto cleanup; } 
+        if (p_in > 0 && n_in > 0 && ldc_in < min_ldc_f_val) { info = -15; goto cleanup; } 
+        else if (p_in > 0 && n_in == 0 && ldc_in < min_ldc_f_val ) {info = -15; goto cleanup;}
     }
 
     /* --- Workspace Allocation --- */
     // LIWORK
     if (job_upper == 'N') {
-        liwork_actual_size = MAX(1, n_in); // If N=0, LIWORK=0 is allowed, but safer to use MAX(1,N) for allocation
-                                          // However, docs say LIWORK = N if JOB='N'. If N=0, LIWORK=0.
+        liwork_actual_size = MAX(1, n_in); 
         if (n_in > 0) {
             iwork_allocated_buffer = (int*)malloc((size_t)liwork_actual_size * sizeof(int));
             if (iwork_allocated_buffer == NULL && liwork_actual_size > 0) { info = SLICOT_MEMORY_ERROR; goto cleanup; }
             if (iwork_allocated_buffer) memset(iwork_allocated_buffer, 0, (size_t)liwork_actual_size * sizeof(int));
         } else {
-            liwork_actual_size = 0; // Explicitly 0 if N=0 and JOB='N'
+            liwork_actual_size = 0; 
             iwork_allocated_buffer = NULL;
         }
     } else { // JOB == 'B'
@@ -220,16 +217,25 @@ int slicot_ab09md(char dico_in, char job_in, char equil_in, char ordsel_in,
         int nr_val = *nr_io; // Reduced order
         if (nr_val >= 0) { 
             // A is overwritten with Ar (nr_val x nr_val)
+            // Source a_ptr (a_cm) is column-major, nr_val rows, nr_val columns, with leading dimension lda_f.
+            // Destination a_io is row-major, nr_val rows, nr_val columns, with leading dimension lda_in.
             if (a_cm != NULL && nr_val > 0) {
-                 slicot_transpose_to_c_with_ld(a_cm, a_io, nr_val, nr_val, MAX(1,nr_val) /*src_ld_f*/, lda_in /*dst_ld_c=cols of A_io*/, elem_size);
+                slicot_transpose_to_c_with_ld(a_cm, a_io, nr_val, nr_val, 
+                                             lda_f, lda_in, elem_size);
             }
             // B is overwritten with Br (nr_val x m_in)
+            // Source b_ptr (b_cm) is column-major, nr_val rows, m_in columns, with leading dimension ldb_f.
+            // Destination b_io is row-major, nr_val rows, m_in columns, with leading dimension ldb_in.
             if (b_cm != NULL && nr_val > 0 && m_in > 0) {
-                 slicot_transpose_to_c_with_ld(b_cm, b_io, nr_val, m_in, MAX(1,nr_val) /*src_ld_f*/, ldb_in /*dst_ld_c=cols of B_io*/, elem_size);
+                slicot_transpose_to_c_with_ld(b_cm, b_io, nr_val, m_in, 
+                                             ldb_f, ldb_in, elem_size);
             }
             // C is overwritten with Cr (p_in x nr_val)
+            // Source c_ptr (c_cm) is column-major, p_in rows, nr_val columns, with leading dimension ldc_f.
+            // Destination c_io is row-major, p_in rows, nr_val columns, with leading dimension ldc_in.
             if (c_cm != NULL && nr_val > 0 && p_in > 0) {
-                 slicot_transpose_to_c_with_ld(c_cm, c_io, p_in, nr_val, MAX(1,p_in) /*src_ld_f*/, ldc_in /*dst_ld_c=cols of C_io*/, elem_size);
+                slicot_transpose_to_c_with_ld(c_cm, c_io, p_in, nr_val, 
+                                             ldc_f, ldc_in, elem_size);
             }
         }
     }
@@ -237,7 +243,7 @@ int slicot_ab09md(char dico_in, char job_in, char equil_in, char ordsel_in,
 cleanup:
     free(dwork_allocated_buffer);
     free(iwork_allocated_buffer); 
-    if (a_cm) free(a_cm); // Free only if allocated
+    if (a_cm) free(a_cm); 
     if (b_cm) free(b_cm);
     if (c_cm) free(c_cm);
 
