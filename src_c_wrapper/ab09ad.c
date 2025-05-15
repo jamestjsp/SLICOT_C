@@ -65,12 +65,10 @@
  {
      /* Local variables */
      int info = 0;
-     int ldwork_query = -1; /* Use -1 for DWORK workspace query */
      int ldwork_actual = 0;
-     double dwork_val_query; /* To retrieve optimal DWORK size */
-     double* dwork = NULL;
-     int* iwork = NULL;
-     int liwork_actual = 0;
+     double* dwork_allocated_buffer = NULL;
+     int* iwork_allocated_buffer = NULL;
+     int liwork_actual_size = 0;
  
      const int dico_len = 1, job_len = 1, equil_len = 1, ordsel_len = 1;
  
@@ -122,81 +120,30 @@
      }
  
      /* --- Workspace Allocation --- */
- 
-     // Calculate IWORK size
+     // LIWORK
      if (job_upper == 'N') {
-         liwork_actual = MAX(1, n_in); // As per documentation: N for JOB='N'
+         liwork_actual_size = MAX(1, n_in); // LIWORK = N if JOB = 'N'
+         if (n_in > 0) {
+             iwork_allocated_buffer = (int*)malloc((size_t)liwork_actual_size * sizeof(int));
+             CHECK_ALLOC(iwork_allocated_buffer);
+         } else {
+             liwork_actual_size = 0;
+             iwork_allocated_buffer = NULL;
+         }
      } else { // JOB == 'B'
-         liwork_actual = 1; // Minimal size for JOB='B' (Fortran requires at least 1 for dummy)
-                            // SLICOT doc says LIWORK = 0 if JOB = 'B'.
-                            // Fortran often expects a valid pointer even if size is 0,
-                            // so allocating 1 is safer unless NULL is explicitly allowed for size 0 workspace.
-                            // Given it's an array, a valid pointer to size 1 is safest.
-                            // If n_in = 0, then liwork_actual will be 1.
+         liwork_actual_size = 0; // LIWORK = 0 if JOB = 'B'
+         iwork_allocated_buffer = NULL;
      }
-     if (n_in == 0 && job_upper == 'B') { // Specifically for JOB='B' and N=0, LIWORK=0
-         liwork_actual = 0; // SLICOT documentation for AB09AD: LIWORK = 0 if JOB='B'
-         iwork = NULL; // Pass NULL if size is 0
+
+     // LDWORK: Use the formula provided in the documentation
+     if (n_in == 0) {
+         ldwork_actual = 1;
      } else {
-         iwork = (int*)malloc((size_t)liwork_actual * sizeof(int));
-         CHECK_ALLOC(iwork);
+         ldwork_actual = MAX(1, n_in * (2 * n_in + MAX(n_in, MAX(m_in, p_in)) + 5) + (n_in * (n_in + 1)) / 2);
      }
- 
- 
-     // Perform DWORK workspace query
-     // For query, pass dummy arrays for A, B, C, HSV if N=0, or actual pointers if they might be inspected
-     // However, typically, only dimensions and options are used for workspace calculation.
-     // The Fortran routine expects valid pointers for A, B, C even in query mode if N > 0.
-     // For N=0, it's safer to pass NULL or dummy 1-element pointers.
-     // The current wrapper logic already handles a_ptr, b_ptr, c_ptr before this.
-     // We will use temporary pointers for the query call to avoid issues if N=0 and original pointers are NULL.
-     
-     double dummy_scalar_for_query = 0.0;
-     int dummy_nr_for_query = (ordsel_upper == 'F' ? *nr_io : 0);
- 
-     // Set up temporary pointers for the query call, especially for N=0 case
-     double* query_a_ptr = (n_in > 0) ? a_io : &dummy_scalar_for_query;
-     int query_lda = (n_in > 0) ? lda_in : 1;
-     double* query_b_ptr = (n_in > 0 && m_in > 0) ? b_io : &dummy_scalar_for_query;
-     int query_ldb = (n_in > 0 && m_in > 0) ? ldb_in : 1;
-     double* query_c_ptr = (n_in > 0 && p_in > 0) ? c_io : &dummy_scalar_for_query;
-     int query_ldc = (n_in > 0 && p_in > 0) ? ldc_in : 1;
-     double* query_hsv_ptr = (n_in > 0) ? hsv_out : &dummy_scalar_for_query;
- 
-     // If row_major, the query still needs Fortran-style LDs
-     int query_lda_f = row_major ? MAX(1, n_in) : query_lda;
-     int query_ldb_f = row_major ? MAX(1, n_in) : query_ldb;
-     int query_ldc_f = row_major ? MAX(1, p_in) : query_ldc;
- 
- 
-     F77_FUNC(ab09ad, AB09AD)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
-                               &n_in, &m_in, &p_in, &dummy_nr_for_query, /* Use temp NR for query */
-                               query_a_ptr, &query_lda_f,
-                               query_b_ptr, &query_ldb_f,
-                               query_c_ptr, &query_ldc_f,
-                               query_hsv_ptr, &tol_in,
-                               iwork, /* iwork already allocated or NULL */
-                               &dwork_val_query, &ldwork_query, /* Query DWORK */
-                               iwarn_out, &info,
-                               dico_len, job_len, equil_len, ordsel_len);
- 
-     if (info < 0 && info != -19) { /* Allow INFO = -19 (LDWORK too small for query) */
-         goto cleanup;
-     }
-     info = 0; // Reset info after successful or expected query "failure"
- 
-     ldwork_actual = (int)dwork_val_query;
-     // Ensure minimum documented size for DWORK
-     int min_ldwork_formula = 1;
-     if (n_in > 0) {
-         int max_nmp = MAX(n_in, MAX(m_in, p_in));
-         min_ldwork_formula = MAX(1, n_in * (2 * n_in + max_nmp + 5) + (n_in * (n_in + 1)) / 2);
-     }
-     ldwork_actual = MAX(ldwork_actual, min_ldwork_formula);
-     
-     dwork = (double*)malloc((size_t)ldwork_actual * sizeof(double));
-     CHECK_ALLOC(dwork);
- 
+
+     dwork_allocated_buffer = (double*)malloc((size_t)ldwork_actual * sizeof(double));
+     CHECK_ALLOC(dwork_allocated_buffer);
  
      /* --- Prepare arrays for column-major format if using row-major --- */
      size_t elem_size = sizeof(double);
@@ -252,7 +199,7 @@
                                b_ptr, &ldb_f,
                                c_ptr, &ldc_f,
                                hsv_ptr, &tol_in,
-                               iwork, dwork, &ldwork_actual, /* Pass actual DWORK size */
+                               iwork_allocated_buffer, dwork_allocated_buffer, &ldwork_actual, /* Pass actual DWORK size */
                                iwarn_out, &info,
                                dico_len, job_len, equil_len, ordsel_len);
  
@@ -278,8 +225,8 @@
  
  cleanup:
      /* --- Cleanup --- */
-     free(dwork);
-     free(iwork); 
+     free(dwork_allocated_buffer);
+     free(iwork_allocated_buffer); 
      free(a_cm);
      free(b_cm);
      free(c_cm);

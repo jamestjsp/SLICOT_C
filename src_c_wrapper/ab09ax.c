@@ -69,9 +69,7 @@
  {
      /* Local variables */
      int info = 0;
-     int ldwork_for_query = -1; /* Use -1 for DWORK workspace query */
      int ldwork_actual = 0;
-     double dwork_val_from_query_arr[1]; /* SLICOT expects DWORK(1) as an array */
      double* dwork_allocated_buffer = NULL;
      int* iwork_allocated_buffer = NULL;
      int liwork_actual_size = 0;
@@ -143,67 +141,28 @@
  
  
      /* --- Workspace Allocation --- */
-     // IWORK allocation based on documentation: LIWORK = N if JOB='N', 0 if JOB='B'.
+     // LIWORK
      if (job_upper == 'N') {
+         liwork_actual_size = MAX(1, n_in); // LIWORK = N if JOB = 'N'
          if (n_in > 0) {
-             liwork_actual_size = n_in;
              iwork_allocated_buffer = (int*)malloc((size_t)liwork_actual_size * sizeof(int));
              CHECK_ALLOC(iwork_allocated_buffer);
-         } else { // N_IN == 0
+         } else {
              liwork_actual_size = 0;
              iwork_allocated_buffer = NULL;
          }
-     } else { // JOB_UPPER == 'B'
-         liwork_actual_size = 0; // LIWORK = 0
+     } else { // JOB == 'B'
+         liwork_actual_size = 0; // LIWORK = 0 if JOB = 'B'
          iwork_allocated_buffer = NULL;
      }
- 
-     // DWORK workspace query
-     // Use dummy pointers for query if N=0, as actual pointers might be NULL.
-     double dummy_double_for_query = 0.0;
-     int dummy_nr_for_query = (ordsel_upper == 'F' ? *nr_io : 0); // Use input NR for fixed order query
- 
-     double* q_a_ptr = (n_in > 0) ? a_io : &dummy_double_for_query;
-     int q_lda_f = row_major ? MAX(1, n_in) : ( (n_in > 0) ? lda_in : 1 );
-     double* q_b_ptr = (n_in > 0 && m_in > 0) ? b_io : &dummy_double_for_query;
-     int q_ldb_f = row_major ? MAX(1, n_in) : ( (n_in > 0 && m_in > 0) ? ldb_in : 1 );
-     double* q_c_ptr = (p_in > 0 && n_in > 0) ? c_io : &dummy_double_for_query;
-     int q_ldc_f = row_major ? MAX(1, p_in) : ( (p_in > 0 && n_in > 0) ? ldc_in : 1 );
-     double* q_hsv_ptr = (n_in > 0) ? hsv_out : &dummy_double_for_query;
-     double* q_t_ptr = (n_in > 0) ? t_out : &dummy_double_for_query;
-     int q_ldt_f = row_major ? MAX(1, n_in) : ( (n_in > 0) ? ldt_in : 1 );
-     double* q_ti_ptr = (n_in > 0) ? ti_out : &dummy_double_for_query;
-     // For query, LDTI_F can be based on N, as NR is not yet determined for ORDSEL='A'
-     int q_ldti_f = row_major ? MAX(1, n_in) : ( (n_in > 0) ? ldti_in : 1 );
- 
- 
-     F77_FUNC(ab09ax, AB09AX)(&dico_upper, &job_upper, &ordsel_upper,
-                               &n_in, &m_in, &p_in, &dummy_nr_for_query,
-                               q_a_ptr, &q_lda_f, q_b_ptr, &q_ldb_f, q_c_ptr, &q_ldc_f,
-                               q_hsv_ptr, q_t_ptr, &q_ldt_f, q_ti_ptr, &q_ldti_f,
-                               &tol_in, iwork_allocated_buffer, 
-                               dwork_val_from_query_arr, &ldwork_for_query, /* Query DWORK */
-                               iwarn_out, &info,
-                               dico_len, job_len, ordsel_len);
- 
-     // LDWORK is parameter 22. Expect INFO = -22 for successful query.
-     if (info == -22) { // Successful query
-         ldwork_actual = (int)dwork_val_from_query_arr[0];
-         info = 0; // Reset info
-     } else if (info == 0) { // Also successful if Fortran routine handles LDWORK=-1 and returns INFO=0
-          ldwork_actual = (int)dwork_val_from_query_arr[0];
+
+     // LDWORK: Use the formula provided in the documentation
+     if (n_in == 0) {
+         ldwork_actual = 1;
+     } else {
+         ldwork_actual = MAX(1, n_in * (MAX(n_in, MAX(m_in, p_in)) + 5) + (n_in * (n_in + 1)) / 2);
      }
-     else { // Query failed for other reasons
-         goto cleanup; 
-     }
- 
-     // Ensure minimum documented size for DWORK
-     int min_ldwork_formula = 1; // Default for N=0
-     if (n_in > 0) {
-         min_ldwork_formula = MAX(1, n_in * (MAX(n_in, MAX(m_in, p_in)) + 5) + (n_in * (n_in + 1)) / 2);
-     }
-     ldwork_actual = MAX(ldwork_actual, min_ldwork_formula);
-     
+
      dwork_allocated_buffer = (double*)malloc((size_t)ldwork_actual * sizeof(double));
      CHECK_ALLOC(dwork_allocated_buffer);
  
@@ -303,4 +262,3 @@
  
      return info;
  }
- 
