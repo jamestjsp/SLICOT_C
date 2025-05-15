@@ -70,9 +70,7 @@
  {
      /* Local variables */
      int info = 0; // This will hold the info from Fortran calls
-     int ldwork_for_query = -1; 
      int ldwork_actual = 0;
-     double dwork_val_from_query_arr[1]; // Array to receive DWORK(1) from query
      double* dwork_allocated_buffer = NULL;
      int* iwork_allocated_buffer = NULL;
      int liwork_actual_size = 0;
@@ -136,59 +134,17 @@
      liwork_actual_size = MAX(1, 2 * n_in);
      iwork_allocated_buffer = (int*)malloc((size_t)liwork_actual_size * sizeof(int));
      CHECK_ALLOC(iwork_allocated_buffer);
- 
-     double dummy_double_for_query = 0.0;
-     int dummy_nr_for_query = (ordsel_upper == 'F' ? *nr_io : 0);
-     double* q_a_ptr = (n_in > 0) ? a_io : &dummy_double_for_query;
-     int q_lda_f = row_major ? MAX(1, n_in) : ( (n_in > 0) ? lda_in : 1 );
-     double* q_b_ptr = (n_in > 0 && m_in > 0) ? b_io : &dummy_double_for_query;
-     int q_ldb_f = row_major ? MAX(1, n_in) : ( (n_in > 0 && m_in > 0) ? ldb_in : 1 );
-     double* q_c_ptr = (p_in > 0 && n_in > 0) ? c_io : &dummy_double_for_query;
-     int q_ldc_f = row_major ? MAX(1, p_in) : ( (p_in > 0 && n_in > 0) ? ldc_in : 1 );
-     double* q_d_ptr = (p_in > 0 && m_in > 0) ? d_io : &dummy_double_for_query;
-     int q_ldd_f = row_major ? MAX(1, p_in) : ( (p_in > 0 && m_in > 0) ? ldd_in : 1 );
-     double* q_hsv_ptr = (n_in > 0) ? hsv_out : &dummy_double_for_query;
-     
-     int query_info_val = 0; // Use a separate variable for query info
-     F77_FUNC(ab09bd, AB09BD)(&dico_upper, &job_upper, &equil_upper, &ordsel_upper,
-                               &n_in, &m_in, &p_in, &dummy_nr_for_query,
-                               q_a_ptr, &q_lda_f, q_b_ptr, &q_ldb_f, q_c_ptr, &q_ldc_f, q_d_ptr, &q_ldd_f,
-                               q_hsv_ptr, &tol1_in, &tol2_in, iwork_allocated_buffer, 
-                               dwork_val_from_query_arr, &ldwork_for_query, 
-                               iwarn_out, &query_info_val, // Store query info here
-                               dico_len, job_len, equil_len, ordsel_len);
- 
-     int min_ldwork_formula = 1;
-     if (n_in > 0) {
-          min_ldwork_formula = MAX(1, n_in * (2 * n_in + MAX(n_in, MAX(m_in, p_in)) + 5) + (n_in * (n_in + 1)) / 2);
+
+     // Calculate LDWORK using the supplied formula
+     if (n_in == 0) {
+         ldwork_actual = 1;
+     } else {
+         ldwork_actual = MAX(1, n_in * (2 * n_in + MAX(n_in, MAX(m_in, p_in)) + 5) + (n_in * (n_in + 1)) / 2);
      }
- 
-     if (query_info_val == 0) { 
-         ldwork_actual = (int)dwork_val_from_query_arr[0];
-         ldwork_actual = MAX(ldwork_actual, min_ldwork_formula); 
-     } else { 
-         // Query failed or returned an unexpected info (e.g. -22 for this routine might mean DWORK(1) is not set)
-         // Rely solely on the formula.
-         ldwork_actual = min_ldwork_formula;
-         // If query_info_val was -22 (or other non-fatal query specific error), 
-         // the main 'info' for the wrapper should still be 0 before computational call.
-         // If query_info_val was a fatal error (e.g. -1 for DICO), it would be caught by earlier checks
-         // or this 'else' branch would lead to returning that fatal error.
-         // For now, if query didn't return 0, we use formula and proceed with info=0 for computation.
-         // If query_info_val indicates a real error that should stop execution, it will be returned by the wrapper.
-         // The critical part is that 'info' for the *computational* call must be 0.
-         // The 'info' variable of the wrapper function will carry the final status.
-         if (query_info_val != 0 && query_info_val != -22) { // A genuine error from query other than -22
-              info = query_info_val; // Preserve this error
-              goto cleanup;
-         }
-         // If query_info_val was -22, we use formula, and info (for wrapper) remains 0 for now.
-     }
-     ldwork_actual = MAX(1, ldwork_actual); 
-     
+
      dwork_allocated_buffer = (double*)malloc((size_t)ldwork_actual * sizeof(double));
-     CHECK_ALLOC(dwork_allocated_buffer); // Sets 'info' to SLICOT_MEMORY_ERROR and jumps to cleanup on failure
- 
+     CHECK_ALLOC(dwork_allocated_buffer);
+
      /* --- Prepare Arrays for Computational Call (info is 0 if we reached here without CHECK_ALLOC failing) --- */
      size_t elem_size = sizeof(double);
      // ... (rest of a_ptr, b_ptr, etc. setup as before) ...
@@ -258,4 +214,3 @@
  
      return info; // Return the final info status
  }
- 
