@@ -47,11 +47,10 @@ int slicot_mb05nd(int n, double delta, const double* a, int lda,
 {
     /* --- Local Variables --- */
     int info = 0;           // SLICOT routine return status
-    int ldwork = -1;        // Workspace query flag / allocated size for dwork
-    double dwork_query;     // Variable to receive optimal dwork size
-    double* dwork = NULL;   // Double workspace array
-    int* iwork = NULL;      // Integer workspace array
-    int iwork_size = 0;     // Size of iwork
+    int ldwork_actual;      // Workspace size for dwork
+    double* dwork_allocated_buffer = NULL;   // Double workspace array
+    int* iwork_allocated_buffer = NULL;      // Integer workspace array
+    int liwork_actual_size = 0;              // Size of iwork
 
     /* Pointers for column-major copies (if row_major is true) */
     double *a_cm = NULL, *ex_cm = NULL, *exint_cm = NULL;
@@ -93,31 +92,21 @@ int slicot_mb05nd(int n, double delta, const double* a, int lda,
 
     /* --- Workspace Allocation --- */
 
-    // Allocate IWORK (size N)
-    iwork_size = MAX(1, n);
-    iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-    CHECK_ALLOC(iwork); // Sets info and jumps to cleanup on failure
+    // LIWORK: Fixed size based on documentation
+    liwork_actual_size = MAX(1, n);
+    iwork_allocated_buffer = (int*)malloc((size_t)liwork_actual_size * sizeof(int));
+    CHECK_ALLOC(iwork_allocated_buffer);
 
-    // Perform workspace query for DWORK
-    ldwork = -1; // Query mode
-    F77_FUNC(mb05nd, MB05ND)(&n, &delta, a, &lda, ex, &ldex, exint, &ldexin,
-                             &tol, iwork, &dwork_query, &ldwork, &info);
-
-    if (info < 0) {
-        // Query failed due to invalid input arguments (already checked above, but good practice)
-        goto cleanup;
+    // LDWORK: Use the formula provided in the documentation
+    if (n == 0) {
+        ldwork_actual = 1;
+    } else {
+        ldwork_actual = MAX(1, n * (n + 1)); // Minimum required size
+        ldwork_actual = MAX(ldwork_actual, 2 * n * n); // Optimum size
     }
-    info = 0; // Reset info after successful query
 
-    // Get the required dwork size from query result
-    ldwork = (int)dwork_query;
-    // Check against minimum documented size: MAX(1, N*(N+1))
-    int min_ldwork = MAX(1, n * (n + 1));
-    ldwork = MAX(ldwork, min_ldwork);
-
-    // Allocate DWORK
-    dwork = (double*)malloc((size_t)ldwork * elem_size);
-    CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
+    dwork_allocated_buffer = (double*)malloc((size_t)ldwork_actual * elem_size);
+    CHECK_ALLOC(dwork_allocated_buffer);
 
     /* --- Prepare Arrays and Call Fortran Routine --- */
 
@@ -142,7 +131,7 @@ int slicot_mb05nd(int n, double delta, const double* a, int lda,
                                  a_cm, &lda_f,           // Pass CM A (in)
                                  ex_cm, &ldex_f,         // Pass CM EX (out)
                                  exint_cm, &ldexin_f,    // Pass CM EXINT (out)
-                                 &tol, iwork, dwork, &ldwork, &info);
+                                 &tol, iwork_allocated_buffer, dwork_allocated_buffer, &ldwork_actual, &info);
 
         /* Copy back results from column-major temps to original row-major arrays */
         if (info == 0 || info == (n + 1)) { // Copy back even if INFO = N+1 (overflow warning)
@@ -163,15 +152,15 @@ int slicot_mb05nd(int n, double delta, const double* a, int lda,
                                  a, &lda_f,              // Pass original A
                                  ex, &ldex_f,            // Pass original EX
                                  exint, &ldexin_f,       // Pass original EXINT
-                                 &tol, iwork, dwork, &ldwork, &info);
+                                 &tol, iwork_allocated_buffer, dwork_allocated_buffer, &ldwork_actual, &info);
         // EX and EXINT are modified in place.
     }
 
 cleanup:
     /* --- Cleanup --- */
     // Free allocated memory (safe to free NULL pointers)
-    free(dwork);
-    free(iwork);
+    free(dwork_allocated_buffer);
+    free(iwork_allocated_buffer);
     free(a_cm);
     free(ex_cm);
     free(exint_cm);
