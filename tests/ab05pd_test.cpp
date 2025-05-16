@@ -439,45 +439,56 @@ TEST_F(Ab05pdTestColMajor, ZeroDimension) {
     int n2_zero = 0;
     int n_out = 0;
     
-    // Create minimal valid arrays (still need space for 1 element to avoid nullptr)
-    std::vector<double> A1_zero(1, 0.0);
-    std::vector<double> B1_zero(1, 0.0);
-    std::vector<double> C1_zero(1, 0.0);
-    std::vector<double> D1_zero(1, 0.0);
-    std::vector<double> A2_zero(1, 0.0);
-    std::vector<double> B2_zero(1, 0.0);
-    std::vector<double> C2_zero(1, 0.0);
-    std::vector<double> D2_zero(1, 0.0);
-    std::vector<double> A_zero(MAX(1, N1+N2), 0.0); // Ensure enough space for combined system
-    std::vector<double> B_zero(MAX(1, (N1+N2)*M), 0.0);
-    std::vector<double> C_zero(MAX(1, P*(N1+N2)), 0.0);
-    std::vector<double> D_zero(MAX(1, P*M), 0.0);
+    // Create minimal valid arrays with appropriate sizes
+    std::vector<double> A1_zero(std::max(1, n1_zero * n1_zero), 0.0);
+    std::vector<double> B1_zero(std::max(1, n1_zero * M), 0.0);
+    std::vector<double> C1_zero(std::max(1, P * n1_zero), 0.0);
+    std::vector<double> D1_zero(std::max(1, P * M), 0.0);
+    std::vector<double> A2_zero(std::max(1, n2_zero * n2_zero), 0.0);
+    std::vector<double> B2_zero(std::max(1, n2_zero * M), 0.0);
+    std::vector<double> C2_zero(std::max(1, P * n2_zero), 0.0);
+    std::vector<double> D2_zero(std::max(1, P * M), 0.0);
     
-    // For the N1=0 test
-    // Test with N1=0, col-major: A2 is N2×N2, B2 is N2×M, C2 is P×N2, D2 is P×M
+    // Output arrays need to be sized for the combined system
+    std::vector<double> A_zero(std::max(1, (N1+N2) * (N1+N2)), 0.0);
+    std::vector<double> B_zero(std::max(1, (N1+N2) * M), 0.0);
+    std::vector<double> C_zero(std::max(1, P * (N1+N2)), 0.0);
+    std::vector<double> D_zero(std::max(1, P * M), 0.0);
+    
+    // Test with N1=0, col-major
+    int LDA1_zero = std::max(1, n1_zero);
+    int LDB1_zero = std::max(1, n1_zero);
+    int LDC1_zero = std::max(1, P);
+    int LDD1_zero = std::max(1, P);
+    
     int info = slicot_ab05pd('N',
-                         n1_zero, M, P, N2, ALPHA,
-                         A1_zero.data(), 1, B1_zero.data(), 1,
-                         C1_zero.data(), MAX(1,P), D1_zero.data(), MAX(1,P),
-                         A2.data(), N2, B2.data(), N2, // Use actual dimensions from A2 and B2
-                         C2.data(), P, D2.data(), P,  // Use actual dimensions from C2 and D2
-                         &n_out,                         A_zero.data(), MAX(1,N2), B_zero.data(), MAX(1,N2),
-                         C_zero.data(), MAX(1,P), D_zero.data(), MAX(1,P),
-                         0); // Column-major format (0)
+                          n1_zero, M, P, N2, ALPHA,
+                          A1_zero.data(), LDA1_zero, B1_zero.data(), LDB1_zero,
+                          C1_zero.data(), LDC1_zero, D1_zero.data(), LDD1_zero,
+                          A2.data(), N2, B2.data(), N2,
+                          C2.data(), P, D2.data(), P,
+                          &n_out,
+                          A_zero.data(), std::max(1, N2), B_zero.data(), std::max(1, N2),
+                          C_zero.data(), std::max(1, P), D_zero.data(), std::max(1, P),
+                          0); // Column-major format (0)
     ASSERT_EQ(info, 0);
-    ASSERT_EQ(n_out, N2);    ASSERT_EQ(info, 0);
     ASSERT_EQ(n_out, N2);
     
     // Test with N2=0
+    int LDA2_zero = std::max(1, n2_zero);
+    int LDB2_zero = std::max(1, n2_zero);
+    int LDC2_zero = std::max(1, P);
+    int LDD2_zero = std::max(1, P);
+    
     info = slicot_ab05pd('N',
                       N1, M, P, n2_zero, ALPHA,
                       A1.data(), N1, B1.data(), N1,
                       C1.data(), P, D1.data(), P,
-                      A2_zero.data(), 1, B2_zero.data(), 1,
-                      C2_zero.data(), MAX(1,P), D2_zero.data(), MAX(1,P),
+                      A2_zero.data(), LDA2_zero, B2_zero.data(), LDB2_zero,
+                      C2_zero.data(), LDC2_zero, D2_zero.data(), LDD2_zero,
                       &n_out,
-                      A_zero.data(), MAX(1,N1), B_zero.data(), MAX(1,N1),
-                      C_zero.data(), MAX(1,P), D_zero.data(), MAX(1,P),
+                      A_zero.data(), std::max(1, N1), B_zero.data(), std::max(1, N1),
+                      C_zero.data(), std::max(1, P), D_zero.data(), std::max(1, P),
                       0); // Column-major format
     ASSERT_EQ(info, 0);
     ASSERT_EQ(n_out, N1);
@@ -490,21 +501,23 @@ TEST_F(Ab05pdTestColMajor, ZeroDimension) {
                       A2.data(), N2, B2_zero.data(), N2,
                       C2.data(), P, D2_zero.data(), P,
                       &n_out,
-                      A_zero.data(), MAX(1,N1+N2), B_zero.data(), MAX(1,N1+N2),
-                      C_zero.data(), MAX(1,P), D_zero.data(), MAX(1,P),
+                      A_zero.data(), std::max(1, N1+N2), B_zero.data(), std::max(1, N1+N2),
+                      C_zero.data(), std::max(1, P), D_zero.data(), std::max(1, P),
                       0); // Column-major format
     ASSERT_EQ(info, 0);
+    ASSERT_EQ(n_out, N1+N2);
     
     // Test with P=0
     info = slicot_ab05pd('N',
                       N1, M, p_zero, N2, ALPHA,
                       A1.data(), N1, B1.data(), N1,
-                      C1_zero.data(), 1, D1_zero.data(), 1,
+                      C1_zero.data(), std::max(1, p_zero), D1_zero.data(), std::max(1, p_zero),
                       A2.data(), N2, B2.data(), N2,
-                      C2_zero.data(), 1, D2_zero.data(), 1,
+                      C2_zero.data(), std::max(1, p_zero), D2_zero.data(), std::max(1, p_zero),
                       &n_out,
-                      A_zero.data(), MAX(1,N1+N2), B_zero.data(), MAX(1,N1+N2),
-                      C_zero.data(), 1, D_zero.data(), 1,
+                      A_zero.data(), std::max(1, N1+N2), B_zero.data(), std::max(1, N1+N2),
+                      C_zero.data(), std::max(1, p_zero), D_zero.data(), std::max(1, p_zero),
                       0); // Column-major format
     ASSERT_EQ(info, 0);
+    ASSERT_EQ(n_out, N1+N2);
 }
