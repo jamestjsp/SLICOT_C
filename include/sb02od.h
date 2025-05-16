@@ -70,13 +70,13 @@
   * @param[out] alfai    Double array, dimension (2*n). Imaginary parts of generalized eigenvalues.
   * @param[out] beta     Double array, dimension (2*n). Scaling factors for generalized eigenvalues.
   * The first n eigenvalues correspond to the closed-loop spectrum.
-  * @param[out] s        Double array, dimension (lds, *) or (2*n+m or 2*n, lds).
+  * @param[out] s        Double array, dimension (lds, K_s) or (K_s, lds) where K_s = (jobb=='B' ? 2*n+m : 2*n).
   * Ordered real Schur form S of the pencil matrix (or Hamiltonian if dico='C', jobb='G').
-  * @param[in] lds       Leading dimension of S. >=max(1, 2*n+m) if jobb='B', >=max(1, 2*n) if jobb='G'.
-  * @param[out] t        Double array, dimension (ldt, 2*n) or (2*n+m or 2*n, ldt).
+  * @param[in] lds       Leading dimension of S. For column-major, lds >= MAX(1, K_s). For row-major, lds >= MAX(1, K_s).
+  * @param[out] t        Double array, dimension (ldt, 2*n) or (K_t_rows, ldt) where K_t_rows = (jobb=='B' ? 2*n+m : (dico=='D' ? 2*n : 1)).
   * Ordered upper triangular form T of the second matrix in the pencil.
   * Not referenced if dico='C' and jobb='G'.
-  * @param[in] ldt       Leading dimension of T. >=max(1, 2*n+m) if jobb='B', >=max(1, 2*n) if jobb='G'/'D', >=1 if jobb='G'/'C'.
+  * @param[in] ldt       Leading dimension of T. For column-major, ldt >= MAX(1, K_t_rows). For row-major, ldt >= MAX(1, 2*n).
   * @param[out] u        Double array, dimension (ldu, 2*n) or (2*n, ldu).
   * Orthogonal transformation matrix U.
   * @param[in] ldu       Leading dimension of U. >= max(1, 2*n).
@@ -112,4 +112,3 @@
  #endif
  
  #endif /* SB02OD_H */
- 

@@ -100,8 +100,8 @@
      char uplo_upper = toupper(uplo);
      char jobl_upper = toupper(jobl);
      char sort_upper = toupper(sort);
-
-     /* Pointers for column-major copies if needed */
+ 
+      /* Pointers for column-major copies if needed */
      double *a_cm = NULL, *b_cm = NULL, *q_cm = NULL, *r_cm = NULL, *l_cm = NULL;
      double *x_cm = NULL, *s_cm = NULL, *t_cm = NULL, *u_cm = NULL;
      const double *a_ptr, *b_ptr, *q_ptr, *r_ptr, *l_ptr; // Input pointers
@@ -110,65 +110,108 @@
 
 
      /* --- Input Parameter Validation --- */
+ 
+      if (dico_upper != 'C' && dico_upper != 'D') { info = -1; goto cleanup; }
+      if (jobb_upper != 'B' && jobb_upper != 'G') { info = -2; goto cleanup; }
+      if (fact_upper != 'N' && fact_upper != 'C' && fact_upper != 'D' && fact_upper != 'B') { info = -3; goto cleanup; }
+      if (uplo_upper != 'U' && uplo_upper != 'L') { info = -4; goto cleanup; }
+      if (jobl_upper != 'Z' && jobl_upper != 'N') { info = -5; goto cleanup; }
+      if (sort_upper != 'S' && sort_upper != 'U') { info = -6; goto cleanup; }
+      if (n < 0) { info = -7; goto cleanup; }
+      if (m < 0) { info = -8; goto cleanup; }
+      if (p < 0) { info = -9; goto cleanup; }
+      // TOL check done by Fortran
+ 
+      // Determine effective dimensions based on flags for validation
+      int q_rows_f = (fact_upper == 'N' || fact_upper == 'D') ? n : p;
+      int r_rows_f = (jobb_upper == 'B' && (fact_upper == 'N' || fact_upper == 'C')) ? m : (jobb_upper == 'B' ? p : 1);
+      int l_rows_f = (jobb_upper == 'B' && jobl_upper == 'N') ? n : 1;
+ 
+      int min_lda_f = MAX(1, n);
+      int min_ldb_f = MAX(1, n); // For B or G
+      int min_ldq_f = MAX(1, q_rows_f); // For Q or C
+      int min_ldr_f = MAX(1, r_rows_f); // For R or D (only if JOBB='B')
+      int min_ldl_f = MAX(1, l_rows_f); // For L (only if JOBB='B', JOBL='N')
+      int min_ldx_f = MAX(1, n);
+      int s_t_rows_f = (jobb_upper == 'B') ? (2 * n + m) : (2 * n);
+      int min_lds_f = MAX(1, s_t_rows_f);
+      int t_fortran_rows = (jobb_upper == 'B') ? (2*n+m) : ((dico_upper == 'D') ? (2*n) : 1); // Rows for T in Fortran
+      int t_fortran_cols = (dico_upper == 'C' && jobb_upper == 'G') ? 1 : (2*n) ; // Columns for T in Fortran (or 1 if not ref'd)
+      int min_ldt_f = (dico_upper == 'C' && jobb_upper == 'G') ? 1 : MAX(1, t_fortran_rows); 
+      int min_ldu_f = MAX(1, 2 * n);
+ 
+      if (row_major) {
+          // Determine effective column counts for row-major LDA checks
+          int b_cols_rm = (jobb_upper == 'B') ? m : n; // B(n,m) or G(n,n)
+          int q_cols_rm = n; // Q(n,n) or C(p,n)
+          int r_cols_rm = (jobb_upper == 'B') ? m : 1; // R(m,m) or D(p,m)
+          int l_cols_rm = (jobb_upper == 'B' && jobl_upper == 'N') ? m : 1; // L(n,m)
+          int s_cols_rm = s_t_rows_f; // S is square (s_t_rows_f x s_t_rows_f)
+          int t_cols_rm = (dico_upper == 'C' && jobb_upper == 'G') ? 1 : (2*n); // T is (t_fortran_rows x 2*n)
+          int u_cols_rm = 2 * n; // U is 2n x 2n
+ 
+          if (lda < n) { info = -11; goto cleanup; } // A(n,n)
+          if (ldb < b_cols_rm) { info = -13; goto cleanup; }
+          if (ldq < q_cols_rm) { info = -15; goto cleanup; }
+          if (jobb_upper == 'B' && ldr < r_cols_rm) { info = -17; goto cleanup; }
+          if (jobb_upper == 'B' && jobl_upper == 'N' && ldl < l_cols_rm) { info = -19; goto cleanup; }
+          if (ldx < n) { info = -21; goto cleanup; } // X(n,n)
+          if (lds < s_cols_rm) { info = -26; goto cleanup; }
+          if (ldt < t_cols_rm && !(dico_upper == 'C' && jobb_upper == 'G')) { info = -28; goto cleanup; }
+          if (ldu < u_cols_rm) { info = -30; goto cleanup; }
+ 
+      } else { // Column-major checks
+          if (lda < min_lda_f) { info = -11; goto cleanup; }
+          if (ldb < min_ldb_f) { info = -13; goto cleanup; }
+          if (ldq < min_ldq_f) { info = -15; goto cleanup; }
+          if (jobb_upper == 'B' && ldr < min_ldr_f) { info = -17; goto cleanup; }
+          if (jobb_upper == 'B' && jobl_upper == 'N' && ldl < min_ldl_f) { info = -19; goto cleanup; }
+          if (ldx < min_ldx_f) { info = -21; goto cleanup; }
+          if (lds < min_lds_f) { info = -26; goto cleanup; }
+          if (ldt < min_ldt_f && !(dico_upper == 'C' && jobb_upper == 'G')) { info = -28; goto cleanup; }
+          if (ldu < min_ldu_f) { info = -30; goto cleanup; }
+      }
+ 
+      // Additional NULL checks for required matrices if N > 0 or M > 0 or P > 0
+      if (n > 0 && a == NULL) { info = -10; goto cleanup; } // A is arg 10
+      if (n > 0 && b == NULL) { // B/G is arg 12
+          // B is B(N,M) if JOBB='B', G(N,N) if JOBB='G'
+          // If M=0 and JOBB='B', B might be legitimately NULL if not referenced.
+          // However, Fortran expects non-NULL if N>0.
+          if (! (jobb_upper == 'B' && m == 0) ) {
+             info = -12; goto cleanup;
+          }
+      }
+      if (q == NULL) { // Q/C is arg 14
+          // Q is Q(N,N) if FACT='N' or 'D'
+          // C is C(P,N) if FACT='C' or 'B'
+          if ( (fact_upper == 'N' || fact_upper == 'D') && n > 0 ) { info = -14; goto cleanup; }
+          if ( (fact_upper == 'C' || fact_upper == 'B') && p > 0 && n > 0 ) { info = -14; goto cleanup; }
+      }
+      if (jobb_upper == 'B' && r == NULL) { // R/D is arg 16
+          // R is R(M,M) if FACT='N' or 'C'
+          // D is D(P,M) if FACT='D' or 'B'
+          if ( (fact_upper == 'N' || fact_upper == 'C') && m > 0) { info = -16; goto cleanup; }
+          if ( (fact_upper == 'D' || fact_upper == 'B') && p > 0 && m > 0) { info = -16; goto cleanup; }
+      }
+      if (jobb_upper == 'B' && jobl_upper == 'N' && l == NULL) { // L is arg 18
+          if (n > 0 && m > 0) { info = -18; goto cleanup; }
+      }
+      // Output arrays X, S, T, U must be non-NULL if their dimensions are non-zero.
+      // This is implicitly handled by their leading dimension checks if N > 0.
+      // If N=0, they can be NULL if the wrapper passes dummy pointers.
+      // The current wrapper passes x_ptr etc. which could be NULL if N=0.
+      // The Fortran routine SB02OD handles N=0 by not referencing these arrays.
+      // ALFAR, ALFAI, BETA, RCOND must always be non-NULL.
+      if (rcond == NULL) { info = -20; goto cleanup; } // RCOND is arg 20
+      if (n > 0 && x == NULL) { info = -21; goto cleanup; } // X is arg 21
+      if (alfar == NULL) { info = -22; goto cleanup; }
+      if (alfai == NULL) { info = -23; goto cleanup; }
+      if (beta == NULL) { info = -24; goto cleanup; }
+      if (s_t_rows_f > 0 && s == NULL) { info = -25; goto cleanup; } // S is arg 25
+      if (!(dico_upper == 'C' && jobb_upper == 'G') && t_fortran_rows > 0 && t_fortran_cols > 0 && t == NULL) { info = -27; goto cleanup; } // T is arg 27
+      if (2*n > 0 && u == NULL) { info = -29; goto cleanup; } // U is arg 29
 
-     if (dico_upper != 'C' && dico_upper != 'D') { info = -1; goto cleanup; }
-     if (jobb_upper != 'B' && jobb_upper != 'G') { info = -2; goto cleanup; }
-     if (fact_upper != 'N' && fact_upper != 'C' && fact_upper != 'D' && fact_upper != 'B') { info = -3; goto cleanup; }
-     if (uplo_upper != 'U' && uplo_upper != 'L') { info = -4; goto cleanup; }
-     if (jobl_upper != 'Z' && jobl_upper != 'N') { info = -5; goto cleanup; }
-     if (sort_upper != 'S' && sort_upper != 'U') { info = -6; goto cleanup; }
-     if (n < 0) { info = -7; goto cleanup; }
-     if (m < 0) { info = -8; goto cleanup; }
-     if (p < 0) { info = -9; goto cleanup; }
-     // TOL check done by Fortran
-
-     // Determine effective dimensions based on flags for validation
-     int q_rows_f = (fact_upper == 'N' || fact_upper == 'D') ? n : p;
-     int r_rows_f = (jobb_upper == 'B' && (fact_upper == 'N' || fact_upper == 'C')) ? m : (jobb_upper == 'B' ? p : 1);
-     int l_rows_f = (jobb_upper == 'B' && jobl_upper == 'N') ? n : 1;
-
-     int min_lda_f = MAX(1, n);
-     int min_ldb_f = MAX(1, n); // For B or G
-     int min_ldq_f = MAX(1, q_rows_f); // For Q or C
-     int min_ldr_f = MAX(1, r_rows_f); // For R or D (only if JOBB='B')
-     int min_ldl_f = MAX(1, l_rows_f); // For L (only if JOBB='B', JOBL='N')
-     int min_ldx_f = MAX(1, n);
-     int s_t_rows_f = (jobb_upper == 'B') ? (2 * n + m) : (2 * n);
-     int min_lds_f = MAX(1, s_t_rows_f);
-     int min_ldt_f = (dico_upper == 'C' && jobb_upper == 'G') ? 1 : MAX(1, s_t_rows_f); // T not ref'd if DICO='C',JOBB='G'
-     int min_ldu_f = MAX(1, 2 * n);
-
-     if (row_major) {
-         // Determine effective column counts for row-major LDA checks
-         int b_cols_rm = (jobb_upper == 'B') ? m : n; // B(n,m) or G(n,n)
-         int q_cols_rm = n; // Q(n,n) or C(p,n)
-         int r_cols_rm = (jobb_upper == 'B') ? m : 1; // R(m,m) or D(p,m)
-         int l_cols_rm = (jobb_upper == 'B' && jobl_upper == 'N') ? m : 1; // L(n,m)
-         int s_cols_rm = s_t_rows_f; // S is square
-         int t_cols_rm = (dico_upper == 'C' && jobb_upper == 'G') ? 1 : s_t_rows_f; // T is s_t_rows x s_t_rows (or not ref)
-         int u_cols_rm = 2 * n; // U is 2n x 2n
-
-         if (lda < n) { info = -11; goto cleanup; } // A(n,n)
-         if (ldb < b_cols_rm) { info = -13; goto cleanup; }
-         if (ldq < q_cols_rm) { info = -15; goto cleanup; }
-         if (jobb_upper == 'B' && ldr < r_cols_rm) { info = -17; goto cleanup; }
-         if (jobb_upper == 'B' && jobl_upper == 'N' && ldl < l_cols_rm) { info = -19; goto cleanup; }
-         if (ldx < n) { info = -21; goto cleanup; } // X(n,n)
-         if (lds < s_cols_rm) { info = -26; goto cleanup; }
-         if (ldt < t_cols_rm) { info = -28; goto cleanup; }
-         if (ldu < u_cols_rm) { info = -30; goto cleanup; }
-
-     } else { // Column-major checks
-         if (lda < min_lda_f) { info = -11; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -13; goto cleanup; }
-         if (ldq < min_ldq_f) { info = -15; goto cleanup; }
-         if (jobb_upper == 'B' && ldr < min_ldr_f) { info = -17; goto cleanup; }
-         if (jobb_upper == 'B' && jobl_upper == 'N' && ldl < min_ldl_f) { info = -19; goto cleanup; }
-         if (ldx < min_ldx_f) { info = -21; goto cleanup; }
-         if (lds < min_lds_f) { info = -26; goto cleanup; }
-         if (ldt < min_ldt_f) { info = -28; goto cleanup; }
-         if (ldu < min_ldu_f) { info = -30; goto cleanup; }
-     }
 
      /* --- Prepare arrays for column-major format if using row-major --- */
      size_t elem_size = sizeof(double);
@@ -180,9 +223,10 @@
      size_t r_rows = r_rows_f; size_t r_cols = m; size_t r_size = r_rows * r_cols; // R or D
      size_t l_rows = n; size_t l_cols = m; size_t l_size = (jobb_upper == 'B' && jobl_upper == 'N') ? l_rows * l_cols : 0; // L
      size_t x_rows = n; size_t x_cols = n; size_t x_size = x_rows * x_cols; // X
-     int s_t_rows = s_t_rows_f; // Rows for S and T
-     int s_cols = s_t_rows; size_t s_size = (size_t)s_t_rows * s_cols; // S
-     int t_cols = s_t_rows; size_t t_size = (size_t)s_t_rows * t_cols; // T square (or not ref'd)
+     int s_t_rows = s_t_rows_f; // Rows for S (and T's leading dim in Fortran)
+     int s_f_cols = s_t_rows; size_t s_size = (size_t)s_t_rows * s_f_cols; // S is s_t_rows x s_t_rows
+     // T is t_fortran_rows x t_fortran_cols
+     size_t t_size = (dico_upper == 'C' && jobb_upper == 'G') ? 0 : ((size_t)t_fortran_rows * t_fortran_cols);
      size_t u_rows = 2*n; size_t u_cols = 2*n; size_t u_size = u_rows * u_cols; // U
 
      if (row_major) {
@@ -195,7 +239,7 @@
          // Output arrays
          if (x_size > 0) { x_cm = (double*)malloc(x_size * elem_size); CHECK_ALLOC(x_cm); }
          if (s_size > 0) { s_cm = (double*)malloc(s_size * elem_size); CHECK_ALLOC(s_cm); }
-         if (t_size > 0 && !(dico_upper == 'C' && jobb_upper == 'G')) { t_cm = (double*)malloc(t_size * elem_size); CHECK_ALLOC(t_cm); } // T not ref'd if DICO='C',JOBB='G'
+         if (t_size > 0) { t_cm = (double*)malloc(t_size * elem_size); CHECK_ALLOC(t_cm); } 
          if (u_size > 0) { u_cm = (double*)malloc(u_size * elem_size); CHECK_ALLOC(u_cm); }
 
          /* Transpose C inputs to Fortran copies */
@@ -218,7 +262,7 @@
          ldl_f = (l_rows > 0) ? l_rows : 1;
          ldx_f = (x_rows > 0) ? x_rows : 1;
          lds_f = (s_t_rows > 0) ? s_t_rows : 1;
-         ldt_f = (s_t_rows > 0) ? s_t_rows : 1;
+         ldt_f = (t_fortran_rows > 0 && !(dico_upper == 'C' && jobb_upper == 'G')) ? t_fortran_rows : 1;
          ldu_f = (u_rows > 0) ? u_rows : 1;
 
          /* Set pointers */
@@ -229,7 +273,7 @@
          l_ptr = l_cm;                            // Pass NULL if not used (l_size=0)
          x_ptr = x_cm;
          s_ptr = s_cm;
-         t_ptr = t_cm;                            // Pass NULL if not used
+         t_ptr = (dico_upper == 'C' && jobb_upper == 'G') ? NULL : t_cm; 
          u_ptr = u_cm;
 
      } else {
@@ -250,7 +294,7 @@
          l_ptr = l;
          x_ptr = x;
          s_ptr = s;
-         t_ptr = t;
+         t_ptr = (dico_upper == 'C' && jobb_upper == 'G') ? NULL : t;
          u_ptr = u;
 
          // Need to copy symmetric inputs G, Q, R to ensure full matrix is passed
@@ -261,10 +305,9 @@
          // Adjust pointers for NULL cases
          if (jobb_upper != 'B') r_ptr = NULL;
          if (!(jobb_upper == 'B' && jobl_upper == 'N')) l_ptr = NULL;
-         if (dico_upper == 'C' && jobb_upper == 'G') t_ptr = NULL;
+         // t_ptr already handled above for both row-major and column-major
      }
-
-
+ 
      /* --- Workspace Allocation --- */
 
      // Allocate IWORK and BWORK
@@ -302,9 +345,34 @@
 
      /* --- Copy results back to row-major format if needed --- */
      if (row_major && (info == 0 || info == 6)) { // Copy back even if INFO=6
-         if (x_cm) slicot_transpose_symmetric_to_c(x_cm, x, n, uplo_upper, elem_size); // X is symmetric
-         if (s_cm) slicot_transpose_to_c(s_cm, s, s_t_rows, s_cols, elem_size);
-         if (t_cm) slicot_transpose_to_c(t_cm, t, s_t_rows, t_cols, elem_size);
+         if (x_cm && n > 0) { 
+             // Symmetrize x_cm (column-major) which was pointed to by x_ptr.
+             // x_ptr was x_cm, ldx_f was its leading dimension (n for this allocation).
+             if (uplo_upper == 'U') {
+                 for (int j_col = 0; j_col < n; ++j_col) { // Column index
+                     for (int i_row = j_col + 1; i_row < n; ++i_row) { // Row index for lower triangle (i_row > j_col)
+                         x_cm[i_row + j_col * ldx_f] = x_cm[j_col + i_row * ldx_f]; // x_cm(i_row, j_col) = x_cm(j_col, i_row)
+                     }
+                 }
+             } else { // uplo_upper == 'L'
+                 for (int j_col = 0; j_col < n; ++j_col) { // Column index
+                     for (int i_row = j_col + 1; i_row < n; ++i_row) { // Row index for an element in what would be its transposed upper position
+                                                                      // We want to fill upper triangle of x_cm from its lower: x_cm(j_col, i_row) = x_cm(i_row, j_col)
+                         x_cm[j_col + i_row * ldx_f] = x_cm[i_row + j_col * ldx_f];
+                     }
+                 }
+             }
+             // Now x_cm is fully symmetric, transpose it to row-major x.
+             slicot_transpose_to_c(x_cm, x, n, n, elem_size);
+         } else if (x_cm && n == 0 && x) {
+             // If n=0, x_cm might be allocated (e.g. size 0 if x_size=0), x might be non-NULL.
+             // No data to copy.
+         }
+
+         if (s_cm) slicot_transpose_to_c(s_cm, s, s_t_rows, s_f_cols, elem_size); // S is s_t_rows x s_f_cols
+         if (t_cm && !(dico_upper == 'C' && jobb_upper == 'G')) {
+             slicot_transpose_to_c(t_cm, t, t_fortran_rows, t_fortran_cols, elem_size); // T is t_fortran_rows x t_fortran_cols
+         }
          if (u_cm) slicot_transpose_to_c(u_cm, u, u_rows, u_cols, elem_size);
          // RCOND, ALFAR, ALFAI, BETA modified directly
      } else if (!row_major && (info == 0 || info == 6)) {
