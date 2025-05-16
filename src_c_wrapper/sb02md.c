@@ -11,7 +11,8 @@
  #include <ctype.h>
  #include <stddef.h> // For size_t
  #include <string.h> // For memcpy
-
+ #include <stdio.h>  // For fprintf, stderr
+ 
  // Include the header file for this wrapper
  #include "sb02md.h"
  // Include necessary SLICOT utility headers
@@ -98,6 +99,18 @@
      if (scal_upper != 'G' && scal_upper != 'N') { info = -4; goto cleanup; }
      if (sort_upper != 'S' && sort_upper != 'U') { info = -5; goto cleanup; }
      if (n < 0) { info = -6; goto cleanup; }
+
+     // Check for NULL pointers for required arrays if N > 0
+     if (n > 0) {
+         if (a == NULL) { info = -7; goto cleanup; } // A is 7th arg
+         if (g == NULL) { info = -9; goto cleanup; } // G is 9th arg
+         if (q == NULL) { info = -11; goto cleanup; } // Q is 11th arg
+         if (rcond == NULL) { info = -13; goto cleanup; } // RCOND is 13th arg
+         if (wr == NULL) { info = -14; goto cleanup; } // WR is 14th arg
+         if (wi == NULL) { info = -15; goto cleanup; } // WI is 15th arg
+         if (s == NULL) { info = -16; goto cleanup; } // S is 16th arg
+         if (u == NULL) { info = -18; goto cleanup; } // U is 18th arg
+     }
 
      // Check leading dimensions based on storage order
      int min_lda_f = MAX(1, n);
@@ -227,7 +240,7 @@
              slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
          }
          // Copy back Q (contains solution X)
-         if (q_size > 0) slicot_transpose_symmetric_to_c(q_cm, q, q_rows, uplo_upper, elem_size); // Symmetric copy back
+         if (q_size > 0) slicot_transpose_to_c(q_cm, q, q_rows, q_cols, elem_size); // X is a full matrix
          // Copy back S and U
          if (s_size > 0) slicot_transpose_to_c(s_cm, s, s_rows, s_cols, elem_size);
          if (u_size > 0) slicot_transpose_to_c(u_cm, u, u_rows, u_cols, elem_size);
@@ -251,6 +264,10 @@
      free(q_cm); // Free Q copy if allocated
      free(s_cm);
      free(u_cm);
+
+     if (info == SLICOT_MEMORY_ERROR) {
+        fprintf(stderr, "Error: Memory allocation failed in slicot_sb02md.\n");
+     }
 
      return info;
  }
