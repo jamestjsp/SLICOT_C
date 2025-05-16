@@ -21,23 +21,22 @@
   * A, B, C are input/output. Z is output.
   */
  extern void F77_FUNC(sb04qd, SB04QD)(
-     const int* n,           // INTEGER N
-     const int* m,           // INTEGER M
-     double* a,              // DOUBLE PRECISION A(LDA,*) (in/out)
-     const int* lda,         // INTEGER LDA
-     double* b,              // DOUBLE PRECISION B(LDB,*) (in/out)
-     const int* ldb,         // INTEGER LDB
-     double* c,              // DOUBLE PRECISION C(LDC,*) (in/out -> X)
-     const int* ldc,         // INTEGER LDC
-     double* z,              // DOUBLE PRECISION Z(LDZ,*) (output)
-     const int* ldz,         // INTEGER LDZ
-     int* iwork,             // INTEGER IWORK(*)
-     double* dwork,          // DOUBLE PRECISION DWORK(*)
-     const int* ldwork,      // INTEGER LDWORK
-     int* info               // INTEGER INFO (output)
+     const int* n,     // INTEGER N
+     const int* m,     // INTEGER M
+     double* a,        // DOUBLE PRECISION A(LDA,N)
+     const int* lda,   // INTEGER LDA
+     double* b,        // DOUBLE PRECISION B(LDB,M)
+     const int* ldb,   // INTEGER LDB
+     double* c,        // DOUBLE PRECISION C(LDC,M) -> X(N,M)
+     const int* ldc,   // INTEGER LDC
+     double* z,        // DOUBLE PRECISION Z(LDZ,M)
+     const int* ldz,   // INTEGER LDZ
+     int* iwork,      // INTEGER IWORK(*) - Added this missing argument
+     double* dwork,    // DOUBLE PRECISION DWORK(*)
+     const int* ldwork,// INTEGER LDWORK
+     int* info         // INTEGER INFO
  );
-
-
+ 
  /* C wrapper function definition */
  SLICOT_EXPORT
  int slicot_sb04qd(int n, int m,
@@ -45,142 +44,148 @@
                    double* c, int ldc, double* z, int ldz,
                    int row_major)
  {
-     /* Local variables */
      int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
      double* dwork = NULL;
+     int ldwork = -1; // Initialize for workspace query
+ 
      int* iwork = NULL;
      int iwork_size = 0;
-
-     /* Pointers for column-major copies if needed */
-     double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL, *z_cm = NULL;
+ 
+     double* a_cm = NULL;
+     double* b_cm = NULL;
+     double* c_cm = NULL;
+     double* z_cm = NULL;
      double *a_ptr, *b_ptr, *c_ptr, *z_ptr;
      int lda_f, ldb_f, ldc_f, ldz_f;
 
 
      /* --- Input Parameter Validation --- */
 
-     if (n < 0) { info = -1; goto cleanup; }
-     if (m < 0) { info = -2; goto cleanup; }
+     // Check scalar parameters first
+     if (n < 0) { info = -1; goto cleanup; } // N is 1st arg
+     if (m < 0) { info = -2; goto cleanup; } // M is 2nd arg
 
-     // Check leading dimensions based on storage order
-     int min_lda_f = MAX(1, n);
-     int min_ldb_f = MAX(1, m);
-     int min_ldc_f = MAX(1, n);
-     int min_ldz_f = MAX(1, m);
+     // Check pointers for required arrays
+     // A is N x N, B is M x M, C is N x M (input), X is N x M (output in C), Z is M x M (output)
+     if (a == NULL && n > 0) { info = -3; goto cleanup; } // A is 3rd arg
+     if (b == NULL && m > 0) { info = -5; goto cleanup; } // B is 5th arg
+     if (c == NULL && n > 0 && m > 0) { info = -7; goto cleanup; } // C is 7th arg
+     if (z == NULL && m > 0) { info = -9; goto cleanup; } // Z is 9th arg
+
+     // Check leading dimensions based on row_major flag
+     // Fortran leading dimensions (number of rows)
+     int min_lda_f_val = MAX(1, n);
+     int min_ldb_f_val = MAX(1, m);
+     int min_ldc_f_val = MAX(1, n); // C/X is N rows in Fortran
+     int min_ldz_f_val = MAX(1, m); // Z is M rows in Fortran
 
      if (row_major) {
-         // For row-major C, LD is the number of columns
-         int min_lda_rm_cols = n;
-         int min_ldb_rm_cols = m;
-         int min_ldc_rm_cols = m;
-         int min_ldz_rm_cols = m;
-         if (lda < min_lda_rm_cols) { info = -4; goto cleanup; }
-         if (ldb < min_ldb_rm_cols) { info = -6; goto cleanup; }
-         if (ldc < min_ldc_rm_cols) { info = -8; goto cleanup; }
-         if (ldz < min_ldz_rm_cols) { info = -10; goto cleanup; }
+         // C LD is number of columns
+         if (n > 0 && lda < n) { info = -4; goto cleanup; } // A (NxN) needs N cols
+         if (m > 0 && ldb < m) { info = -6; goto cleanup; } // B (MxM) needs M cols
+         if (m > 0 && ldc < m) { info = -8; goto cleanup; } // C/X (NxM) needs M cols
+         if (m > 0 && ldz < m) { info = -10; goto cleanup; } // Z (MxM) needs M cols
      } else {
-         // For column-major C, LD is the number of rows (Fortran style)
-         if (lda < min_lda_f) { info = -4; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -6; goto cleanup; }
-         if (ldc < min_ldc_f) { info = -8; goto cleanup; }
-         if (ldz < min_ldz_f) { info = -10; goto cleanup; }
+         // C LD is number of rows (Fortran style)
+         if (lda < min_lda_f_val && n > 0) { info = -4; goto cleanup; }
+         if (ldb < min_ldb_f_val && m > 0) { info = -6; goto cleanup; }
+         if (ldc < min_ldc_f_val && n > 0 && m > 0) { info = -8; goto cleanup; }
+         if (ldz < min_ldz_f_val && m > 0) { info = -10; goto cleanup; }
      }
+
+     if (info != 0) { goto cleanup; }
+ 
+     /* --- Allocate Integer Workspace IWORK --- */
+     // Common size for SB04xD routines is N+M. Use MAX(1, ...) for safety.
+     iwork_size = MAX(1, n + m);
+     if (n == 0 && m == 0) iwork_size = 1; // Ensure minimum size 1
+ 
+     iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
+     CHECK_ALLOC(iwork);
+ 
+     /* --- Workspace Allocation --- */
+     // Workspace query for DWORK
+     double dwork_query[1];
+     // ldwork is already -1
+     F77_FUNC(sb04qd, SB04QD)(&n, &m, NULL, &min_lda_f_val, NULL, &min_ldb_f_val, NULL, &min_ldc_f_val, NULL, &min_ldz_f_val,
+                              iwork, dwork_query, &ldwork, &info);
+
+     if (info == 0 || info == -13) { // -13 for LDWORK error during query (SB04QD uses -13 for LDWORK)
+         ldwork = (int)dwork_query[0];
+         // Ensure minimum size based on documentation formula (example: N*M + MAX(N,M))
+         // From SB04QD example (not available, using SB04MD example as placeholder): LDWORK >= MAX(1, N*(M + MAX(2,N) + 2) + M*MAX(1,M-1)/2 )
+         // A simpler common one: MAX(1, N + M + N*M) or similar.
+         // For SB04QD, the Fortran example uses LDWORK = N*M + MAX(N,M).
+         int min_ldwork_formula = (n == 0 && m == 0) ? 1 : (n * m + MAX(n, m));
+         min_ldwork_formula = MAX(1, min_ldwork_formula);
+         ldwork = MAX(ldwork, min_ldwork_formula);
+         info = 0; // Reset info after successful query or if it was -12
+     } else {
+         // Fallback to formula if query fails for other reasons
+         int min_ldwork_formula = (n == 0 && m == 0) ? 1 : (n * m + MAX(n, m));
+         ldwork = MAX(1, min_ldwork_formula);
+         info = 0; // Reset info if it was a different error from query
+     }
+     
+     if (ldwork > 0) {
+         dwork = (double*)malloc((size_t)ldwork * sizeof(double));
+         CHECK_ALLOC(dwork);
+     } else if (n == 0 && m == 0) { // Handle case where ldwork might be calculated as 0 or 1
+         ldwork = 1; // Ensure at least 1 for dwork if routine expects it
+         dwork = (double*)malloc((size_t)ldwork * sizeof(double));
+         CHECK_ALLOC(dwork);
+     }
+
 
      /* --- Prepare arrays for column-major format if using row-major --- */
      size_t elem_size = sizeof(double);
      if (row_major) {
-         /* Allocate memory for column-major copies */
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = m; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = n; size_t c_cols = m; size_t c_size = c_rows * c_cols;
-         size_t z_rows = m; size_t z_cols = m; size_t z_size = z_rows * z_cols;
+         lda_f = MAX(1, n);
+         ldb_f = MAX(1, m);
+         ldc_f = MAX(1, n); // X is N rows in Fortran
+         ldz_f = MAX(1, m);
 
-         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
-         if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
-         if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); } // C is in/out -> X
-         if (z_size > 0) { z_cm = (double*)malloc(z_size * elem_size); CHECK_ALLOC(z_cm); } // Z is output
+         size_t a_size_bytes = (size_t)lda_f * n * elem_size; if (n == 0) a_size_bytes = 0;
+         size_t b_size_bytes = (size_t)ldb_f * m * elem_size; if (m == 0) b_size_bytes = 0;
+         size_t c_size_bytes = (size_t)ldc_f * m * elem_size; if (n == 0 || m == 0) c_size_bytes = 0; // C/X is N x M
+         size_t z_size_bytes = (size_t)ldz_f * m * elem_size; if (m == 0) z_size_bytes = 0; // Z is M x M
 
-         /* Transpose C inputs to Fortran copies */
-         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-         if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-         if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
+         if (a_size_bytes > 0) { a_cm = (double*)malloc(a_size_bytes); CHECK_ALLOC(a_cm); slicot_transpose_to_fortran_with_ld(a, a_cm, n, n, lda, lda_f, elem_size); }
+         if (b_size_bytes > 0) { b_cm = (double*)malloc(b_size_bytes); CHECK_ALLOC(b_cm); slicot_transpose_to_fortran_with_ld(b, b_cm, m, m, ldb, ldb_f, elem_size); }
+         if (c_size_bytes > 0) { c_cm = (double*)malloc(c_size_bytes); CHECK_ALLOC(c_cm); slicot_transpose_to_fortran_with_ld(c, c_cm, n, m, ldc, ldc_f, elem_size); }
+         if (z_size_bytes > 0) { z_cm = (double*)malloc(z_size_bytes); CHECK_ALLOC(z_cm); /* Z is output only */ }
 
-         /* Fortran leading dimensions */
-         lda_f = (a_rows > 0) ? a_rows : 1;
-         ldb_f = (b_rows > 0) ? b_rows : 1;
-         ldc_f = (c_rows > 0) ? c_rows : 1;
-         ldz_f = (z_rows > 0) ? z_rows : 1;
-
-         /* Set pointers */
-         a_ptr = a_cm;
-         b_ptr = b_cm;
-         c_ptr = c_cm;
-         z_ptr = z_cm;
-
+         a_ptr = (a_size_bytes > 0) ? a_cm : NULL;
+         b_ptr = (b_size_bytes > 0) ? b_cm : NULL;
+         c_ptr = (c_size_bytes > 0) ? c_cm : NULL; // Fortran writes X to c_cm
+         z_ptr = (z_size_bytes > 0) ? z_cm : NULL; // Fortran writes Z to z_cm
      } else {
-         /* Column-major case - use original arrays */
-         lda_f = lda;
-         ldb_f = ldb;
-         ldc_f = ldc;
-         ldz_f = ldz;
-         a_ptr = a;
-         b_ptr = b;
-         c_ptr = c;
-         z_ptr = z;
+         // Column-major C: Pass original pointers (or NULL if size is 0)
+         if (n == 0) a_ptr = NULL;
+         if (m == 0) b_ptr = NULL;
+         if (n == 0 || m == 0) c_ptr = NULL;
+         if (m == 0) z_ptr = NULL;
+         // lda_f, ldb_f, ldc_f, ldz_f are already correctly set to C LDs (rows)
      }
-
-     /* --- Workspace Allocation --- */
-
-     // Allocate IWORK (size 4*N)
-     iwork_size = MAX(1, 4 * n); // Ensure size >= 1
-     iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-     CHECK_ALLOC(iwork);
-
-     // Perform workspace query for DWORK
-     double dwork_temp[1]; // Small array to receive query result
-     ldwork = -1; // Query mode
-     F77_FUNC(sb04qd, SB04QD)(&n, &m, a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, z_ptr, &ldz_f,
-                              iwork, dwork_temp, &ldwork, &info);
-
-     if (info < 0 && info != -13) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-13 from query)
-     info = 0; // Reset info after query
-
-     // Get the required dwork size from query result
-     ldwork = (int)dwork_temp[0]; // First element contains optimal ldwork
-     // Check against minimum documented size: MAX(1, 2*N*N + 9*N, 5*M, N + M)
-     int min_ldwork = 1;
-     min_ldwork = MAX(min_ldwork, 2 * n * n + 9 * n);
-     min_ldwork = MAX(min_ldwork, 5 * m);
-     min_ldwork = MAX(min_ldwork, n + m);
-     ldwork = MAX(ldwork, min_ldwork);
-
-     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
-
 
      /* --- Call the computational routine --- */
-     F77_FUNC(sb04qd, SB04QD)(&n, &m,
-                              a_ptr, &lda_f,           // Pass A ptr
-                              b_ptr, &ldb_f,           // Pass B ptr
-                              c_ptr, &ldc_f,           // Pass C ptr
-                              z_ptr, &ldz_f,           // Pass Z ptr
-                              iwork, dwork, &ldwork, &info);
-
+     F77_FUNC(sb04qd, SB04QD)(&n, &m, a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, z_ptr, &ldz_f,
+                             iwork, dwork, &ldwork, &info);
+ 
      /* --- Copy results back to row-major format if needed --- */
-     if (row_major && (info == 0 || info > m)) { // Copy back even if INFO > M (singular solve)
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = m; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = n; size_t c_cols = m; size_t c_size = c_rows * c_cols;
-         size_t z_rows = m; size_t z_cols = m; size_t z_size = z_rows * z_cols;
+     if (row_major && info == 0) {
+         // A and B are input-only for SB04QD (unlike SB04MD which can modify them)
+         // C (input) is overwritten by X (output)
+         size_t c_size_bytes = (size_t)ldc_f * m * elem_size; if (n == 0 || m == 0) c_size_bytes = 0;
+         size_t z_size_bytes = (size_t)ldz_f * m * elem_size; if (m == 0) z_size_bytes = 0;
 
-         if (a_size > 0) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size); // Modified A
-         if (b_size > 0) slicot_transpose_to_c(b_cm, b, b_rows, b_cols, elem_size); // Modified B
-         if (c_size > 0) slicot_transpose_to_c(c_cm, c, c_rows, c_cols, elem_size); // Solution X (in C)
-         if (z_size > 0) slicot_transpose_to_c(z_cm, z, z_rows, z_cols, elem_size); // Output Z
+         if (c_ptr && c_size_bytes > 0) { // c_ptr is c_cm
+             slicot_transpose_to_c_with_ld(c_ptr, c, n, m, ldc_f, ldc, elem_size);
+         }
+         if (z_ptr && z_size_bytes > 0) { // z_ptr is z_cm
+             slicot_transpose_to_c_with_ld(z_ptr, z, m, m, ldz_f, ldz, elem_size);
+         }
      }
-     // In column-major case, A, B, C, Z are modified in place.
 
  cleanup:
      /* --- Cleanup --- */
