@@ -221,8 +221,9 @@ extern void F77_FUNC(sb02mt, SB02MT)(
      iwork_ptr = (int*)malloc((size_t)iwork_size_val * sizeof(int));
      CHECK_ALLOC(iwork_ptr);
     
-     /* --- Prepare Arrays for Fortran Call --- */
+     /* --- Prepare Arrays and Call Fortran Routine --- */
      size_t elem_size = sizeof(double);
+     static double slicot_static_dummy_double = 0.0; // Static dummy for N=0 cases
      
      if (row_major) {
          /* --- Row-Major Case --- */
@@ -262,7 +263,7 @@ extern void F77_FUNC(sb02mt, SB02MT)(
          lds_f = MAX(1, 2 * n); ldu_f = MAX(1, 2 * n);
         
          a_f_ptr = a_cm; b_f_ptr = b_cm; q_f_ptr = q_cm; r_f_ptr = r_cm; 
-         l_f_ptr = (jobl_upper == 'N') ? l_cm : NULL; // Pass NULL if L not used
+         l_f_ptr = (jobl_upper == 'N') ? l_cm : NULL; 
          x_f_ptr = x_cm; g_f_ptr = g_cm; s_f_ptr = s_cm; u_f_ptr = u_cm;
 
      } else {
@@ -271,9 +272,39 @@ extern void F77_FUNC(sb02mt, SB02MT)(
          ldx_f = ldx; ldg_f = ldg; lds_f = lds; ldu_f = ldu;
         
          a_f_ptr = a_io; b_f_ptr = b_io; q_f_ptr = q_io; r_f_ptr = r_io; 
-         l_f_ptr = (jobl_upper == 'N') ? l_io : NULL; // Pass NULL if L not used
+         l_f_ptr = (jobl_upper == 'N') ? l_io : NULL; 
          x_f_ptr = x_out; g_f_ptr = g_out; s_f_ptr = s_out; u_f_ptr = u_out;
      }
+
+    /* Ensure non-NULL pointers for Fortran when dimensions are zero, based on test findings */
+    if (n == 0) {
+        a_f_ptr = (a_f_ptr == NULL) ? &slicot_static_dummy_double : a_f_ptr;
+        b_f_ptr = (b_f_ptr == NULL) ? &slicot_static_dummy_double : b_f_ptr;
+        q_f_ptr = (q_f_ptr == NULL) ? &slicot_static_dummy_double : q_f_ptr;
+        if (jobl_upper == 'N') {
+            l_f_ptr = (l_f_ptr == NULL) ? &slicot_static_dummy_double : l_f_ptr;
+        }
+        // Else L is not referenced by Fortran, l_f_ptr can remain NULL if it was.
+        // However, test used dummy for L, so safer to assign dummy if JOBL='N'.
+
+        x_f_ptr = (x_f_ptr == NULL) ? &slicot_static_dummy_double : x_f_ptr;
+        g_f_ptr = (g_f_ptr == NULL) ? &slicot_static_dummy_double : g_f_ptr;
+        s_f_ptr = (s_f_ptr == NULL) ? &slicot_static_dummy_double : s_f_ptr;
+        u_f_ptr = (u_f_ptr == NULL) ? &slicot_static_dummy_double : u_f_ptr;
+        // wr_out and wi_out are direct arguments to the C wrapper.
+        // If N=0, the test passes &dummy_val for them. The C wrapper does not need to change these pointers.
+    }
+    if (m == 0) {
+        r_f_ptr = (r_f_ptr == NULL) ? &slicot_static_dummy_double : r_f_ptr;
+        if (n > 0) { // If N > 0 and M = 0
+            b_f_ptr = (b_f_ptr == NULL) ? &slicot_static_dummy_double : b_f_ptr;
+            g_f_ptr = (g_f_ptr == NULL) ? &slicot_static_dummy_double : g_f_ptr;
+            if (jobl_upper == 'N') {
+                l_f_ptr = (l_f_ptr == NULL) ? &slicot_static_dummy_double : l_f_ptr;
+            }
+        }
+    }
+    // Note: rcond_out and rank_out must always point to valid memory by the caller.
     
      /* --- Call Fortran Routine --- */
      F77_FUNC(sb02mt, SB02MT)(&dico_upper, &jobb_upper, &fact_upper, &uplo_upper,
