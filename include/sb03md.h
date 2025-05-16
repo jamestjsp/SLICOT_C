@@ -52,7 +52,11 @@
   * @param[in] ldu       The leading dimension of array U. >= max(1,n).
   * @param[in,out] c     Double array, dimension (ldc, n) or (n, ldc).
   * On entry (if job='X' or 'B'), the symmetric matrix C.
-  * On exit (if job='X' or 'B'), the symmetric solution matrix X.
+  * For row-major, the wrapper expects the upper triangle to be populated for processing.
+  * For column-major, the wrapper expects the upper triangle to be populated for processing.
+  * On exit (if job='X' or 'B'), contains the symmetric solution matrix X.
+  * If row_major, the full matrix X is returned.
+  * If column_major, the upper triangle of X is returned in C.
   * Not referenced if job='S'.
   * @param[in] ldc       Leading dimension of C. >=1 if job='S', >=max(1,n) otherwise.
   * @param[out] scale    Scale factor (<= 1) applied to C to avoid overflow in X.
@@ -83,4 +87,3 @@
  #endif
  
  #endif /* SB03MD_H */
- 

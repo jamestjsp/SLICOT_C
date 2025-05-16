@@ -72,7 +72,7 @@
      char job_upper = toupper(job);
      char fact_upper = toupper(fact);
      char trana_upper = toupper(trana);
-
+ 
      /* Pointers for column-major copies if needed */
      double *a_cm = NULL, *u_cm = NULL, *c_cm = NULL;
      double *a_ptr, *u_ptr, *c_ptr;
@@ -85,8 +85,23 @@
      if (fact_upper != 'F' && fact_upper != 'N') { info = -3; goto cleanup; }
      if (trana_upper != 'N' && trana_upper != 'T' && trana_upper != 'C') { info = -4; goto cleanup; }
      if (n < 0) { info = -5; goto cleanup; }
+ 
+     // Add NULL checks for essential pointers
+     if (n > 0 && a == NULL) { info = -6; goto cleanup; } // A is arg 6
+     if (n > 0 && u == NULL) { info = -8; goto cleanup; } // U is arg 8
+     if (job_upper != 'S' && n > 0 && c == NULL) { info = -10; goto cleanup; } // C is arg 10
+     if (scale == NULL) { info = -12; goto cleanup; } // SCALE is arg 12
+     if ((job_upper == 'S' || job_upper == 'B') && sep == NULL) { info = -13; goto cleanup; } // SEP is arg 13
+     if (job_upper == 'B' && ferr == NULL) { info = -14; goto cleanup; } // FERR is arg 14
+     // WR and WI are not strictly needed if FACT='F', but Fortran expects non-NULL if N > 0.
+     // However, the Fortran routine SB03MD itself checks if FACT='N' before using WR/WI.
+     // So, NULL for WR/WI if FACT='F' should be okay with the Fortran routine.
+     // The wrapper passes them directly. If N > 0 and FACT='N', they must be non-NULL.
+     if (fact_upper == 'N' && n > 0 && wr == NULL) { info = -15; goto cleanup; }
+     if (fact_upper == 'N' && n > 0 && wi == NULL) { info = -16; goto cleanup; }
 
-     // Check leading dimensions based on storage order
+
+     // Determine effective dimensions for validation
      int min_lda_f = MAX(1, n);
      int min_ldu_f = MAX(1, n);
      int min_ldc_f = (job_upper == 'S') ? 1 : MAX(1, n); // C not referenced if JOB='S'
