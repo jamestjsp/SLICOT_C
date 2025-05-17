@@ -1,159 +1,159 @@
 /**
  * @file tb01id.c
- * @brief C wrapper implementation for SLICOT routine TB01ID
- *
- * This file provides a C wrapper implementation for the SLICOT routine TB01ID,
- * which balances a system matrix S = [A B; C 0] corresponding to a
- * state-space triplet (A,B,C) using diagonal similarity transformations.
+ * @brief C wrapper for SLICOT routine TB01ID.
+ * @details Balances a system matrix corresponding to a triplet (A,B,C).
+ * Matrices A, B, C are modified. MAXRED is input/output. SCALE is output.
+ * No explicit workspace arrays are required by this routine.
+ * Input/output matrix format is handled via the row_major parameter.
  */
 
- #include <stdlib.h>
- #include <ctype.h>
- #include <stddef.h> // For size_t
- #include <string.h> // For memcpy if needed
+#include <stdlib.h> // For malloc, free
+#include <string.h> // For memcpy
+#include <ctype.h>  // For toupper
+#include <math.h>   // For fmax (from C standard library)
 
- // Include the header file for this wrapper
- #include "tb01id.h"
- // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
- #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
+#include "tb01id.h"       // Public header for this wrapper
+#include "slicot_utils.h" // Provides CHECK_ALLOC, SLICOT_MEMORY_ERROR, MAX, MIN, transpose functions etc.
+#include "slicot_f77.h"   // Provides F77_FUNC macro
 
- /*
-  * Declare the external Fortran routine using the F77_FUNC macro.
-  * MAXRED, A, B, C are input/output. SCALE is output.
-  */
- extern void F77_FUNC(tb01id, TB01ID)(
-     const char* job,        // CHARACTER*1 JOB
-     const int* n,           // INTEGER N
-     const int* m,           // INTEGER M
-     const int* p,           // INTEGER P
-     double* maxred,         // DOUBLE PRECISION MAXRED (in/out)
-     double* a,              // DOUBLE PRECISION A(LDA,*) (in/out)
-     const int* lda,         // INTEGER LDA
-     double* b,              // DOUBLE PRECISION B(LDB,*) (in/out)
-     const int* ldb,         // INTEGER LDB
-     double* c,              // DOUBLE PRECISION C(LDC,*) (in/out)
-     const int* ldc,         // INTEGER LDC
-     double* scale,          // DOUBLE PRECISION SCALE(*) (output)
-     int* info,              // INTEGER INFO (output)
-     int job_len             // Hidden length
- );
+/* External Fortran routine declaration */
+extern void F77_FUNC(tb01id, TB01ID)(
+    const char* job,
+    const int* n, const int* m, const int* p,
+    double* maxred, /* input/output */
+    double* a, const int* lda, /* input/output */
+    double* b, const int* ldb, /* input/output */
+    double* c, const int* ldc, /* input/output */
+    double* scale, /* output */
+    int* info,     /* output */
+    size_t job_len
+);
+
+SLICOT_EXPORT
+int slicot_tb01id(
+    char job_param,
+    int n_param, int m_param, int p_param,
+    double* maxred_io,      /* input/output */
+    double* a_io, int lda,  /* input/output */
+    double* b_io, int ldb,  /* input/output */
+    double* c_io, int ldc,  /* input/output */
+    double* scale_out,      /* output */
+    int row_major)
+{
+    // 1. Variable declarations
+    int info = 0;
+
+    // Column-major copies for input/output matrices
+    double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL;
+
+    // Fortran-style leading dimensions
+    int lda_f, ldb_f, ldc_f;
+    
+    char job_f = toupper(job_param);
+
+    // 2. Input parameter validation
+    if (strchr("ABCN", job_f) == NULL) { info = -1; goto cleanup; }
+    if (n_param < 0) { info = -2; goto cleanup; }
+    if (m_param < 0) { info = -3; goto cleanup; }
+    if (p_param < 0) { info = -4; goto cleanup; }
+    if (maxred_io == NULL) { info = -5; goto cleanup; } 
+
+    // Validate pointers for matrices based on dimensions
+    // A is N x N
+    if (a_io == NULL && n_param > 0) { info = -6; goto cleanup; }
+    // B is N x M. Not referenced if M=0.
+    if (b_io == NULL && n_param > 0 && m_param > 0 && job_f != 'C' && job_f != 'N') { info = -8; goto cleanup; }
+    // C is P x N. Not referenced if P=0.
+    if (c_io == NULL && p_param > 0 && n_param > 0 && job_f != 'B' && job_f != 'N') { info = -10; goto cleanup; }
+    // SCALE is N-dim output.
+    if (scale_out == NULL && n_param > 0) { info = -12; goto cleanup; } 
 
 
- /* C wrapper function definition */
- SLICOT_EXPORT
- int slicot_tb01id(char job, int n, int m, int p, double* maxred,
-                   double* a, int lda, double* b, int ldb,
-                   double* c, int ldc, double* scale,
-                   int row_major)
- {
-     /* Local variables */
-     int info = 0;
-     // No workspace needed
-     const int job_len = 1;
-     char job_upper = toupper(job);
+    // Validate leading dimensions
+    int min_lda_f = MAX(1, n_param);
+    int min_ldb_f = MAX(1, n_param); 
+    int min_ldc_f = MAX(1, p_param); 
 
-     /* Pointers for column-major copies if needed */
-     double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL;
-     double *a_ptr, *b_ptr, *c_ptr;
-     int lda_f, ldb_f, ldc_f;
+    if (row_major) { // C LDA is number of columns
+        if (n_param > 0 && lda < n_param) { info = -7; goto cleanup; }
+        if (n_param > 0 && m_param > 0 && ldb < m_param) { info = -9; goto cleanup; }
+        if (p_param > 0 && n_param > 0 && ldc < n_param) { info = -11; goto cleanup; }
+    } else { // Column-major C (Fortran-style LDs)
+        if (n_param > 0 && lda < min_lda_f) { info = -7; goto cleanup; }
+        if (n_param > 0 && m_param > 0 && ldb < min_ldb_f) { info = -9; goto cleanup; }
+        if (p_param > 0 && n_param > 0 && ldc < min_ldc_f) { info = -11; goto cleanup; }
+    }
+    if (info != 0) { goto cleanup; }
 
+    // 3. Workspace Allocation - None explicit for TB01ID
 
-     /* --- Input Parameter Validation --- */
+    // 4. Memory allocation for column-major copies
+    size_t a_nelems = (size_t)n_param * n_param; if(n_param == 0) a_nelems = 0;
+    size_t b_nelems = (size_t)n_param * m_param; if(n_param == 0 || m_param == 0) b_nelems = 0;
+    size_t c_nelems = (size_t)p_param * n_param; if(p_param == 0 || n_param == 0) c_nelems = 0;
 
-     if (job_upper != 'A' && job_upper != 'B' && job_upper != 'C' && job_upper != 'N') {
-         info = -1; goto cleanup;
-     }
-     if (n < 0) { info = -2; goto cleanup; }
-     if (m < 0) { info = -3; goto cleanup; }
-     if (p < 0) { info = -4; goto cleanup; }
-     // MAXRED check done by Fortran
+    if (row_major) {
+        if (a_nelems > 0) { a_cm = (double*)malloc(a_nelems * sizeof(double)); CHECK_ALLOC(a_cm); }
+        if (b_nelems > 0 && (job_f == 'A' || job_f == 'B')) { b_cm = (double*)malloc(b_nelems * sizeof(double)); CHECK_ALLOC(b_cm); }
+        if (c_nelems > 0 && (job_f == 'A' || job_f == 'C')) { c_cm = (double*)malloc(c_nelems * sizeof(double)); CHECK_ALLOC(c_cm); }
+    }
 
-     // Check leading dimensions based on storage order
-     int min_lda_f = MAX(1, n);
-     int min_ldb_f = (m > 0) ? MAX(1, n) : 1; // B not referenced if m=0
-     int min_ldc_f = (p > 0) ? MAX(1, p) : 1; // C not referenced if p=0
+    // 5. Prepare Fortran parameters and perform conversions
+    double* a_ptr = a_io; double* b_ptr = b_io; double* c_ptr = c_io;
+    
+    lda_f=lda; ldb_f=ldb; ldc_f=ldc;
 
-     if (row_major) {
-         // For row-major C, LD is the number of columns
-         int min_lda_rm_cols = n;
-         int min_ldb_rm_cols = (m > 0) ? m : 1;
-         int min_ldc_rm_cols = (p > 0) ? n : 1;
-         if (lda < min_lda_rm_cols) { info = -7; goto cleanup; }
-         if (ldb < min_ldb_rm_cols) { info = -9; goto cleanup; }
-         if (ldc < min_ldc_rm_cols) { info = -11; goto cleanup; }
-     } else {
-         // For column-major C, LD is the number of rows (Fortran style)
-         if (lda < min_lda_f) { info = -7; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -9; goto cleanup; }
-         if (ldc < min_ldc_f) { info = -11; goto cleanup; }
-     }
+    if (row_major) {
+        lda_f = min_lda_f; 
+        ldb_f = min_ldb_f; 
+        ldc_f = min_ldc_f;
 
-     /* --- Prepare arrays for column-major format if using row-major --- */
-     size_t elem_size = sizeof(double);
-     if (row_major) {
-         /* Allocate memory for column-major copies */
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
+        if (a_nelems > 0) { slicot_transpose_to_fortran_with_ld(a_io, a_cm, n_param, n_param, lda, lda_f, sizeof(double)); a_ptr = a_cm; } 
+        else {a_ptr = (n_param == 0 ? NULL : a_io);}
+        
+        if (b_nelems > 0 && (job_f == 'A' || job_f == 'B')) { slicot_transpose_to_fortran_with_ld(b_io, b_cm, n_param, m_param, ldb, ldb_f, sizeof(double)); b_ptr = b_cm; } 
+        else {b_ptr = (n_param == 0 || m_param == 0 ? NULL : b_io);}
+        
+        if (c_nelems > 0 && (job_f == 'A' || job_f == 'C')) { slicot_transpose_to_fortran_with_ld(c_io, c_cm, p_param, n_param, ldc, ldc_f, sizeof(double)); c_ptr = c_cm; } 
+        else {c_ptr = (p_param == 0 || n_param == 0 ? NULL : c_io);}
 
-         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
-         if (m > 0 && b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
-         if (p > 0 && c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
+    } else { // Column-major C
+        if(a_nelems == 0 && n_param == 0) a_ptr = NULL; 
+        if(b_nelems == 0 && (n_param == 0 || m_param == 0)) b_ptr = NULL;
+        if(c_nelems == 0 && (p_param == 0 || n_param == 0)) c_ptr = NULL;
+    }
+    
+    int n_f_call = n_param, m_f_call = m_param, p_f_call = p_param;
 
-         /* Transpose C inputs to Fortran copies */
-         if (a_cm) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-         if (b_cm) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-         if (c_cm) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
+    // 7. Call Fortran function
+    F77_FUNC(tb01id, TB01ID)(&job_f, &n_f_call, &m_f_call, &p_f_call,
+                             maxred_io, 
+                             a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f,
+                             scale_out, &info,
+                             1 /* job_len */); 
 
-         /* Fortran leading dimensions */
-         lda_f = (a_rows > 0) ? a_rows : 1;
-         ldb_f = (b_rows > 0) ? b_rows : 1;
-         ldc_f = (c_rows > 0) ? c_rows : 1;
+    // 8. Convert results back to row-major
+    if (row_major && info == 0) {
+        if (a_nelems > 0 && a_cm != NULL && a_io != NULL) {
+            slicot_transpose_to_c_with_ld(a_cm, a_io, n_param, n_param, lda_f, lda, sizeof(double));
+        }
+        if (b_nelems > 0 && b_cm != NULL && b_io != NULL && (job_f == 'A' || job_f == 'B')) {
+            slicot_transpose_to_c_with_ld(b_cm, b_io, n_param, m_param, ldb_f, ldb, sizeof(double));
+        }
+        if (c_nelems > 0 && c_cm != NULL && c_io != NULL && (job_f == 'A' || job_f == 'C')) {
+            slicot_transpose_to_c_with_ld(c_cm, c_io, p_param, n_param, ldc_f, ldc, sizeof(double));
+        }
+    }
 
-         /* Set pointers */
-         a_ptr = a_cm;
-         b_ptr = (m > 0) ? b_cm : NULL; // Pass NULL if M=0
-         c_ptr = (p > 0) ? c_cm : NULL; // Pass NULL if P=0
-
-     } else {
-         /* Column-major case - use original arrays */
-         lda_f = lda;
-         ldb_f = ldb;
-         ldc_f = ldc;
-         a_ptr = a;
-         b_ptr = b;
-         c_ptr = c;
-     }
-
-     /* --- Workspace Allocation --- */
-     // No external workspace needed for this routine
-
-     /* --- Call the computational routine --- */
-     F77_FUNC(tb01id, TB01ID)(&job_upper, &n, &m, &p, maxred,
-                              a_ptr, &lda_f,
-                              b_ptr, &ldb_f,
-                              c_ptr, &ldc_f,
-                              scale, &info, job_len);
-
-     /* --- Copy results back to row-major format if needed --- */
-     if (row_major && info == 0) {
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-
-         if (a_cm) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
-         if (b_cm) slicot_transpose_to_c(b_cm, b, b_rows, b_cols, elem_size);
-         if (c_cm) slicot_transpose_to_c(c_cm, c, c_rows, c_cols, elem_size);
-         // MAXRED, SCALE modified directly
-     }
-     // In column-major case, MAXRED, A, B, C, SCALE modified in place.
-
- cleanup:
-     /* --- Cleanup --- */
-     free(a_cm);
-     free(b_cm);
-     free(c_cm);
-
-     return info;
- }
+cleanup:
+    if(row_major){
+        free(a_cm); 
+        if (job_f == 'A' || job_f == 'B') free(b_cm);
+        if (job_f == 'A' || job_f == 'C') free(c_cm);
+    }
+    
+    if (info == SLICOT_MEMORY_ERROR) {
+       // Memory allocation error caught by CHECK_ALLOC
+    }
+    return info;
+}
