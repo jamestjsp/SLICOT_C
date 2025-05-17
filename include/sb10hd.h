@@ -1,79 +1,73 @@
 /**
  * @file sb10hd.h
- * @brief C wrapper for SLICOT routine SB10HD
- *
- * This file provides a C interface to the SLICOT routine SB10HD,
- * which computes an H2 optimal state controller for a continuous-time
- * system.
+ * @brief Header for C wrapper of SLICOT routine SB10HD.
  */
 
- #ifndef SB10HD_H
- #define SB10HD_H
- 
- #include <stddef.h> // For size_t
- 
- #include "slicot_utils.h" 
+#ifndef SLICOT_WRAPPER_SB10HD_H
+#define SLICOT_WRAPPER_SB10HD_H
 
- #ifdef __cplusplus
- extern "C" {
- #endif
- 
- /**
-  * @brief Computes H2 optimal state controller for a continuous-time system.
-  *
-  * Computes the matrices of the H2 optimal n-state controller
-  * K = [AK, BK; CK, DK] for the continuous-time system P = [A, B; C, D].
-  * Assumes standard H2 problem setup (D11=0) and conditions (A1)-(A3).
-  *
-  * @param[in] n         Order of the system (state dimension), n >= 0.
-  * @param[in] m         Column size of B and D, m >= 0.
-  * @param[in] np        Row size of C and D, np >= 0.
-  * @param[in] ncon      Number of control inputs (columns of B2, rows of CK, DK), M >= ncon >= 0.
-  * @param[in] nmeas     Number of measurements (rows of C2, columns of BK, DK), NP >= nmeas >= 0.
-  * @param[in] a         Double array, dimension (lda, n) or (n, lda). System matrix A.
-  * @param[in] lda       Leading dimension of A. >= max(1,n).
-  * @param[in] b         Double array, dimension (ldb, m) or (n, ldb). System matrix B = [B1 B2].
-  * @param[in] ldb       Leading dimension of B. >= max(1,n).
-  * @param[in] c         Double array, dimension (ldc, n) or (np, ldc). System matrix C = [C1; C2].
-  * @param[in] ldc       Leading dimension of C. >= max(1,np).
-  * @param[in] d         Double array, dimension (ldd, m) or (np, ldd). System matrix D = [0 D12; D21 D22].
-  * @param[in] ldd       Leading dimension of D. >= max(1,np).
-  * @param[out] ak       Double array, dimension (ldak, n) or (n, ldak). Controller state matrix AK.
-  * @param[in] ldak      Leading dimension of AK. >= max(1,n).
-  * @param[out] bk       Double array, dimension (ldbk, nmeas) or (n, ldbk). Controller input matrix BK.
-  * @param[in] ldbk      Leading dimension of BK. >= max(1,n).
-  * @param[out] ck       Double array, dimension (ldck, n) or (ncon, ldck). Controller output matrix CK.
-  * @param[in] ldck      Leading dimension of CK. >= max(1,ncon).
-  * @param[out] dk       Double array, dimension (lddk, nmeas) or (ncon, lddk). Controller matrix DK.
-  * @param[in] lddk      Leading dimension of DK. >= max(1,ncon).
-  * @param[out] rcond    Double array, dimension (4). Reciprocal condition number estimates.
-  * @param[in] tol       Tolerance for rank determination. If <= 0, default used.
-  * @param[in] row_major Integer flag:
-  * = 0: All 2D arrays are column-major (Fortran style).
-  * = 1: All 2D arrays are row-major (C style).
-  * (Array rcond is 1D).
-  *
-  * @return info         Error indicator:
-  * = 0: successful exit
-  * < 0: if info = -i, the i-th argument had an illegal value.
-  * = 1: D12 is not full column rank.
-  * = 2: D21 is not full row rank.
-  * = 3: SVD algorithm failed.
-  * = 4: X-Riccati solver failed.
-  * = 5: Y-Riccati solver failed.
-  * Memory allocation errors may also be returned.
-  */
- SLICOT_EXPORT
- int slicot_sb10hd(int n, int m, int np, int ncon, int nmeas,
-                   const double* a, int lda, const double* b, int ldb,
-                   const double* c, int ldc, const double* d, int ldd,
-                   double* ak, int ldak, double* bk, int ldbk,
-                   double* ck, int ldck, double* dk, int lddk,
-                   double* rcond, double tol, int row_major);
- 
- #ifdef __cplusplus
- }
- #endif
- 
- #endif /* SB10HD_H */
- 
+#include "slicot_utils.h" // Provides SLICOT_EXPORT macro
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Computes the matrices of the H2 optimal n-state controller.
+ * @details This is a C wrapper for the SLICOT Fortran routine SB10HD.
+ * Workspace is allocated internally. Assumes D11 block of D is zero.
+ *
+ * @param n_param (input) The order of the system. N >= 0.
+ * @param m_param (input) The column size of the matrix B. M >= 0.
+ * @param np_param (input) The row size of the matrix C. NP >= 0.
+ * @param ncon_param (input) The number of control inputs (M2). M >= NCON >= 0, NP-NMEAS >= NCON.
+ * @param nmeas_param (input) The number of measurements (NP2). NP >= NMEAS >= 0, M-NCON >= NMEAS.
+ * @param a      (input) System state matrix A. Dimensions (N x N).
+ * Stored column-wise if row_major=0, row-wise if row_major=1.
+ * @param lda    Leading dimension of A. If row_major=0, lda >= max(1,N). If row_major=1, lda >= max(1,N) (cols).
+ * @param b      (input) System input matrix B. Dimensions (N x M).
+ * @param ldb    Leading dimension of B. If row_major=0, ldb >= max(1,N). If row_major=1, ldb >= max(1,M) (cols).
+ * @param c      (input) System output matrix C. Dimensions (NP x N).
+ * @param ldc    Leading dimension of C. If row_major=0, ldc >= max(1,NP). If row_major=1, ldc >= max(1,N) (cols).
+ * @param d      (input) System input/output matrix D. Dimensions (NP x M). Assumed D11 = 0.
+ * @param ldd    Leading dimension of D. If row_major=0, ldd >= max(1,NP). If row_major=1, ldd >= max(1,M) (cols).
+ * @param[out] ak Controller state matrix AK. Dimensions (N x N).
+ * @param ldak   Leading dimension of AK. If row_major=0, ldak >= max(1,N). If row_major=1, ldak >= max(1,N) (cols).
+ * @param[out] bk Controller input matrix BK. Dimensions (N x NMEAS).
+ * @param ldbk   Leading dimension of BK. If row_major=0, ldbk >= max(1,N). If row_major=1, ldbk >= max(1,NMEAS) (cols).
+ * @param[out] ck Controller output matrix CK. Dimensions (NCON x N).
+ * @param ldck   Leading dimension of CK. If row_major=0, ldck >= max(1,NCON). If row_major=1, ldck >= max(1,N) (cols).
+ * @param[out] dk Controller input/output matrix DK. Dimensions (NCON x NMEAS).
+ * @param lddk   Leading dimension of DK. If row_major=0, lddk >= max(1,NCON). If row_major=1, lddk >= max(1,NMEAS) (cols).
+ * @param[out] rcond Reciprocal condition numbers (array of size 4).
+ * @param tol    (input) Tolerance. If tol <= 0, sqrt(machine_precision) is used.
+ * @param row_major Specifies matrix storage: 0 for column-major, 1 for row-major.
+ *
+ * @return info Error indicator:
+ * = 0:  successful exit
+ * < 0:  if info = -i, the i-th argument had an illegal value
+ * = 1:  if D12 had not full column rank
+ * = 2:  if D21 had not full row rank
+ * = 3:  if SVD algorithm did not converge
+ * = 4:  if X-Riccati equation was not solved successfully
+ * = 5:  if Y-Riccati equation was not solved successfully
+ * = SLICOT_MEMORY_ERROR (-1010): internal memory allocation failed.
+ */
+SLICOT_EXPORT
+int slicot_sb10hd(int n_param, int m_param, int np_param, int ncon_param, int nmeas_param,
+                  double* a, int lda,
+                  double* b, int ldb,
+                  double* c, int ldc,
+                  double* d, int ldd,
+                  double* ak, int ldak,
+                  double* bk, int ldbk,
+                  double* ck, int ldck,
+                  double* dk, int lddk,
+                  double* rcond, double tol,
+                  int row_major);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SLICOT_WRAPPER_SB10HD_H */
