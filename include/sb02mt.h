@@ -3,7 +3,8 @@
  * @brief C wrapper for SLICOT routine SB02MT
  *
  * This file provides a C interface to the SLICOT routine SB02MT,
- * which converts optimal problems with coupling weighting terms to standard problems.
+ * which converts optimal problems with coupling weighting terms to
+ * standard problems.
  */
 
 #ifndef SB02MT_H
@@ -20,82 +21,95 @@ extern "C" {
  * @brief Converts optimal problems with coupling weighting terms to standard problems.
  *
  * Computes the matrices:
- *   G = B*R^(-1)*B'
- *   A_bar = A - B*R^(-1)*L'
- *   Q_bar = Q - L*R^(-1)*L'
+ * G_out = B * R^(-1) * B'  (if jobg == 'G')
+ * A_io  = A_io - B_io * R_io^(-1) * L_io' (if jobl == 'N')
+ * Q_io  = Q_io - L_io * R_io^(-1) * L_io' (if jobl == 'N')
  *
- * @param[in] dico      Character specifying the type of the system:
- *                      = 'C': Continuous-time system
- *                      = 'D': Discrete-time system
- * @param[in] jobb      Character specifying whether or not B is non-zero:
- *                      = 'B': B is non-zero
- *                      = 'Z': B is zero
- * @param[in] fact      Character specifying whether R is factored:
- *                      = 'N': R is not factored
- *                      = 'C': R contains Cholesky factor
- *                      = 'U': R contains UdU'/LdL' factorization
- * @param[in] uplo      Character specifying which triangle is stored:
- *                      = 'U': Upper triangle is stored
- *                      = 'L': Lower triangle is stored
- * @param[in] jobl      Character specifying whether L is zero:
- *                      = 'Z': L is zero
- *                      = 'N': L is non-zero
- * @param[in] sort      Character specifying ordering of eigenvalues:
- *                      = 'S': Stable eigenvalues first
- *                      = 'U': Unstable eigenvalues first
- * @param[in] n         Order of the state matrix A, n >= 0
- * @param[in] m         Number of inputs, m >= 0
- * @param[in] p         Number of outputs, p >= 0
- * @param[in,out] a     State matrix A, dimension (lda,n) or (n,lda)
- *                      On output if jobl='N': A_bar = A - B*R^(-1)*L'
- * @param[in] lda       Leading dimension of a, >= max(1,n) if jobl='N', >= 1 otherwise
- * @param[in,out] b     Input matrix B, dimension (ldb,m) or (n,ldb)
- * @param[in] ldb       Leading dimension of b, >= max(1,n)
- * @param[in,out] q     Input symmetric matrix Q, dimension (ldq,n) or (n,ldq)
- *                      On output if jobl='N': Q_bar = Q - L*R^(-1)*L'
- * @param[in] ldq       Leading dimension of q, >= max(1,n) if jobl='N', >= 1 otherwise
- * @param[in,out] r     Input matrix R, dimension (ldr,m) or (m,ldr)
- * @param[in] ldr       Leading dimension of r, >= max(1,m)
- * @param[in,out] l     Cross-term weighting matrix L, dimension (ldl,m) or (n,ldl)
- *                      Only used if jobl='N'
- * @param[in] ldl       Leading dimension of l, >= max(1,n) if jobl='N', >= 1 otherwise
- * @param[out] g        Output matrix G = B*R^(-1)*B', dimension (ldg,n) or (n,ldg)
- *                      Only computed if jobg='G'
- * @param[in] ldg       Leading dimension of g, >= max(1,n) if jobg='G', >= 1 otherwise
- * @param[out] rcond    Array containing reciprocal condition numbers:
- *                      rcond[0] = Reciprocal condition number of R
- *                      rcond[1] = Reciprocal condition number used in rank determination
- * @param[out] rank     Integer giving the effective rank of matrix R
- * @param[in] tol       Tolerance used for numerical rank determination
- * @param[in] row_major Flag indicating storage format:
- *                      = 0: Column-major (Fortran) storage
- *                      = 1: Row-major (C) storage
+ * Workspace (IWORK, DWORK) is allocated internally by this wrapper.
+ * Input/output matrix format is handled via the row_major parameter.
  *
- * @return info         Status code:
- *                      = 0: successful exit
- *                      < 0: if info = -i, the i-th argument had an illegal value
- *                      = i: i-th diagonal element of d factor is zero (1<=i<=m)
- *                      = m+1: R is numerically singular
+ * @param[in] jobg      Specifies whether or not the matrix G is to be computed:
+ * = 'G': Compute G_out.
+ * = 'N': Do not compute G_out.
+ * @param[in] jobl      Specifies whether or not the matrix L_io is zero:
+ * = 'Z': L_io is zero (A_io and Q_io are not modified by L_io terms).
+ * = 'N': L_io is non-zero.
+ * @param[in] fact      Specifies how the matrix R_io is given:
+ * = 'N': R_io contains the matrix R.
+ * = 'C': R_io contains the Cholesky factor of R.
+ * = 'U': R_io contains the UdU' or LdL' factorization of R.
+ * @param[in] uplo      Specifies which triangle of symmetric matrices R_io, Q_io, G_out is stored:
+ * = 'U': Upper triangle.
+ * = 'L': Lower triangle.
+ * @param[in] n         Order of matrices A_io, Q_io, G_out; number of rows of B_io, L_io. N >= 0.
+ * @param[in] m         Order of matrix R_io; number of columns of B_io, L_io. M >= 0.
+ * @param[in,out] a_io  On entry (if jobl='N'), the N-by-N matrix A.
+ * On exit (if jobl='N', info=0), the updated N-by-N matrix A_io.
+ * Stored column-wise if row_major=0, row-wise if row_major=1.
+ * @param[in] lda       Leading dimension of a_io.
+ * If row_major=0: lda >= max(1,N) if jobl='N'; lda >= 1 if jobl='Z'.
+ * If row_major=1: lda >= max(1,N) if jobl='N' (cols); lda >= 1 if jobl='Z'.
+ * @param[in,out] b_io  On entry, the N-by-M matrix B.
+ * On exit (if oufact_out=1, info=0), B_io contains B*chol(R)^(-1). Unchanged if oufact_out != 1.
+ * Stored column-wise if row_major=0, row-wise if row_major=1.
+ * @param[in] ldb       Leading dimension of b_io.
+ * If row_major=0: ldb >= max(1,N).
+ * If row_major=1: ldb >= max(1,M) (cols).
+ * @param[in,out] q_io  On entry (if jobl='N'), the N-by-N symmetric matrix Q.
+ * On exit (if jobl='N', info=0), the updated N-by-N symmetric matrix Q_io.
+ * Stored column-wise if row_major=0, row-wise if row_major=1.
+ * @param[in] ldq       Leading dimension of q_io.
+ * If row_major=0: ldq >= max(1,N) if jobl='N'; ldq >= 1 if jobl='Z'.
+ * If row_major=1: ldq >= max(1,N) if jobl='N' (cols); ldq >= 1 if jobl='Z'.
+ * @param[in,out] r_io  On entry, the M-by-M symmetric matrix R or its factors (see fact).
+ * On exit (if oufact_out=1 or 2, info=0 or M+1), R_io contains computed factors. Unchanged if fact='C' or 'U'.
+ * Stored column-wise if row_major=0, row-wise if row_major=1.
+ * @param[in] ldr       Leading dimension of r_io.
+ * If row_major=0: ldr >= max(1,M).
+ * If row_major=1: ldr >= max(1,M) (cols).
+ * @param[in,out] l_io  On entry (if jobl='N'), the N-by-M matrix L.
+ * On exit (if jobl='N', oufact_out=1, info=0), L_io contains L*chol(R)^(-1). Unchanged if oufact_out != 1.
+ * Not referenced if jobl='Z'.
+ * Stored column-wise if row_major=0, row-wise if row_major=1.
+ * @param[in] ldl       Leading dimension of l_io.
+ * If row_major=0: ldl >= max(1,N) if jobl='N'; ldl >= 1 if jobl='Z'.
+ * If row_major=1: ldl >= max(1,M) if jobl='N' (cols); ldl >= 1 if jobl='Z'.
+ * @param[in,out] ipiv_io Integer array, dimension (M).
+ * On entry (if fact='U'), details of interchanges for R.
+ * On exit (if oufact_out=2), details of interchanges for R.
+ * Not referenced if fact='C'.
+ * @param[out] g_out    If jobg='G' and info=0, the N-by-N symmetric matrix G.
+ * Not referenced if jobg='N'.
+ * Stored column-wise if row_major=0, row-wise if row_major=1.
+ * @param[in] ldg       Leading dimension of g_out.
+ * If row_major=0: ldg >= max(1,N) if jobg='G'; ldg >= 1 if jobg='N'.
+ * If row_major=1: ldg >= max(1,N) if jobg='G' (cols); ldg >= 1 if jobg='N'.
+ * @param[out] oufact_out Information about the factorization of R used:
+ * =0: M=0, no factorization.
+ * =1: Cholesky factorization.
+ * =2: UdU' or LdL' factorization.
+ * @param[in] row_major Specifies matrix storage: 0 for column-major, 1 for row-major.
+ *
+ * @return info         Error indicator:
+ * = 0: successful exit.
+ * < 0: if info = -i, the i-th argument had an illegal value.
+ * = i (1<=i<=M): i-th element of d factor in R's factorization is zero.
+ * = M+1: R is numerically singular.
+ * = SLICOT_MEMORY_ERROR (-1010): internal memory allocation failed.
  */
 SLICOT_EXPORT
 int slicot_sb02mt(
-    char dico, char jobb, char fact, char uplo, char jobl, char sort,
-    int n, int m, int p,
-    double* a, int lda,     // Input/Output A
-    double* b, int ldb,     // Input B
-    double* q, int ldq,     // Input/Output Q
-    double* r, int ldr,     // Input R
-    double* l, int ldl,     // Input L (if JOBL='N')
-    double* x, int ldx,     // Output X (solution)
-    double* g, int ldg,     // Output G (gain)
-    double* rcond,          // Output RCOND (array of 2)
-    int* rank,              // Output RANK
-    double* s, int lds,     // Output S (Schur matrix)
-    double* u, int ldu,     // Output U (transformation matrix)
-    double* wr,             // Output WR (real part of eigenvalues)
-    double* wi,             // Output WI (imaginary part of eigenvalues)
-    double tol,             // Input TOL
-    int row_major           // Input row_major
+    char jobg, char jobl, char fact, char uplo,
+    int n, int m,
+    double* a_io, int lda,
+    double* b_io, int ldb,
+    double* q_io, int ldq,
+    double* r_io, int ldr,
+    double* l_io, int ldl,
+    int* ipiv_io,
+    double* g_out, int ldg,
+    int* oufact_out,
+    int row_major
 );
 
 #ifdef __cplusplus
