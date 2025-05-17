@@ -1,87 +1,68 @@
 /**
  * @file sg03bd.h
- * @brief C wrapper for SLICOT routine SG03BD
- *
- * This file provides a C interface to the SLICOT routine SG03BD,
- * which solves stable continuous- or discrete-time generalized
- * Lyapunov equations for the Cholesky factor U of the solution
- * X = op(U)'*op(U).
+ * @brief Header for C wrapper of SLICOT routine SG03BD.
  */
 
- #ifndef SG03BD_H
- #define SG03BD_H
- 
- #include <stddef.h> // For size_t
- 
- #include "slicot_utils.h" 
+#ifndef SLICOT_WRAPPER_SG03BD_H
+#define SLICOT_WRAPPER_SG03BD_H
 
- #ifdef __cplusplus
- extern "C" {
- #endif
- 
- /**
-  * @brief Solves stable generalized Lyapunov equations for the Cholesky factor.
-  *
-  * Solves op(A)'*X*op(E) + op(E)'*X*op(A) = -scale^2*op(B)'*op(B) (continuous) or
-  * op(A)'*X*op(A) - op(E)'*X*op(E) = -scale^2*op(B)'*op(B) (discrete),
-  * for the Cholesky factor U, where X = op(U)'*op(U) and U is upper triangular.
-  * The pencil A - lambda*E must be stable (continuous) or convergent (discrete).
-  *
-  * @param[in] dico      Specifies the type of Lyapunov equation: 'C' or 'D'.
-  * @param[in] fact      Specifies if generalized Schur factorization is provided: 'F' or 'N'.
-  * @param[in] trans     Specifies the form of op(K): 'N' or 'T'.
-  * @param[in] n         Order of matrices A, E; columns of op(B). n >= 0.
-  * @param[in] m         Number of rows of op(B). m >= 0.
-  * @param[in,out] a     Double array, dimension (lda, n) or (n, lda).
-  * On entry, matrix A or Schur factor A_s. On exit (if fact='N'), Schur factor A_s.
-  * @param[in] lda       Leading dimension of A. >= max(1,n).
-  * @param[in,out] e     Double array, dimension (lde, n) or (n, lde).
-  * On entry, matrix E or Schur factor E_s. On exit (if fact='N'), Schur factor E_s.
-  * @param[in] lde       Leading dimension of E. >= max(1,n).
-  * @param[in,out] q     Double array, dimension (ldq, n) or (n, ldq).
-  * If fact='F', orthogonal matrix Q on entry. If fact='N', computed Q on exit.
-  * @param[in] ldq       Leading dimension of Q. >= max(1,n).
-  * @param[in,out] z     Double array, dimension (ldz, n) or (n, ldz).
-  * If fact='F', orthogonal matrix Z on entry. If fact='N', computed Z on exit.
-  * @param[in] ldz       Leading dimension of Z. >= max(1,n).
-  * @param[in,out] b     Double array. If trans='N', dimension (ldb, n) or (m, ldb).
-  * If trans='T', dimension (ldb, m) or (n, ldb).
-  * On entry, contains the matrix B.
-  * On exit, the leading N-by-N part contains the upper triangular Cholesky factor U.
-  * @param[in] ldb       Leading dimension of B.
-  * If trans='N', ldb >= max(1,m,n). If trans='T', ldb >= max(1,n).
-  * @param[out] scale    Scale factor (<= 1) applied to B to avoid overflow in U.
-  * @param[out] alphar   Double array, dimension (n). Real parts of generalized eigenvalues.
-  * @param[out] alphai   Double array, dimension (n). Imaginary parts of generalized eigenvalues.
-  * @param[out] beta     Double array, dimension (n). Scaling factors of generalized eigenvalues.
-  * @param[in] row_major Integer flag:
-  * = 0: Arrays a, e, q, z, b are column-major.
-  * = 1: Arrays a, e, q, z, b are row-major.
-  * (Arrays alphar, alphai, beta are 1D).
-  *
-  * @return info         Error indicator:
-  * = 0: successful exit
-  * < 0: if info = -i, the i-th argument had an illegal value.
-  * = 1: Pencil A - lambda*E is nearly singular. Perturbed solve.
-  * = 2: (fact='F') Input A_s is not upper quasi-triangular.
-  * = 3: (fact='F') A 2x2 block in pencil has non-complex eigenvalues.
-  * = 4: (fact='N') QZ algorithm failed.
-  * = 5: (dico='C') Pencil is not c-stable.
-  * = 6: (dico='D') Pencil is not d-stable.
-  * = 7: DSYEVX failed (discrete-time case only).
-  * Memory allocation errors may also be returned.
-  */
- SLICOT_EXPORT
- int slicot_sg03bd(char dico, char fact, char trans, int n, int m,
-                   double* a, int lda, double* e, int lde,
-                   double* q, int ldq, double* z, int ldz,
-                   double* b, int ldb, double* scale,
-                   double* alphar, double* alphai, double* beta,
-                   int row_major);
- 
- #ifdef __cplusplus
- }
- #endif
- 
- #endif /* SG03BD_H */
- 
+#include "slicot_utils.h" // Provides SLICOT_EXPORT macro
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Solves for Cholesky factor of generalized stable continuous- or
+ * discrete-time Lyapunov equations.
+ * @details This is a C wrapper for the SLICOT Fortran routine SG03BD.
+ * Workspace is allocated internally.
+ *
+ * @param dico_param Specifies equation type: 'C' (continuous), 'D' (discrete).
+ * @param fact_param Specifies if Schur factorization of (A,E) is supplied: 'N' (no), 'F' (yes).
+ * @param trans_param Specifies if transposed equation is solved: 'N' (no), 'T' (yes).
+ * @param n_param    (input) Order of matrix A. N >= 0.
+ * @param m_param    (input) Number of rows in op(B). M >= 0.
+ * @param a_io       (input/output) On entry, matrix A (N x N). If FACT='F', A_s.
+ * On exit (if FACT='N'), Schur factor A_s.
+ * @param lda        Leading dimension of A.
+ * @param e_io       (input/output) On entry, matrix E (N x N). If FACT='F', E_s.
+ * On exit (if FACT='N'), Schur factor E_s.
+ * @param lde        Leading dimension of E.
+ * @param q_io       (input/output) Orthogonal matrix Q from Schur factorization (N x N).
+ * Input if FACT='F', output if FACT='N'.
+ * @param ldq        Leading dimension of Q.
+ * @param z_io       (input/output) Orthogonal matrix Z from Schur factorization (N x N).
+ * Input if FACT='F', output if FACT='N'.
+ * @param ldz        Leading dimension of Z.
+ * @param b_in_u_out (input/output) On entry, matrix B (op(B) is M x N).
+ * On exit, the leading N x N part contains Cholesky factor U.
+ * @param ldb        Leading dimension of B/U. If TRANS='T', LDB >= max(1,N).
+ * If TRANS='N', LDB >= max(1,M,N) to accommodate input B (MxN) and output U (NxN).
+ * @param[out] scale_out Scale factor SCALE.
+ * @param[out] alphar_out Real parts of eigenvalues of A - lambda*E. Dim (N).
+ * @param[out] alfai_out Imaginary parts of eigenvalues. Dim (N).
+ * @param[out] beta_out Denominators of eigenvalues. Dim (N).
+ * @param row_major  Specifies matrix storage (0 for column-major, 1 for row-major).
+ *
+ * @return info Error indicator (see SLICOT documentation for SG03BD).
+ * SLICOT_MEMORY_ERROR (-1010) for internal memory allocation failure.
+ */
+SLICOT_EXPORT
+int slicot_sg03bd(
+    char dico_param, char fact_param, char trans_param,
+    int n_param, int m_param,
+    double* a_io, int lda,
+    double* e_io, int lde,
+    double* q_io, int ldq,
+    double* z_io, int ldz,
+    double* b_in_u_out, int ldb,
+    double* scale_out,
+    double* alphar_out, double* alfai_out, double* beta_out,
+    int row_major);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SLICOT_WRAPPER_SG03BD_H */
