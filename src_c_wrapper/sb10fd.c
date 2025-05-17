@@ -1,310 +1,284 @@
 /**
  * @file sb10fd.c
- * @brief C wrapper implementation for SLICOT routine SB10FD
- *
- * This file provides a C wrapper implementation for the SLICOT routine SB10FD,
- * which computes an H-infinity (sub)optimal state controller for a
- * continuous-time system.
+ * @brief C wrapper for SLICOT routine SB10FD.
+ * @details Computes the matrices of an H-infinity (sub)optimal n-state
+ * controller for a continuous-time system.
+ * Workspace (IWORK, DWORK, BWORK) is allocated internally by this wrapper.
+ * Input/output matrix format is handled via the row_major parameter.
  */
 
- #include <stdlib.h>
- #include <stddef.h> // For size_t
+#include <stdlib.h> // For malloc, free
+#include <string.h> // For memcpy, memset
+#include <math.h>   // For fabs, fmax
+#include "sb10fd.h" // Public header for this wrapper
+#include "slicot_utils.h"  // Provides CHECK_ALLOC, SLICOT_MEMORY_ERROR, MAX, MIN, transpose functions etc.
+#include "slicot_f77.h"    // Provides F77_FUNC macro for Fortran name mangling
 
- // Include the header file for this wrapper
- #include "sb10fd.h"
- // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
- #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
+/* External Fortran routine declaration */
+extern void F77_FUNC(sb10fd, SB10FD)(
+    const int* n_fortran, const int* m_fortran, const int* np_fortran, const int* ncon_fortran, const int* nmeas_fortran,
+    const double* gamma_fortran,
+    const double* a_fortran, const int* lda_fortran,
+    const double* b_fortran, const int* ldb_fortran,
+    const double* c_fortran, const int* ldc_fortran,
+    const double* d_fortran, const int* ldd_fortran,
+    double* ak_fortran, const int* ldak_fortran,
+    double* bk_fortran, const int* ldbk_fortran,
+    double* ck_fortran, const int* ldck_fortran,
+    double* dk_fortran, const int* lddk_fortran,
+    double* rcond_fortran, const double* tol_fortran,
+    int* iwork_fortran, double* dwork_fortran, const int* ldwork_fortran,
+    int* bwork_fortran, /* Fortran LOGICAL, C int */
+    int* info_fortran
+);
 
- /*
-  * Declare the external Fortran routine using the F77_FUNC macro.
-  * Input matrices are const. Output matrices AK..DK are non-const.
-  * Output scalar array is RCOND.
-  */
- extern void F77_FUNC(sb10fd, SB10FD)(
-     const int* n,           // INTEGER N
-     const int* m,           // INTEGER M
-     const int* np,          // INTEGER NP
-     const int* ncon,        // INTEGER NCON
-     const int* nmeas,       // INTEGER NMEAS
-     const double* gamma,    // DOUBLE PRECISION GAMMA (in)
-     const double* a,        // DOUBLE PRECISION A(LDA,*) (in)
-     const int* lda,         // INTEGER LDA
-     const double* b,        // DOUBLE PRECISION B(LDB,*) (in)
-     const int* ldb,         // INTEGER LDB
-     const double* c,        // DOUBLE PRECISION C(LDC,*) (in)
-     const int* ldc,         // INTEGER LDC
-     const double* d,        // DOUBLE PRECISION D(LDD,*) (in)
-     const int* ldd,         // INTEGER LDD
-     double* ak,             // DOUBLE PRECISION AK(LDAK,*) (output)
-     const int* ldak,        // INTEGER LDAK
-     double* bk,             // DOUBLE PRECISION BK(LDBK,*) (output)
-     const int* ldbk,        // INTEGER LDBK
-     double* ck,             // DOUBLE PRECISION CK(LDCK,*) (output)
-     const int* ldck,        // INTEGER LDCK
-     double* dk,             // DOUBLE PRECISION DK(LDDK,*) (output)
-     const int* lddk,        // INTEGER LDDK
-     double* rcond,          // DOUBLE PRECISION RCOND(4) (output)
-     const double* tol,      // DOUBLE PRECISION TOL (in)
-     int* iwork,             // INTEGER IWORK(*)
-     double* dwork,          // DOUBLE PRECISION DWORK(*)
-     const int* ldwork,      // INTEGER LDWORK
-     int* bwork,             // LOGICAL BWORK(*) -> int*
-     int* info               // INTEGER INFO (output)
- );
+/* C wrapper function definition */
+SLICOT_EXPORT
+int slicot_sb10fd(int n_param, int m_param, int np_param, int ncon_param, int nmeas_param,
+                  double gamma_val,
+                  double* a, int lda,
+                  double* b, int ldb,
+                  double* c, int ldc,
+                  double* d, int ldd,
+                  double* ak, int ldak,
+                  double* bk, int ldbk,
+                  double* ck, int ldck,
+                  double* dk, int lddk,
+                  double* rcond, double tol,
+                  int row_major)
+{
+    // 1. Variable declarations
+    int info = 0;
+    int *iwork = NULL;
+    double *dwork = NULL;
+    int *bwork = NULL; // For Fortran LOGICAL array
+    int liwork = 0;
+    int ldwork = 0;
+    int lbwork = 0;
 
+    // Pointers for column-major copies
+    double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL, *d_cm = NULL;
+    double *ak_cm = NULL, *bk_cm = NULL, *ck_cm = NULL, *dk_cm = NULL;
 
- /* C wrapper function definition */
- SLICOT_EXPORT
- int slicot_sb10fd(int n, int m, int np, int ncon, int nmeas,
-                   double gamma, const double* a, int lda,
-                   const double* b, int ldb, const double* c, int ldc,
-                   const double* d, int ldd, double* ak, int ldak,
-                   double* bk, int ldbk, double* ck, int ldck,
-                   double* dk, int lddk, double* rcond, double tol,
-                   int row_major)
- {
-     /* Local variables */
-     int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     int liwork = 0;  /* Fixed size */
-     int lbwork = 0;  /* Fixed size */
-     double* dwork = NULL;
-     int* iwork = NULL;
-     int* bwork = NULL; // Map LOGICAL to int
+    // Fortran-style leading dimensions
+    int lda_f, ldb_f, ldc_f, ldd_f;
+    int ldak_f, ldbk_f, ldck_f, lddk_f;
 
-     /* Pointers for column-major copies if needed */
-     double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL, *d_cm = NULL;
-     double *ak_cm = NULL, *bk_cm = NULL, *ck_cm = NULL, *dk_cm = NULL;
-     const double *a_ptr, *b_ptr, *c_ptr, *d_ptr; // Input pointers
-     double *ak_ptr, *bk_ptr, *ck_ptr, *dk_ptr; // Output pointers (K)
-     int lda_f, ldb_f, ldc_f, ldd_f, ldak_f, ldbk_f, ldck_f, lddk_f;
+    // Make a copy of gamma to pass by reference
+    double gamma_f = gamma_val;
+    double tol_f = tol;
 
 
-     /* --- Input Parameter Validation --- */
+    // 2. Input parameter validation (Check BEFORE allocating memory)
+    if (n_param < 0) { info = -1; goto cleanup; }
+    if (m_param < 0) { info = -2; goto cleanup; }
+    if (np_param < 0) { info = -3; goto cleanup; }
+    if (ncon_param < 0 || ncon_param > m_param) { info = -4; goto cleanup; }
+    if (nmeas_param < 0 || nmeas_param > np_param) { info = -5; goto cleanup; }
+    if (gamma_val < 0.0) { info = -6; goto cleanup; }
 
-     if (n < 0) { info = -1; goto cleanup; }
-     if (m < 0) { info = -2; goto cleanup; }
-     if (np < 0) { info = -3; goto cleanup; }
-     if (ncon < 0 || ncon > m) { info = -4; goto cleanup; }
-     if (nmeas < 0 || nmeas > np) { info = -5; goto cleanup; }
-     if (gamma < 0.0) { info = -6; goto cleanup; }
-     // TOL checked by Fortran
+    // Additional constraints from documentation
+    // NP-NMEAS >= NCON  => np_param - nmeas_param >= ncon_param
+    if (np_param - nmeas_param < ncon_param) { info = -4; goto cleanup; }
+    // M-NCON >= NMEAS   => m_param - ncon_param >= nmeas_param
+    if (m_param - ncon_param < nmeas_param) { info = -5; goto cleanup; }
 
-     // Calculate partition dimensions needed for validation/workspace
-     int m1 = m - ncon;      // Columns of B1, D11, D21
-     int np2 = nmeas;        // Rows of C2, D21, D22
-     int np1 = np - np2;     // Rows of C1, D11, D12
-     int m2 = ncon;          // Columns of B2, D12, D22
-
-     // Further dimension checks related to partitioning
-     if (np1 < 0) { info = -5; goto cleanup; } // Implied by nmeas <= np
-     if (m1 < 0)  { info = -4; goto cleanup; } // Implied by ncon <= m
-
-
-     // Check leading dimensions based on storage order
-     int min_lda_f = MAX(1, n);
-     int min_ldb_f = MAX(1, n);
-     int min_ldc_f = MAX(1, np);
-     int min_ldd_f = MAX(1, np);
-     int min_ldak_f = MAX(1, n);
-     int min_ldbk_f = MAX(1, n);
-     int min_ldck_f = MAX(1, ncon);
-     int min_lddk_f = MAX(1, ncon);
-
-     if (row_major) {
-         // For row-major C, LD is the number of columns
-         int min_lda_rm_cols = n;
-         int min_ldb_rm_cols = m;
-         int min_ldc_rm_cols = n;
-         int min_ldd_rm_cols = m;
-         int min_ldak_rm_cols = n;
-         int min_ldbk_rm_cols = nmeas;
-         int min_ldck_rm_cols = n;
-         int min_lddk_rm_cols = nmeas;
-
-         if (lda < min_lda_rm_cols) { info = -8; goto cleanup; }
-         if (ldb < min_ldb_rm_cols) { info = -10; goto cleanup; }
-         if (ldc < min_ldc_rm_cols) { info = -12; goto cleanup; }
-         if (ldd < min_ldd_rm_cols) { info = -14; goto cleanup; }
-         if (ldak < min_ldak_rm_cols) { info = -16; goto cleanup; }
-         if (ldbk < min_ldbk_rm_cols) { info = -18; goto cleanup; }
-         if (ldck < min_ldck_rm_cols) { info = -20; goto cleanup; }
-         if (lddk < min_lddk_rm_cols) { info = -22; goto cleanup; }
-     } else {
-         // For column-major C, LD is the number of rows (Fortran style)
-         if (lda < min_lda_f) { info = -8; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -10; goto cleanup; }
-         if (ldc < min_ldc_f) { info = -12; goto cleanup; }
-         if (ldd < min_ldd_f) { info = -14; goto cleanup; }
-         if (ldak < min_ldak_f) { info = -16; goto cleanup; }
-         if (ldbk < min_ldbk_f) { info = -18; goto cleanup; }
-         if (ldck < min_ldck_f) { info = -20; goto cleanup; }
-         if (lddk < min_lddk_f) { info = -22; goto cleanup; }
-     }
-
-     /* --- Prepare arrays for column-major format if using row-major --- */
-     size_t elem_size = sizeof(double);
-     if (row_major) {
-         /* Allocate memory for column-major copies */
-         size_t a_rows = n; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-         size_t b_rows = n; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-         size_t c_rows = np; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-         size_t d_rows = np; size_t d_cols = m; size_t d_size = d_rows * d_cols;
-         size_t ak_rows = n; size_t ak_cols = n; size_t ak_size = ak_rows * ak_cols;
-         size_t bk_rows = n; size_t bk_cols = nmeas; size_t bk_size = bk_rows * bk_cols;
-         size_t ck_rows = ncon; size_t ck_cols = n; size_t ck_size = ck_rows * ck_cols;
-         size_t dk_rows = ncon; size_t dk_cols = nmeas; size_t dk_size = dk_rows * dk_cols;
-
-         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
-         if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
-         if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
-         if (d_size > 0) { d_cm = (double*)malloc(d_size * elem_size); CHECK_ALLOC(d_cm); }
-         if (ak_size > 0) { ak_cm = (double*)malloc(ak_size * elem_size); CHECK_ALLOC(ak_cm); } // Output
-         if (bk_size > 0) { bk_cm = (double*)malloc(bk_size * elem_size); CHECK_ALLOC(bk_cm); } // Output
-         if (ck_size > 0) { ck_cm = (double*)malloc(ck_size * elem_size); CHECK_ALLOC(ck_cm); } // Output
-         if (dk_size > 0) { dk_cm = (double*)malloc(dk_size * elem_size); CHECK_ALLOC(dk_cm); } // Output
-
-         /* Transpose C inputs to Fortran copies */
-         if (a_size > 0) slicot_transpose_to_fortran(a, a_cm, n, n, elem_size);
-         if (b_size > 0) slicot_transpose_to_fortran(b, b_cm, n, m, elem_size);
-         if (c_size > 0) slicot_transpose_to_fortran(c, c_cm, np, n, elem_size);
-         if (d_size > 0) slicot_transpose_to_fortran(d, d_cm, np, m, elem_size);
-
-         /* Fortran leading dimensions */
-         lda_f = (a_rows > 0) ? a_rows : 1;
-         ldb_f = (b_rows > 0) ? b_rows : 1;
-         ldc_f = (c_rows > 0) ? c_rows : 1;
-         ldd_f = (d_rows > 0) ? d_rows : 1;
-         ldak_f = (ak_rows > 0) ? ak_rows : 1;
-         ldbk_f = (bk_rows > 0) ? bk_rows : 1;
-         ldck_f = (ck_rows > 0) ? ck_rows : 1;
-         lddk_f = (dk_rows > 0) ? dk_rows : 1;
-
-         /* Set pointers */
-         a_ptr = a_cm; b_ptr = b_cm; c_ptr = c_cm; d_ptr = d_cm;
-         ak_ptr = ak_cm; bk_ptr = bk_cm; ck_ptr = ck_cm; dk_ptr = dk_cm;
-
-     } else {
-         /* Column-major case - use original arrays */
-         lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd;
-         ldak_f = ldak; ldbk_f = ldbk; ldck_f = ldck; lddk_f = lddk;
-         a_ptr = (double*)a; b_ptr = (double*)b; c_ptr = (double*)c; d_ptr = (double*)d; // Cast away const for Fortran call
-         ak_ptr = ak; bk_ptr = bk; ck_ptr = ck; dk_ptr = dk;
-     }
+    // Check pointers for required arrays
+    // For N=0, A,B,C,AK,BK,CK might be NULL if their dimensions involving N become zero.
+    // D and DK depend on NP, M, NCON, NMEAS.
+    if (a == NULL && n_param > 0) { info = -7; goto cleanup; }
+    if (b == NULL && n_param > 0 && m_param > 0) { info = -9; goto cleanup; }
+    if (c == NULL && np_param > 0 && n_param > 0) { info = -11; goto cleanup; }
+    if (d == NULL && np_param > 0 && m_param > 0) { info = -13; goto cleanup; } // D is NPxM
+    if (ak == NULL && n_param > 0) { info = -14; goto cleanup; }
+    if (bk == NULL && n_param > 0 && nmeas_param > 0) { info = -16; goto cleanup; }
+    if (ck == NULL && ncon_param > 0 && n_param > 0) { info = -18; goto cleanup; }
+    if (dk == NULL && ncon_param > 0 && nmeas_param > 0) { info = -20; goto cleanup; } // DK is NCONxNMEAS
+    if (rcond == NULL) { info = -21; goto cleanup; }
 
 
-     /* --- Workspace Allocation --- */
+    // Check leading dimensions
+    int min_lda_f = MAX(1, n_param);
+    int min_ldb_f = MAX(1, n_param); // B is N x M, Fortran LDB is rows (N)
+    int min_ldc_f = MAX(1, np_param); // C is NP x N, Fortran LDC is rows (NP)
+    int min_ldd_f = MAX(1, np_param); // D is NP x M, Fortran LDD is rows (NP)
+    int min_ldak_f = MAX(1, n_param);
+    int min_ldbk_f = MAX(1, n_param); // BK is N x NMEAS, Fortran LDBK is rows (N)
+    int min_ldck_f = MAX(1, ncon_param); // CK is NCON x N, Fortran LDCK is rows (NCON)
+    int min_lddk_f = MAX(1, ncon_param); // DK is NCON x NMEAS, Fortran LDDK is rows (NCON)
 
-     // Determine fixed workspace sizes
-     liwork = MAX(1, MAX(2 * MAX(n, MAX(m1, MAX(np1, MAX(m2, np2)))), n * n));
-     lbwork = MAX(1, 2 * n);
+    if (row_major) {
+        // C LDA is number of columns
+        if (n_param > 0 && lda < n_param) { info = -8; goto cleanup; } // A is NxN
+        if (n_param > 0 && m_param > 0 && ldb < m_param) { info = -10; goto cleanup; } // B is NxM
+        if (np_param > 0 && n_param > 0 && ldc < n_param) { info = -12; goto cleanup; } // C is NPxN
+        if (np_param > 0 && m_param > 0 && ldd < m_param) { info = -13; goto cleanup; } // D is NPxM
 
-     // Allocate IWORK and BWORK
-     iwork = (int*)malloc((size_t)liwork * sizeof(int));
-     CHECK_ALLOC(iwork);
-     bwork = (int*)malloc((size_t)lbwork * sizeof(int)); // Use int for LOGICAL
-     CHECK_ALLOC(bwork);
+        if (n_param > 0 && ldak < n_param) { info = -15; goto cleanup; } // AK is NxN
+        if (n_param > 0 && nmeas_param > 0 && ldbk < nmeas_param) { info = -17; goto cleanup; } // BK is NxNMEAS
+        if (ncon_param > 0 && n_param > 0 && ldck < n_param) { info = -19; goto cleanup; } // CK is NCONxN
+        if (ncon_param > 0 && nmeas_param > 0 && lddk < nmeas_param) { info = -20; goto cleanup; } // DK is NCONxNMEAS
+    } else { // Column-major C (Fortran-style LDs)
+        if (n_param > 0 && lda < min_lda_f) { info = -8; goto cleanup; }
+        if (n_param > 0 && m_param > 0 && ldb < min_ldb_f) { info = -10; goto cleanup; }
+        if (np_param > 0 && n_param > 0 && ldc < min_ldc_f) { info = -12; goto cleanup; }
+        if (np_param > 0 && m_param > 0 && ldd < min_ldd_f) { info = -13; goto cleanup; }
 
-     // Calculate required DWORK size directly based on formula
-     // M1 = M - M2, NP1 = NP - NP2, D1 = NP1 - M2, D2 = M1 - NP2
-     int d1 = np1 - m2;     // NP1 - M2
-     int d2 = m1 - np2;     // M1 - NP2
-     
-     // Calculate LW1 through LW6 components
-     int lw1 = (n + np1 + 1) * (n + m2) + 
-               MAX(3 * (n + m2) + n + np1, 5 * (n + m2));
-     
-     int lw2 = (n + np2) * (n + m1 + 1) + 
-               MAX(3 * (n + np2) + n + m1, 5 * (n + np2));
-     
-     int lw3_temp1 = np1 * MAX(n, m1);
-     int lw3_temp2 = 3 * m2 + np1;
-     int lw3_temp3 = 5 * m2;
-     int lw3 = m2 + np1 * np1 + MAX(MAX(lw3_temp1, lw3_temp2), lw3_temp3);
-     
-     int lw4_temp1 = MAX(n, np1) * m1;
-     int lw4_temp2 = 3 * np2 + m1;
-     int lw4_temp3 = 5 * np2;
-     int lw4 = np2 + m1 * m1 + MAX(MAX(lw4_temp1, lw4_temp2), lw4_temp3);
-     
-     // LW5 calculation
-     int lw5_temp1 = n * m;
-     int lw5_temp2 = 10 * n * n + 12 * n + 5;
-     int lw5_temp3 = 3 * n * n + MAX(lw5_temp1, lw5_temp2);
-     int lw5_temp4 = m * m + MAX(2 * m1, lw5_temp3);
-     
-     int lw5_temp5 = n * np;
-     int lw5_temp6 = 10 * n * n + 12 * n + 5;
-     int lw5_temp7 = 3 * n * n + MAX(lw5_temp5, lw5_temp6);
-     int lw5_temp8 = np * np + MAX(2 * np1, lw5_temp7);
-     
-     int lw5 = 2 * n * n + n * (m + np) + MAX(1, MAX(lw5_temp4, lw5_temp8));
-     
-     // LW6 calculation
-     int lw6_temp1 = 2 * d1;
-     int lw6_temp2 = (d1 + d2) * np2;
-     int lw6_temp3 = d1 * d1 + MAX(lw6_temp1, lw6_temp2);
-     
-     int lw6_temp4 = 2 * d2;
-     int lw6_temp5 = d2 * m2;
-     int lw6_temp6 = d2 * d2 + MAX(lw6_temp4, lw6_temp5);
-     
-     int lw6_temp7 = m2 * m2 + 3 * m2;
-     int lw6_temp8 = MAX(np2, n);
-     int lw6_temp9 = np2 * (2 * np2 + m2 + lw6_temp8);
-     int lw6_temp10 = m2 * np2 + MAX(lw6_temp7, lw6_temp9);
-     int lw6_temp11 = 2 * n * m2;
-     int lw6_temp12 = n * (2 * np2 + m2) + MAX(lw6_temp11, lw6_temp10);
-     
-     int lw6_temp13 = MAX(MAX(lw6_temp3, lw6_temp6), MAX(3 * n, lw6_temp12));
-     int lw6 = 2 * n * n + n * (m + np) + 
-               MAX(1, m2 * np2 + np2 * np2 + m2 * m2 + lw6_temp13);
-     
-     // Final LDWORK calculation
-     int base_size = n * m + np * (n + m) + m2 * m2 + np2 * np2;
-     
-     // Break down the nested MAX calls into binary operations
-     int lw1_lw2 = MAX(lw1, lw2);
-     int lw3_lw4 = MAX(lw3, lw4);
-     int lw12_lw34 = MAX(lw1_lw2, lw3_lw4);
-     int lw5_lw6 = MAX(lw5, lw6);
-     int max_lw = MAX(lw12_lw34, lw5_lw6);
-     ldwork = base_size + MAX(1, max_lw);
+        if (n_param > 0 && ldak < min_ldak_f) { info = -15; goto cleanup; }
+        if (n_param > 0 && nmeas_param > 0 && ldbk < min_ldbk_f) { info = -17; goto cleanup; }
+        if (ncon_param > 0 && n_param > 0 && ldck < min_ldck_f) { info = -19; goto cleanup; }
+        if (ncon_param > 0 && nmeas_param > 0 && lddk < min_lddk_f) { info = -20; goto cleanup; }
+    }
+    if (info != 0) { goto cleanup; }
 
-     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
+    // 3. Internal Workspace Allocation
+    // LIWORK = max(2*max(N,M-NCON,NP-NMEAS,NCON),N*N)
+    int m1_ws = m_param - ncon_param;  // M1 in Fortran doc for workspace
+    int np1_ws = np_param - nmeas_param; // NP1 in Fortran doc for workspace
+    liwork = MAX(1, MAX(2 * MAX(n_param, MAX(m1_ws, MAX(np1_ws, ncon_param))), n_param * n_param));
+    iwork = (int*)malloc((size_t)liwork * sizeof(int));
+    CHECK_ALLOC(iwork);
+
+    // BWORK size is 2*N
+    lbwork = 2 * n_param;
+    if (n_param > 0) { // Only allocate if N > 0
+        bwork = (int*)malloc((size_t)lbwork * sizeof(int));
+        CHECK_ALLOC(bwork);
+    } else {
+        bwork = NULL; 
+    }
+    
+    // LDWORK calculation based on SLICOT documentation / Slycot wrapper (minimum size formula)
+    // Renaming to avoid conflict with Fortran doc names if they were macros
+    int N_ws = n_param;
+    int M_ws = m_param;
+    int NP_ws = np_param;
+    int M2_ws = ncon_param;  // NCON
+    int NP2_ws = nmeas_param; // NMEAS
+
+    int m1_fmla = M_ws - M2_ws;   // M1 in formula (M - NCON)
+    int np1_fmla = NP_ws - NP2_ws; // NP1 in formula (NP - NMEAS)
+    
+    int d1_fmla = np1_fmla - M2_ws;
+    int d2_fmla = m1_fmla - NP2_ws;
+
+    int lw1, lw2, lw3, lw4, lw5, lw6;
+
+    lw1 = (N_ws + np1_fmla + 1)*(N_ws + M2_ws) + MAX(3*(N_ws + M2_ws) + N_ws + np1_fmla, 5*(N_ws + M2_ws));
+    lw2 = (N_ws + NP2_ws)*(N_ws + m1_fmla + 1) + MAX(3*(N_ws + NP2_ws) + N_ws + m1_fmla, 5*(N_ws + NP2_ws));
+    lw3 = M2_ws + np1_fmla*np1_fmla + MAX(np1_fmla*MAX(N_ws,m1_fmla), MAX(3*M2_ws+np1_fmla,5*M2_ws));
+    lw4 = NP2_ws + m1_fmla*m1_fmla + MAX(MAX(N_ws,np1_fmla)*m1_fmla, MAX(3*NP2_ws+m1_fmla,5*NP2_ws));
+    
+    int term_lw5_1 = M_ws*M_ws + MAX(2*m1_fmla, 3*N_ws*N_ws + MAX(N_ws*M_ws, 10*N_ws*N_ws + 12*N_ws + 5));
+    int term_lw5_2 = NP_ws*NP_ws + MAX(2*np1_fmla, 3*N_ws*N_ws + MAX(N_ws*NP_ws, 10*N_ws*N_ws + 12*N_ws + 5));
+    lw5 = 2*N_ws*N_ws + N_ws*(M_ws+NP_ws) + MAX(1, MAX(term_lw5_1, term_lw5_2));
+
+    int term_lw6_1 = d1_fmla*d1_fmla + MAX(2*d1_fmla, (d1_fmla+d2_fmla)*NP2_ws);
+    int term_lw6_2 = d2_fmla*d2_fmla + MAX(2*d2_fmla, d2_fmla*M2_ws);
+    int term_lw6_3 = N_ws*(2*NP2_ws + M2_ws) + MAX(2*N_ws*M2_ws, M2_ws*NP2_ws + MAX(M2_ws*M2_ws+3*M2_ws, NP2_ws*(2*NP2_ws + M2_ws + MAX(NP2_ws,N_ws))));
+    lw6 = 2*N_ws*N_ws + N_ws*(M_ws+NP_ws) + MAX(1, M2_ws*NP2_ws + NP2_ws*NP2_ws + M2_ws*M2_ws + MAX(term_lw6_1, MAX(term_lw6_2, MAX(3*N_ws, term_lw6_3))));
+    
+    ldwork = N_ws*M_ws + NP_ws*(N_ws+M_ws) + M2_ws*M2_ws + NP2_ws*NP2_ws + MAX(1, MAX(lw1, MAX(lw2, MAX(lw3, MAX(lw4, MAX(lw5, lw6))))));
+    ldwork = MAX(1, ldwork); // Ensure ldwork is at least 1, especially if all dimensions are 0.
 
 
-     /* --- Call the computational routine --- */
-     F77_FUNC(sb10fd, SB10FD)(&n, &m, &np, &ncon, &nmeas, &gamma,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
-                              ak_ptr, &ldak_f, bk_ptr, &ldbk_f, ck_ptr, &ldck_f, dk_ptr, &lddk_f,
-                              rcond, &tol, iwork, dwork, &ldwork, bwork, &info);
+    dwork = (double*)malloc((size_t)ldwork * sizeof(double));
+    CHECK_ALLOC(dwork);
 
-     /* --- Copy results back to row-major format if needed --- */
-     if (row_major && info == 0) {
-         // Recalculate sizes needed for copy-back
-         size_t ak_rows = n; size_t ak_cols = n; size_t ak_size = ak_rows * ak_cols;
-         size_t bk_rows = n; size_t bk_cols = nmeas; size_t bk_size = bk_rows * bk_cols;
-         size_t ck_rows = ncon; size_t ck_cols = n; size_t ck_size = ck_rows * ck_cols;
-         size_t dk_rows = ncon; size_t dk_cols = nmeas; size_t dk_size = dk_rows * dk_cols;
 
-         if (ak_size > 0) slicot_transpose_to_c(ak_cm, ak, ak_rows, ak_cols, elem_size);
-         if (bk_size > 0) slicot_transpose_to_c(bk_cm, bk, bk_rows, bk_cols, elem_size);
-         if (ck_size > 0) slicot_transpose_to_c(ck_cm, ck, ck_rows, ck_cols, elem_size);
-         if (dk_size > 0) slicot_transpose_to_c(dk_cm, dk, dk_rows, dk_cols, elem_size);
-         // RCOND modified directly
-     }
-     // In column-major case, output arrays modified in place.
+    // 4. Memory allocation for column-major copies (if row_major)
+    size_t a_size_elem = (size_t)n_param * n_param; if (n_param == 0) a_size_elem = 0;
+    size_t b_size_elem = (size_t)n_param * m_param; if (n_param == 0 || m_param == 0) b_size_elem = 0;
+    size_t c_size_elem = (size_t)np_param * n_param; if (np_param == 0 || n_param == 0) c_size_elem = 0;
+    size_t d_size_elem = (size_t)np_param * m_param; if (np_param == 0 || m_param == 0) d_size_elem = 0;
 
- cleanup:
-     /* --- Cleanup --- */
-     free(dwork);
-     free(iwork);
-     free(bwork);
-     free(a_cm); free(b_cm); free(c_cm); free(d_cm);
-     free(ak_cm); free(bk_cm); free(ck_cm); free(dk_cm);
+    size_t ak_size_elem = (size_t)n_param * n_param; if (n_param == 0) ak_size_elem = 0;
+    size_t bk_size_elem = (size_t)n_param * nmeas_param; if (n_param == 0 || nmeas_param == 0) bk_size_elem = 0;
+    size_t ck_size_elem = (size_t)ncon_param * n_param; if (ncon_param == 0 || n_param == 0) ck_size_elem = 0;
+    size_t dk_size_elem = (size_t)ncon_param * nmeas_param; if (ncon_param == 0 || nmeas_param == 0) dk_size_elem = 0;
 
-     return info;
- }
+    if (row_major) {
+        if (a_size_elem > 0) { a_cm = (double*)malloc(a_size_elem * sizeof(double)); CHECK_ALLOC(a_cm); }
+        if (b_size_elem > 0) { b_cm = (double*)malloc(b_size_elem * sizeof(double)); CHECK_ALLOC(b_cm); }
+        if (c_size_elem > 0) { c_cm = (double*)malloc(c_size_elem * sizeof(double)); CHECK_ALLOC(c_cm); }
+        if (d_size_elem > 0) { d_cm = (double*)malloc(d_size_elem * sizeof(double)); CHECK_ALLOC(d_cm); }
+
+        if (ak_size_elem > 0) { ak_cm = (double*)malloc(ak_size_elem * sizeof(double)); CHECK_ALLOC(ak_cm); }
+        if (bk_size_elem > 0) { bk_cm = (double*)malloc(bk_size_elem * sizeof(double)); CHECK_ALLOC(bk_cm); }
+        if (ck_size_elem > 0) { ck_cm = (double*)malloc(ck_size_elem * sizeof(double)); CHECK_ALLOC(ck_cm); }
+        if (dk_size_elem > 0) { dk_cm = (double*)malloc(dk_size_elem * sizeof(double)); CHECK_ALLOC(dk_cm); }
+    }
+
+    // 5. Prepare Fortran parameters and perform conversions
+    double* a_ptr = a, *b_ptr = b, *c_ptr = c, *d_ptr = d;
+    double* ak_ptr = ak, *bk_ptr = bk, *ck_ptr = ck, *dk_ptr = dk;
+
+    lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd;
+    ldak_f = ldak; ldbk_f = ldbk; ldck_f = ldck; lddk_f = lddk;
+
+    if (row_major) {
+        lda_f = MAX(1, n_param);    // Fortran LDA is rows for A (NxN)
+        ldb_f = MAX(1, n_param);    // Fortran LDB is rows for B (NxM)
+        ldc_f = MAX(1, np_param);   // Fortran LDC is rows for C (NPxN)
+        ldd_f = MAX(1, np_param);   // Fortran LDD is rows for D (NPxM)
+        ldak_f = MAX(1, n_param);   // Fortran LDAK is rows for AK (NxN)
+        ldbk_f = MAX(1, n_param);   // Fortran LDBK is rows for BK (NxNMEAS)
+        ldck_f = MAX(1, ncon_param);// Fortran LDCK is rows for CK (NCONxN)
+        lddk_f = MAX(1, ncon_param);// Fortran LDDK is rows for DK (NCONxNMEAS)
+
+        if (a_size_elem > 0) { slicot_transpose_to_fortran_with_ld(a, a_cm, n_param, n_param, lda, lda_f, sizeof(double)); a_ptr = a_cm; } else { a_ptr = NULL; }
+        if (b_size_elem > 0) { slicot_transpose_to_fortran_with_ld(b, b_cm, n_param, m_param, ldb, ldb_f, sizeof(double)); b_ptr = b_cm; } else { b_ptr = NULL; }
+        if (c_size_elem > 0) { slicot_transpose_to_fortran_with_ld(c, c_cm, np_param, n_param, ldc, ldc_f, sizeof(double)); c_ptr = c_cm; } else { c_ptr = NULL; }
+        if (d_size_elem > 0) { slicot_transpose_to_fortran_with_ld(d, d_cm, np_param, m_param, ldd, ldd_f, sizeof(double)); d_ptr = d_cm; } else { d_ptr = NULL; }
+
+        ak_ptr = (ak_size_elem > 0) ? ak_cm : NULL;
+        bk_ptr = (bk_size_elem > 0) ? bk_cm : NULL;
+        ck_ptr = (ck_size_elem > 0) ? ck_cm : NULL;
+        dk_ptr = (dk_size_elem > 0) ? dk_cm : NULL;
+    } else { 
+        // For column major C, ensure NULL pointers are passed if dimensions are zero
+        if (a_size_elem == 0) a_ptr = NULL;
+        if (b_size_elem == 0) b_ptr = NULL;
+        if (c_size_elem == 0) c_ptr = NULL;
+        if (d_size_elem == 0) d_ptr = NULL;
+        if (ak_size_elem == 0) ak_ptr = NULL;
+        if (bk_size_elem == 0) bk_ptr = NULL;
+        if (ck_size_elem == 0) ck_ptr = NULL;
+        if (dk_size_elem == 0) dk_ptr = NULL;
+    }
+
+    // Prepare int params for Fortran call
+    int n_f_call = n_param, m_f_call = m_param, np_f_call = np_param;
+    int ncon_f_call = ncon_param, nmeas_f_call = nmeas_param;
+    int ldwork_f_call = ldwork;
+
+
+    // 7. Call Fortran function
+    F77_FUNC(sb10fd, SB10FD)(&n_f_call, &m_f_call, &np_f_call, &ncon_f_call, &nmeas_f_call, &gamma_f,
+                             a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
+                             ak_ptr, &ldak_f, bk_ptr, &ldbk_f, ck_ptr, &ldck_f, dk_ptr, &lddk_f,
+                             rcond, &tol_f, iwork, dwork, &ldwork_f_call, bwork, &info);
+
+    // 8. Convert results back to row-major (if needed)
+    if (row_major && info == 0) {
+        if (ak_size_elem > 0) { slicot_transpose_to_c_with_ld(ak_cm, ak, n_param, n_param, ldak_f, ldak, sizeof(double)); }
+        if (bk_size_elem > 0) { slicot_transpose_to_c_with_ld(bk_cm, bk, n_param, nmeas_param, ldbk_f, ldbk, sizeof(double)); }
+        if (ck_size_elem > 0) { slicot_transpose_to_c_with_ld(ck_cm, ck, ncon_param, n_param, ldck_f, ldck, sizeof(double)); }
+        if (dk_size_elem > 0) { slicot_transpose_to_c_with_ld(dk_cm, dk, ncon_param, nmeas_param, lddk_f, lddk, sizeof(double)); }
+    }
+
+cleanup:
+    free(iwork);
+    free(dwork);
+    free(bwork);
+
+    if (row_major) {
+        free(a_cm); free(b_cm); free(c_cm); free(d_cm);
+        free(ak_cm); free(bk_cm); free(ck_cm); free(dk_cm);
+    }
+    
+    if (info == SLICOT_MEMORY_ERROR) {
+       // fprintf(stderr, "Error: Memory allocation failed in slicot_sb10fd.\n");
+    }
+    return info;
+}
