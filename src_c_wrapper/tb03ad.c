@@ -1,298 +1,330 @@
 /**
  * @file tb03ad.c
- * @brief C wrapper implementation for SLICOT routine TB03AD
- *
- * This file provides a C wrapper implementation for the SLICOT routine TB03AD,
- * which finds a relatively prime left or right polynomial matrix
- * representation equivalent to a given state-space representation.
+ * @brief C wrapper for SLICOT routine TB03AD.
  */
 
- #include <stdlib.h>
- #include <ctype.h>
- #include <string.h> // For memcpy
- #include <stddef.h> // For size_t
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
+#include <stdio.h>
 
- // Include the header file for this wrapper
- // #include "tb03ad.h" // Assuming a header file exists
- // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
- #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
+#include "tb03ad.h"
+#include "slicot_utils.h"
+#include "slicot_f77.h"
 
- /*
-  * Declare the external Fortran routine using the F77_FUNC macro.
-  * Note the 3D arrays PCOEFF, QCOEFF, VCOEFF are passed as flat pointers.
-  * Hidden lengths for CHARACTER arguments are added at the end.
-  */
- extern void F77_FUNC(tb03ad, TB03AD)(
-     const char* leri,       // CHARACTER*1 LERI
-     const char* equil,      // CHARACTER*1 EQUIL
-     const int* n,           // INTEGER N
-     const int* m,           // INTEGER M
-     const int* p,           // INTEGER P
-     double* a,              // DOUBLE PRECISION A(LDA,*) (in/out)
-     const int* lda,         // INTEGER LDA
-     double* b,              // DOUBLE PRECISION B(LDB,*) (in/out) - Needs workspace
-     const int* ldb,         // INTEGER LDB
-     double* c,              // DOUBLE PRECISION C(LDC,*) (in/out) - Needs workspace
-     const int* ldc,         // INTEGER LDC
-     double* d,              // DOUBLE PRECISION D(LDD,*) (in) - Fortran modifies workspace part
-     const int* ldd,         // INTEGER LDD
-     int* nr,                // INTEGER NR (output)
-     int* index,             // INTEGER INDEX(*) (output)
-     double* pcoeff,         // DOUBLE PRECISION PCOEFF(LDPCO1,LDPCO2,*) (output)
-     const int* ldpco1,      // INTEGER LDPCO1
-     const int* ldpco2,      // INTEGER LDPCO2
-     double* qcoeff,         // DOUBLE PRECISION QCOEFF(LDQCO1,LDQCO2,*) (output) - Needs workspace
-     const int* ldqco1,      // INTEGER LDQCO1
-     const int* ldqco2,      // INTEGER LDQCO2
-     double* vcoeff,         // DOUBLE PRECISION VCOEFF(LDVCO1,LDVCO2,*) (output)
-     const int* ldvco1,      // INTEGER LDVCO1
-     const int* ldvco2,      // INTEGER LDVCO2
-     const double* tol,      // DOUBLE PRECISION TOL
-     int* iwork,             // INTEGER IWORK(*) (output - block orders)
-     double* dwork,          // DOUBLE PRECISION DWORK(*)
-     const int* ldwork,      // INTEGER LDWORK
-     int* info,              // INTEGER INFO (output)
-     int leri_len,           // Hidden length
-     int equil_len           // Hidden length
- );
+/* External Fortran routine declaration */
+extern void F77_FUNC(tb03ad, TB03AD)(
+    const char* leri, const char* equil,
+    const int* n, const int* m, const int* p,
+    double* a, const int* lda,
+    double* b, const int* ldb,
+    double* c, const int* ldc,
+    const double* d, const int* ldd,
+    int* nr,
+    int* index,
+    double* pcoeff, const int* ldpco1, const int* ldpco2,
+    double* qcoeff, const int* ldqco1, const int* ldqco2,
+    double* vcoeff, const int* ldvco1, const int* ldvco2,
+    const double* tol,
+    int* iwork, double* dwork, const int* ldwork,
+    int* info,
+    size_t leri_len, size_t equil_len
+);
 
+// Helper function to transpose a 3D matrix block from Fortran column-major to C row-major
+static void transpose_3d_f2c(const double* f_arr_cm, double* c_arr_rm,
+                             int d1, int d2, int d3,
+                             int ld1_f, int ld2_f, /* Fortran leading dims of f_arr_cm */
+                             int ld1_c, int ld2_c  /* C logical dims for indexing c_arr_rm (d1,d2,d3 used for iteration) */
+                            ) {
+    if (!f_arr_cm || !c_arr_rm || d1 == 0 || d2 == 0 || d3 == 0) return;
+    for (int k = 0; k < d3; ++k) {     // Outermost loop in Fortran (slowest in memory for slice)
+        for (int j = 0; j < d2; ++j) { // Middle loop in Fortran
+            for (int i = 0; i < d1; ++i) { // Innermost loop in Fortran (fastest in memory for slice)
+                // Fortran index: f_arr_cm[i + j*ld1_f + k*ld1_f*ld2_f]
+                // C row-major index for c_arr_rm[i][j][k] where k is fastest:
+                // c_arr_rm[i*ld2_c*d3 + j*d3 + k]
+                // Assuming ld1_c = d1, ld2_c = d2 for the C output block
+                c_arr_rm[i * ld2_c * d3 + j * d3 + k] = f_arr_cm[i + j * ld1_f + k * ld1_f * ld2_f];
+            }
+        }
+    }
+}
 
- /* C wrapper function definition */
- SLICOT_EXPORT
- int slicot_tb03ad(char leri, char equil, int n, int m, int p,
-                   double* a, int lda, double* b, int ldb,
-                   double* c, int ldc, double* d, int ldd,
-                   int* nr, int* index,
-                   double* pcoeff, int ldpco1, int ldpco2,
-                   double* qcoeff, int ldqco1, int ldqco2,
-                   double* vcoeff, int ldvco1, int ldvco2,
-                   double tol, int row_major)
- {
-     /* Local variables */
-     int info = 0;
-     int ldwork = -1; /* Use -1 for workspace query */
-     double dwork_query;
-     double* dwork = NULL;
-     int* iwork = NULL;
-     int iwork_size = 0;
-     int kpcoef = 0; // Max degree + 1 for output arrays
-
-     const int leri_len = 1, equil_len = 1;
-     char leri_upper = toupper(leri);
-     char equil_upper = toupper(equil);
-
-     /* Pointers for column-major copies if needed */
-     double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL, *d_cm = NULL;
-     double *pcoeff_cm = NULL, *qcoeff_cm = NULL, *vcoeff_cm = NULL;
-     double *a_ptr, *b_ptr, *c_ptr, *d_ptr;
-     double *pcoeff_ptr, *qcoeff_ptr, *vcoeff_ptr;
-     int lda_f, ldb_f, ldc_f, ldd_f;
-     int ldpco1_f, ldpco2_f, ldqco1_f, ldqco2_f, ldvco1_f, ldvco2_f;
+// Helper function to transpose a 3D matrix block from C row-major to Fortran column-major
+static void transpose_3d_c2f(const double* c_arr_rm, double* f_arr_cm,
+                             int d1, int d2, int d3,
+                             int ld1_c, int ld2_c, /* C logical dims for indexing c_arr_rm */
+                             int ld1_f, int ld2_f  /* Fortran leading dims of f_arr_cm */
+                            ) {
+    if (!c_arr_rm || !f_arr_cm || d1 == 0 || d2 == 0 || d3 == 0) return;
+    for (int k = 0; k < d3; ++k) {
+        for (int j = 0; j < d2; ++j) {
+            for (int i = 0; i < d1; ++i) {
+                f_arr_cm[i + j * ld1_f + k * ld1_f * ld2_f] = c_arr_rm[i * ld2_c * d3 + j * d3 + k];
+            }
+        }
+    }
+}
 
 
-     /* Determine dimensions based on LERI */
-     int porm = (leri_upper == 'L') ? p : m; // Size for INDEX, PCOEFF dims
-     int porp = (leri_upper == 'L') ? m : p; // Size for QCOEFF dims
-     int maxmp = MAX(m, p);                  // Max dimension for workspace arrays B, C, D
+SLICOT_EXPORT
+int slicot_tb03ad(
+    char leri_param, char equil_param,
+    int n_param, int m_param, int p_param,
+    double* a_io, int lda_c,
+    double* b_io, int ldb_c,
+    double* c_io, int ldc_c,
+    const double* d_in, int ldd_c,
+    int* nr_out,
+    int* index_out,
+    double* pcoeff_out, int ldpco1_c, int ldpco2_c,
+    double* qcoeff_out, int ldqco1_c, int ldqco2_c,
+    double* vcoeff_out, int ldvco1_c, int ldvco2_c,
+    double tol_param,
+    int row_major)
+{
+    int info = 0;
+    char leri_f = toupper(leri_param);
+    char equil_f = toupper(equil_param);
 
-     /* --- Input Parameter Validation --- */
-     if (leri_upper != 'L' && leri_upper != 'R') { info = -1; goto cleanup; }
-     if (equil_upper != 'S' && equil_upper != 'N') { info = -2; goto cleanup; }
-     if (n < 0) { info = -3; goto cleanup; }
-     if (m < 0) { info = -4; goto cleanup; }
-     if (p < 0) { info = -5; goto cleanup; }
-     // TOL check done by Fortran
+    // Workspace
+    int *iwork = NULL;
+    double *dwork = NULL;
+    int liwork, ldwork_val;
 
-     // Check leading dimensions based on storage order
-     // Note: Fortran workspace requirements may mandate larger LDs than input/output sizes.
-     int min_lda_f = MAX(1, n);
-     int min_ldb_f = MAX(1, n); // Needs workspace if p > m
-     int min_ldc_f = MAX(1, maxmp); // Needs workspace if m > p
-     int min_ldd_f = MAX(1, maxmp); // Needs workspace
+    // Column-major copies
+    double *a_cm = NULL, *b_cm = NULL, *c_cm = NULL, *d_cm = NULL;
+    double *pcoeff_cm = NULL, *qcoeff_cm = NULL, *vcoeff_cm = NULL;
 
-     // Output array dimensions validation (minimal checks)
-     int min_ldpco1_f = MAX(1, porm);
-     int min_ldpco2_f = MAX(1, porm);
-     int min_ldqco1_f = (leri_upper == 'L') ? MAX(1, p) : MAX(1, maxmp); // Needs workspace
-     int min_ldqco2_f = (leri_upper == 'L') ? MAX(1, m) : MAX(1, maxmp); // Needs workspace
-     int min_ldvco1_f = MAX(1, porm);
-     int min_ldvco2_f = MAX(1, n); // Max dimension needed is N
+    // Fortran leading dimensions
+    int lda_f, ldb_f, ldc_f, ldd_f;
+    int ldpco1_f, ldpco2_f, ldqco1_f, ldqco2_f, ldvco1_f, ldvco2_f;
 
-     if (row_major) {
-         // For row-major C, LD is the number of columns
-         int min_lda_rm_cols = n;
-         int min_ldb_rm_cols = maxmp; // Needs workspace
-         int min_ldc_rm_cols = n;
-         int min_ldd_rm_cols = maxmp; // Needs workspace
+    // Determine porm, porp based on LERI
+    int porm, porp;
+    if (leri_f == 'L') {
+        porm = p_param;
+        porp = m_param;
+    } else if (leri_f == 'R') {
+        porm = m_param;
+        porp = p_param;
+    } else {
+        info = -1; goto cleanup; // Invalid LERI
+    }
 
-         // Check 3D array dimensions (interpreted as rows/cols of each slice)
-         int min_ldpco1_rm_rows = porm;
-         int min_ldpco2_rm_cols = porm;
-         int min_ldqco1_rm_rows = (leri_upper == 'L') ? p : maxmp;
-         int min_ldqco2_rm_cols = (leri_upper == 'L') ? m : maxmp;
-         int min_ldvco1_rm_rows = porm;
-         int min_ldvco2_rm_cols = n; // Max dimension needed is N
+    // --- Parameter Validation ---
+    if (equil_f != 'S' && equil_f != 'N') { info = -2; goto cleanup; }
+    if (n_param < 0) { info = -3; goto cleanup; }
+    if (m_param < 0) { info = -4; goto cleanup; }
+    if (p_param < 0) { info = -5; goto cleanup; }
 
-         if (lda < min_lda_rm_cols) { info = -7; goto cleanup; }
-         if (ldb < min_ldb_rm_cols) { info = -9; goto cleanup; }
-         if (ldc < min_ldc_rm_cols) { info = -11; goto cleanup; }
-         if (ldd < min_ldd_rm_cols) { info = -13; goto cleanup; }
-         if (ldpco1 < min_ldpco1_rm_rows) { info = -17; goto cleanup; }
-         if (ldpco2 < min_ldpco2_rm_cols) { info = -18; goto cleanup; }
-         if (ldqco1 < min_ldqco1_rm_rows) { info = -20; goto cleanup; }
-         if (ldqco2 < min_ldqco2_rm_cols) { info = -21; goto cleanup; }
-         if (ldvco1 < min_ldvco1_rm_rows) { info = -23; goto cleanup; }
-         if (ldvco2 < min_ldvco2_rm_cols) { info = -24; goto cleanup; }
+    // Validate pointers for essential outputs if dimensions > 0
+    if (nr_out == NULL) { info = -11; goto cleanup; } // NR is 11th arg in Fortran list
+    if (index_out == NULL && porm > 0) { info = -12; goto cleanup; }
+    
+    // Max dimensions for workspace arrays B, C, D
+    int max_mp = MAX(1, MAX(m_param, p_param));
 
-     } else {
-         // For column-major C, LD is the number of rows (Fortran style)
-         if (lda < min_lda_f) { info = -7; goto cleanup; }
-         if (ldb < min_ldb_f) { info = -9; goto cleanup; }
-         if (ldc < min_ldc_f) { info = -11; goto cleanup; }
-         if (ldd < min_ldd_f) { info = -13; goto cleanup; }
-         if (ldpco1 < min_ldpco1_f) { info = -17; goto cleanup; }
-         if (ldpco2 < min_ldpco2_f) { info = -18; goto cleanup; }
-         if (ldqco1 < min_ldqco1_f) { info = -20; goto cleanup; }
-         if (ldqco2 < min_ldqco2_f) { info = -21; goto cleanup; }
-         if (ldvco1 < min_ldvco1_f) { info = -23; goto cleanup; }
-         if (ldvco2 < min_ldvco2_f) { info = -24; goto cleanup; }
-     }
+    // Fortran LDA, LDB, LDC, LDD
+    lda_f = MAX(1, n_param);
+    ldb_f = MAX(1, n_param); // B is N x max_mp in Fortran
+    ldc_f = MAX(1, max_mp);  // C is max_mp x N in Fortran (LDC >= MAX(1,M,P))
+    ldd_f = MAX(1, max_mp);  // D is max_mp x max_mp in Fortran (LDD >= MAX(1,M,P))
 
-     /* --- Prepare arrays for column-major format if using row-major --- */
-     size_t elem_size = sizeof(double);
-     if (row_major) {
-         // Allocate CM copies for inputs A, B, C, D (considering workspace needs)
-         size_t a_rows_f = n; size_t a_cols_f = n; size_t a_size = a_rows_f * a_cols_f;
-         size_t b_rows_f = n; size_t b_cols_f = maxmp; size_t b_size = b_rows_f * b_cols_f;
-         size_t c_rows_f = maxmp; size_t c_cols_f = n; size_t c_size = c_rows_f * c_cols_f;
-         size_t d_rows_f = maxmp; size_t d_cols_f = maxmp; size_t d_size = d_rows_f * d_cols_f;
+    // Validate C leading dimensions against Fortran requirements
+    if (row_major) {
+        if (n_param > 0 && lda_c < n_param) { info = -7; goto cleanup; }
+        if (n_param > 0 && m_param > 0 && ldb_c < m_param) { info = -9; goto cleanup; } // ldb_c is cols of B data
+        if (p_param > 0 && n_param > 0 && ldc_c < n_param) { info = -11; goto cleanup; } // ldc_c is cols of C data
+        if (p_param > 0 && m_param > 0 && ldd_c < m_param) { info = -13; goto cleanup; } // ldd_c is cols of D data
+    } else { // Column-major C
+        if (n_param > 0 && lda_c < lda_f) { info = -7; goto cleanup; }
+        if (n_param > 0 && ldb_c < ldb_f ) { info = -9; goto cleanup; } // ldb_c is rows of B
+        if (p_param > 0 && ldc_c < p_param) { info = -11; goto cleanup; } // ldc_c is rows of C, but Fortran LDC needs to be max_mp
+        if (ldc_c < ldc_f && n_param > 0) {info = -11; goto cleanup; } // Check against Fortran's LDC for C
+        if (p_param > 0 && ldd_c < p_param) { info = -13; goto cleanup; } // ldd_c is rows of D
+        if (ldd_c < ldd_f && (p_param > 0 || m_param > 0) ) {info = -13; goto cleanup; } // Check against Fortran's LDD for D
+    }
+    
+    // Fortran leading dimensions for PCOEFF, QCOEFF, VCOEFF
+    if (leri_f == 'L') { // porm = P, porp = M
+        ldpco1_f = MAX(1, p_param); ldpco2_f = MAX(1, p_param);
+        ldqco1_f = MAX(1, p_param); ldqco2_f = MAX(1, m_param);
+        ldvco1_f = MAX(1, p_param); ldvco2_f = MAX(1, n_param); // Fortran LDVCO2 is N
+    } else { // LERI = 'R', porm = M, porp = P
+        ldpco1_f = MAX(1, m_param); ldpco2_f = MAX(1, m_param);
+        // As per Fortran doc for TB03AD: LDQCO1/2 for LERI='R' are MAX(1,M,P)
+        ldqco1_f = MAX(1, max_mp); ldqco2_f = MAX(1, max_mp);
+        ldvco1_f = MAX(1, m_param); ldvco2_f = MAX(1, n_param); // Fortran LDVCO2 is N
+    }
 
-         if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
-         if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
-         if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
-         if (d_size > 0) { d_cm = (double*)malloc(d_size * elem_size); CHECK_ALLOC(d_cm); }
-
-         // Transpose relevant input parts to CM copies
-         if (n > 0 && n > 0 && a_cm) slicot_transpose_to_fortran(a, a_cm, n, n, elem_size);
-         if (n > 0 && m > 0 && b_cm) slicot_transpose_to_fortran(b, b_cm, n, m, elem_size);
-         if (p > 0 && n > 0 && c_cm) slicot_transpose_to_fortran(c, c_cm, p, n, elem_size);
-         if (p > 0 && m > 0 && d_cm) slicot_transpose_to_fortran(d, d_cm, p, m, elem_size);
-
-         // Allocate CM copies for outputs PCOEFF, QCOEFF, VCOEFF
-         // Sizes depend on kpcoef which is unknown until after call. Cannot pre-allocate perfectly.
-         // Allocate based on input LDs * estimated max degree (N). This is an upper bound.
-         kpcoef = n + 1; // Upper bound for max degree + 1
-         size_t pcoeff_sz_est = (size_t)ldpco1 * ldpco2 * kpcoef;
-         size_t qcoeff_sz_est = (size_t)ldqco1 * ldqco2 * kpcoef;
-         size_t vcoeff_sz_est = (size_t)ldvco1 * ldvco2 * kpcoef;
-
-         if (pcoeff_sz_est > 0) { pcoeff_cm = (double*)malloc(pcoeff_sz_est * elem_size); CHECK_ALLOC(pcoeff_cm); }
-         if (qcoeff_sz_est > 0) { qcoeff_cm = (double*)malloc(qcoeff_sz_est * elem_size); CHECK_ALLOC(qcoeff_cm); }
-         if (vcoeff_sz_est > 0) { vcoeff_cm = (double*)malloc(vcoeff_sz_est * elem_size); CHECK_ALLOC(vcoeff_cm); }
-
-         // Set Fortran leading dimensions
-         lda_f = (n > 0) ? n : 1;
-         ldb_f = (n > 0) ? n : 1;
-         ldc_f = (maxmp > 0) ? maxmp : 1;
-         ldd_f = (maxmp > 0) ? maxmp : 1;
-         ldpco1_f = (porm > 0) ? porm : 1;
-         ldpco2_f = (porm > 0) ? porm : 1;
-         ldqco1_f = (leri_upper == 'L') ? ((p > 0) ? p : 1) : ((maxmp > 0) ? maxmp : 1);
-         ldqco2_f = (leri_upper == 'L') ? ((m > 0) ? m : 1) : ((maxmp > 0) ? maxmp : 1);
-         ldvco1_f = (porm > 0) ? porm : 1;
-         ldvco2_f = (n > 0) ? n : 1;
-
-         // Set pointers
-         a_ptr = a_cm; b_ptr = b_cm; c_ptr = c_cm; d_ptr = d_cm;
-         pcoeff_ptr = pcoeff_cm; qcoeff_ptr = qcoeff_cm; vcoeff_ptr = vcoeff_cm;
-
-     } else {
-         /* Column-major case - use original arrays */
-         lda_f = lda; ldb_f = ldb; ldc_f = ldc; ldd_f = ldd;
-         ldpco1_f = ldpco1; ldpco2_f = ldpco2;
-         ldqco1_f = ldqco1; ldqco2_f = ldqco2;
-         ldvco1_f = ldvco1; ldvco2_f = ldvco2;
-         a_ptr = a; b_ptr = b; c_ptr = c; d_ptr = d;
-         pcoeff_ptr = pcoeff; qcoeff_ptr = qcoeff; vcoeff_ptr = vcoeff;
-     }
+    // Validate C leading dimensions for coefficient arrays (user provides flat arrays)
+    // User provides ldpco1_c, ldpco2_c etc. which are the actual dimensions of their data block
+    if (pcoeff_out == NULL && porm > 0) { info = -15; goto cleanup; }
+    if (qcoeff_out == NULL && porm > 0 && porp > 0) { info = -18; goto cleanup; }
+    // VCOEFF can be NRx0, so NR can be 0.
+    // If NR becomes 0, vcoeff_out might not be strictly needed if ldvco2_c is 0.
+    // However, the third dimension is N+1, so if porm > 0, vcoeff_out should be non-NULL.
+    if (vcoeff_out == NULL && porm > 0 && (n_param +1) > 0 ) { info = -21; goto cleanup; }
 
 
-     /* --- Workspace allocation --- */
+    // --- Workspace Allocation ---
+    liwork = n_param + max_mp;
+    liwork = MAX(1, liwork);
+    iwork = (int*)malloc((size_t)liwork * sizeof(int));
+    CHECK_ALLOC(iwork);
 
-     // Allocate IWORK
-     iwork_size = n + maxmp;
-     if (iwork_size < 1) iwork_size = 1;
-     iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-     CHECK_ALLOC(iwork);
+    int pm_ws = (leri_f == 'L') ? p_param : m_param;
+    ldwork_val = MAX(1, MAX(n_param + MAX(n_param, MAX(3 * m_param, 3 * p_param)), pm_ws * (pm_ws + 2)));
+    if (n_param == 0 && m_param == 0 && p_param == 0) ldwork_val = 1; // Ensure min 1 for zero N,M,P
 
-     // Calculate DWORK size directly using the formula
-     int pm = (leri_upper == 'L') ? p : m;
-     int max_n_3m_3p = MAX(n, MAX(3 * m, 3 * p));
-     ldwork = MAX(1, MAX(n + max_n_3m_3p, pm * (pm + 2)));
+    dwork = (double*)malloc((size_t)ldwork_val * sizeof(double));
+    CHECK_ALLOC(dwork);
 
-     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-     CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
+    // --- Memory for Column-Major Copies ---
+    size_t a_nelems = (size_t)lda_f * n_param; if(n_param == 0) a_nelems = 0;
+    size_t b_nelems_f = (size_t)ldb_f * max_mp; if(n_param == 0) b_nelems_f = 0; // B is N x max_mp in Fortran
+    size_t c_nelems_f = (size_t)ldc_f * n_param; if(p_param == 0 && n_param == 0 && m_param == 0) c_nelems_f = 0; else if (p_param == 0 && n_param > 0) c_nelems_f = 0; // C is max_mp x N
+    size_t d_nelems_f = (size_t)ldd_f * max_mp; if(p_param == 0 && m_param == 0) d_nelems_f = 0; // D is max_mp x max_mp
 
-     /* --- Call the computational routine --- */
-     F77_FUNC(tb03ad, TB03AD)(&leri_upper, &equil_upper, &n, &m, &p,
-                              a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
-                              nr, index, pcoeff_ptr, &ldpco1_f, &ldpco2_f,
-                              qcoeff_ptr, &ldqco1_f, &ldqco2_f, vcoeff_ptr, &ldvco1_f, &ldvco2_f,
-                              &tol, iwork, dwork, &ldwork, &info,
-                              leri_len, equil_len);
+    size_t pcoeff_nelems_f = (size_t)ldpco1_f * ldpco2_f * (n_param + 1); if(porm == 0) pcoeff_nelems_f = 0;
+    size_t qcoeff_nelems_f = (size_t)ldqco1_f * ldqco2_f * (n_param + 1); if(porm == 0 || porp == 0) qcoeff_nelems_f = 0;
+    size_t vcoeff_nelems_f = (size_t)ldvco1_f * ldvco2_f * (n_param + 1); if(porm == 0) vcoeff_nelems_f = 0; // NR can be 0, ldvco2_f is N_param
 
-     /* --- Copy results back to row-major format if needed --- */
-     if (row_major && info == 0) {
-          int nr_val = *nr; // Get the computed minimal order
-          kpcoef = 0;       // Recalculate max degree for output copy
-          if (porm > 0 && nr_val > 0) {
-               for (int i = 0; i < porm; ++i) {
-                   kpcoef = MAX(kpcoef, index[i]); // index is output
-               }
-               kpcoef += 1;
-          } else {
-              kpcoef = 1;
-          }
-          if (kpcoef <= 0) kpcoef = 1;
 
-          // Copy back A, B, C (potentially modified)
-          if (nr_val > 0) {
-              size_t a_rows_f = n; size_t a_cols_f = n; size_t a_size = a_rows_f * a_cols_f;
-              size_t b_rows_f = n; size_t b_cols_f = maxmp; size_t b_size = b_rows_f * b_cols_f;
-              size_t c_rows_f = maxmp; size_t c_cols_f = n; size_t c_size = c_rows_f * c_cols_f;
-              if (a_size > 0 && a_cm) slicot_transpose_to_c(a_cm, a, nr_val, nr_val, elem_size);
-              if (b_size > 0 && m > 0 && b_cm) slicot_transpose_to_c(b_cm, b, nr_val, m, elem_size);
-              if (c_size > 0 && p > 0 && c_cm) slicot_transpose_to_c(c_cm, c, p, nr_val, elem_size);
-          }
+    if (row_major) {
+        if (a_nelems > 0 && a_io) { a_cm = (double*)malloc(a_nelems * sizeof(double)); CHECK_ALLOC(a_cm); }
+        if (b_nelems_f > 0 && b_io) { b_cm = (double*)malloc(b_nelems_f * sizeof(double)); CHECK_ALLOC(b_cm); memset(b_cm, 0, b_nelems_f * sizeof(double));}
+        if (c_nelems_f > 0 && c_io) { c_cm = (double*)malloc(c_nelems_f * sizeof(double)); CHECK_ALLOC(c_cm); memset(c_cm, 0, c_nelems_f * sizeof(double));}
+        if (d_nelems_f > 0 && d_in) { d_cm = (double*)malloc(d_nelems_f * sizeof(double)); CHECK_ALLOC(d_cm); memset(d_cm, 0, d_nelems_f * sizeof(double));}
+        
+        if (pcoeff_nelems_f > 0 && pcoeff_out) { pcoeff_cm = (double*)malloc(pcoeff_nelems_f * sizeof(double)); CHECK_ALLOC(pcoeff_cm); }
+        if (qcoeff_nelems_f > 0 && qcoeff_out) { qcoeff_cm = (double*)malloc(qcoeff_nelems_f * sizeof(double)); CHECK_ALLOC(qcoeff_cm); }
+        if (vcoeff_nelems_f > 0 && vcoeff_out) { vcoeff_cm = (double*)malloc(vcoeff_nelems_f * sizeof(double)); CHECK_ALLOC(vcoeff_cm); }
+    }
 
-          // Copy back 3D output arrays slice by slice
-          size_t pcoeff_slice_size = (size_t)porm * porm;
-          size_t qcoeff_slice_size = (leri_upper == 'L') ? (size_t)p * m : (size_t)maxmp * maxmp; // Use output Q dims (PxM) or workspace size? Assume PxM.
-          size_t vcoeff_slice_size = (size_t)porm * n; // Use max N
-          size_t q_rows_out = p; size_t q_cols_out = m; size_t q_out_slice = q_rows_out * q_cols_out;
-          size_t v_rows_out = porm; size_t v_cols_out = nr_val; size_t v_out_slice = v_rows_out * v_cols_out;
+    // --- Prepare Fortran parameters and perform conversions ---
+    double *a_ptr = a_io, *b_ptr = b_io, *c_ptr = c_io;
+    const double *d_ptr = d_in;
+    double *pcoeff_ptr = pcoeff_out, *qcoeff_ptr = qcoeff_out, *vcoeff_ptr = vcoeff_out;
 
-          for (int k = 0; k < kpcoef; ++k) {
-              if (pcoeff_slice_size > 0 && pcoeff_cm) {
-                  slicot_transpose_to_c(pcoeff_cm + k * pcoeff_slice_size, pcoeff + k * pcoeff_slice_size, porm, porm, elem_size);
-              }
-              if (q_out_slice > 0 && qcoeff_cm) {
-                  slicot_transpose_to_c(qcoeff_cm + k * qcoeff_slice_size, qcoeff + k * q_out_slice, q_rows_out, q_cols_out, elem_size);
-              }
-              if (v_out_slice > 0 && vcoeff_cm) {
-                  slicot_transpose_to_c(vcoeff_cm + k * vcoeff_slice_size, vcoeff + k * v_out_slice, v_rows_out, v_cols_out, elem_size);
-              }
-          }
-     }
-     // In column-major case, A, B, C, NR, INDEX, PCOEFF, QCOEFF, VCOEFF, IWORK modified in place.
+    if (row_major) {
+        // Inputs
+        if (a_cm && a_io && n_param > 0) { slicot_transpose_to_fortran_with_ld(a_io, a_cm, n_param, n_param, lda_c, lda_f, sizeof(double)); }
+        a_ptr = a_cm ? a_cm : NULL; // Use cm if allocated, else NULL (e.g. N=0)
 
-  cleanup:
-     /* --- Cleanup --- */
-     free(dwork);
-     free(iwork);
-     free(a_cm); free(b_cm); free(c_cm); free(d_cm);
-     free(pcoeff_cm); free(qcoeff_cm); free(vcoeff_cm);
+        if (b_cm && b_io && n_param > 0 && m_param > 0) { // B is N x M from user
+            slicot_transpose_to_fortran_with_ld(b_io, b_cm, n_param, m_param, ldb_c, ldb_f, sizeof(double));
+        }
+        b_ptr = b_cm ? b_cm : NULL;
 
-     return info;
- }
+        if (c_cm && c_io && p_param > 0 && n_param > 0) { // C is P x N from user
+             slicot_transpose_to_fortran_with_ld(c_io, c_cm, p_param, n_param, ldc_c, ldc_f, sizeof(double));
+        }
+        c_ptr = c_cm ? c_cm : NULL;
+        
+        if (d_cm && d_in && p_param > 0 && m_param > 0) { // D is P x M from user
+            slicot_transpose_to_fortran_with_ld(d_in, d_cm, p_param, m_param, ldd_c, ldd_f, sizeof(double));
+        }
+        d_ptr = d_cm ? d_cm : (double*)d_in; // d_in is const, cast if d_cm not used. If d_cm is NULL, d_ptr should be NULL if d_in is also null.
+
+        // Outputs (Fortran will write to these _cm buffers)
+        pcoeff_ptr = pcoeff_cm ? pcoeff_cm : NULL;
+        qcoeff_ptr = qcoeff_cm ? qcoeff_cm : NULL;
+        vcoeff_ptr = vcoeff_cm ? vcoeff_cm : NULL;
+
+    } else { // Column-major C
+        if (n_param == 0) { a_ptr = NULL; } // Fortran expects NULL for zero-dim arrays
+        if (n_param == 0 || m_param == 0) { b_ptr = NULL; } // If B is effectively zero size for Fortran
+        if (p_param == 0 || n_param == 0) { c_ptr = NULL; } // If C is effectively zero size
+        if (p_param == 0 || m_param == 0) { d_ptr = NULL; }
+        if (porm == 0) {pcoeff_ptr = NULL; qcoeff_ptr = NULL; vcoeff_ptr = NULL;}
+        else if (porp == 0 && qcoeff_ptr) {qcoeff_ptr = NULL;}
+
+
+        // For column major, ensure Fortran LDCs are met by user's C LDCs
+        // lda_c, ldb_c, ldc_c, ldd_c are already Fortran-style (rows)
+        // This was partially checked in validation.
+        // For C, LDC is P, Fortran LDC is max_mp. If ldc_c < ldc_f, it's an issue.
+    }
+    
+    int nr_val;
+
+    // --- Call Fortran function ---
+    F77_FUNC(tb03ad, TB03AD)(&leri_f, &equil_f, &n_param, &m_param, &p_param,
+                             a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr, &ldd_f,
+                             &nr_val, index_out,
+                             pcoeff_ptr, &ldpco1_f, &ldpco2_f,
+                             qcoeff_ptr, &ldqco1_f, &ldqco2_f,
+                             vcoeff_ptr, &ldvco1_f, &ldvco2_f,
+                             &tol_param, iwork, dwork, &ldwork_val, &info,
+                             1, 1);
+
+    *nr_out = nr_val;
+    int current_nr = nr_val;
+    int kpcoef_actual = 0;
+    if (info == 0 && porm > 0) {
+        for(int i=0; i<porm; ++i) {
+            if (index_out[i] > kpcoef_actual) kpcoef_actual = index_out[i];
+        }
+        kpcoef_actual += 1;
+    }
+    if (porm == 0) kpcoef_actual = 0; // If porm is 0, index_out is not accessed.
+    kpcoef_actual = MAX(0, kpcoef_actual); // Ensure non-negative
+
+
+    // --- Convert results back to row-major if needed ---
+    if (row_major && info == 0) {
+        // A_io (NR x NR)
+        if (a_cm && a_io && current_nr > 0) {
+            slicot_transpose_to_c_with_ld(a_cm, a_io, current_nr, current_nr, lda_f, lda_c, sizeof(double));
+        }
+        // B_io (NR x M)
+        if (b_cm && b_io && current_nr > 0 && m_param > 0) {
+            slicot_transpose_to_c_with_ld(b_cm, b_io, current_nr, m_param, ldb_f, ldb_c, sizeof(double));
+        }
+        // C_io (P x NR)
+        if (c_cm && c_io && p_param > 0 && current_nr > 0) {
+            slicot_transpose_to_c_with_ld(c_cm, c_io, p_param, current_nr, ldc_f, ldc_c, sizeof(double));
+        }
+
+        // PCOEFF_out (porm x porm x kpcoef_actual)
+        if (pcoeff_cm && pcoeff_out && porm > 0 && kpcoef_actual > 0) {
+            transpose_3d_f2c(pcoeff_cm, pcoeff_out, porm, porm, kpcoef_actual, ldpco1_f, ldpco2_f, ldpco1_c, ldpco2_c);
+        }
+
+        // QCOEFF_out
+        int q_d1, q_d2;
+        if (leri_f == 'L') { q_d1 = p_param; q_d2 = m_param; } // P x M
+        else { q_d1 = p_param; q_d2 = m_param; } // P x M (actual data block)
+                                                 // Fortran QCOEFF(LDQCO1,LDQCO2,*)
+                                                 // LERI='R': Q is P x M, LDQCO1_f=max_mp, LDQCO2_f=max_mp
+                                                 // LERI='L': Q is P x M, LDQCO1_f=P, LDQCO2_f=M
+
+        if (qcoeff_cm && qcoeff_out && q_d1 > 0 && q_d2 > 0 && kpcoef_actual > 0) {
+             transpose_3d_f2c(qcoeff_cm, qcoeff_out, q_d1, q_d2, kpcoef_actual, ldqco1_f, ldqco2_f, ldqco1_c, ldqco2_c);
+        }
+        
+        // VCOEFF_out (porm x NR x kpcoef_actual)
+        // ldvco2_c is user's N, but actual data is NR columns
+        if (vcoeff_cm && vcoeff_out && porm > 0 && current_nr > 0 && kpcoef_actual > 0) {
+            transpose_3d_f2c(vcoeff_cm, vcoeff_out, porm, current_nr, kpcoef_actual, ldvco1_f, ldvco2_f, ldvco1_c, ldvco2_c);
+        }
+    }
+
+
+cleanup:
+    free(iwork);
+    free(dwork);
+    if (row_major) {
+        free(a_cm); free(b_cm); free(c_cm); free(d_cm);
+        free(pcoeff_cm); free(qcoeff_cm); free(vcoeff_cm);
+    }
+    
+    if (info == SLICOT_MEMORY_ERROR && n_param > -1) { // Check n_param to avoid message during intentional error tests
+       fprintf(stderr, "Error: Memory allocation failed in slicot_tb03ad.\n");
+    }
+    return info;
+}
