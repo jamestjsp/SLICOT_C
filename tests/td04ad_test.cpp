@@ -70,11 +70,13 @@ protected:
         }
     }
 
-    virtual void SetUpTestData() = 0;
+    virtual void SetUpTestData() = 0; // Pure virtual, to be implemented by derived test fixtures
 
     void SetUpBase(bool is_row_major) {
+        // Call SetUpTestData from the derived class to populate M_val, P_val, INDEX_val, etc.
         SetUpTestData(); 
-        InitializeDimensions();
+        // Then initialize dimensions based on these values
+        InitializeDimensions(); 
 
         size_t n_sum_alloc = std::max(1, N_sum);
         size_t m_alloc = std::max(1, M_val);
@@ -87,8 +89,8 @@ protected:
 
 
         A_out_c.assign(n_sum_alloc * n_sum_alloc, 0.0);
-        if (M_val > 0) B_out_c.assign(n_sum_alloc * m_alloc, 0.0); else B_out_c.clear();
-        if (P_val > 0) C_out_c.assign(p_alloc * n_sum_alloc, 0.0); else C_out_c.clear();
+        if (M_val > 0 && n_sum_alloc > 0 ) B_out_c.assign(n_sum_alloc * m_alloc, 0.0); else B_out_c.clear();
+        if (P_val > 0 && n_sum_alloc > 0 ) C_out_c.assign(p_alloc * n_sum_alloc, 0.0); else C_out_c.clear();
         if (P_val > 0 && M_val > 0) D_out_c.assign(p_alloc * m_alloc, 0.0); else D_out_c.clear();
 
 
@@ -119,13 +121,13 @@ protected:
 
     void VerifyOutputs(bool is_row_major_input) {
         ASSERT_EQ(INFO_out, INFO_expected);
-        if (INFO_expected != 0) return;
+        if (INFO_expected != 0) return; 
 
         ASSERT_EQ(NR_out, NR_expected);
 
         if (NR_out == 0) { 
             if (P_val > 0 && M_val > 0) {
-                 ASSERT_EQ(D_out_c.size(), (size_t)std::max(1,P_val) * std::max(1,M_val)); // Ensure D_out_c was allocated
+                 ASSERT_LE((size_t)P_val * M_val, D_out_c.size()); 
                  ASSERT_EQ(D_expected_f.size(), (size_t)P_val * M_val);
                 for (int i = 0; i < P_val; ++i) {
                     for (int j = 0; j < M_val; ++j) {
@@ -140,9 +142,9 @@ protected:
                     }
                 }
             } else {
-                EXPECT_TRUE(D_expected_f.empty());
+                EXPECT_TRUE(D_expected_f.empty()); 
             }
-            EXPECT_TRUE(A_expected_f.empty());
+            EXPECT_TRUE(A_expected_f.empty()); 
             EXPECT_TRUE(B_expected_f.empty());
             EXPECT_TRUE(C_expected_f.empty());
             return; 
@@ -155,20 +157,20 @@ protected:
 
         int lda_f_comp = NR_out;
         int ldb_f_comp = NR_out; 
-        int ldc_f_comp = P_val > 0 ? P_val : 1; // Avoid 0 for LD if P_val is 0 but NR_out > 0 (unlikely for C)
+        int ldc_f_comp = P_val > 0 ? P_val : 1; 
         int ldd_f_comp = P_val > 0 ? P_val : 1;
 
 
         if (is_row_major_input) {
             slicot_transpose_to_fortran_with_ld(A_out_c.data(), A_actual_f.data(), NR_out, NR_out, LDA_c, lda_f_comp, sizeof(double));
-            if (M_val > 0) slicot_transpose_to_fortran_with_ld(B_out_c.data(), B_actual_f.data(), NR_out, M_val, LDB_c, ldb_f_comp, sizeof(double));
-            if (P_val > 0) slicot_transpose_to_fortran_with_ld(C_out_c.data(), C_actual_f.data(), P_val, NR_out, LDC_c, ldc_f_comp, sizeof(double));
-            if (P_val > 0 && M_val > 0) slicot_transpose_to_fortran_with_ld(D_out_c.data(), D_actual_f.data(), P_val, M_val, LDD_c, ldd_f_comp, sizeof(double));
+            if (M_val > 0 && !B_out_c.empty()) slicot_transpose_to_fortran_with_ld(B_out_c.data(), B_actual_f.data(), NR_out, M_val, LDB_c, ldb_f_comp, sizeof(double));
+            if (P_val > 0 && !C_out_c.empty()) slicot_transpose_to_fortran_with_ld(C_out_c.data(), C_actual_f.data(), P_val, NR_out, LDC_c, ldc_f_comp, sizeof(double));
+            if (P_val > 0 && M_val > 0 && !D_out_c.empty()) slicot_transpose_to_fortran_with_ld(D_out_c.data(), D_actual_f.data(), P_val, M_val, LDD_c, ldd_f_comp, sizeof(double));
         } else { 
-            for(size_t j=0; j < (size_t)NR_out; ++j) for(size_t i=0; i < (size_t)NR_out; ++i) A_actual_f[i+j*(size_t)NR_out] = A_out_c[i+j*(size_t)LDA_c];
-            if (M_val > 0) for(size_t j=0; j < (size_t)M_val; ++j) for(size_t i=0; i < (size_t)NR_out; ++i) B_actual_f[i+j*(size_t)NR_out] = B_out_c[i+j*(size_t)LDB_c];
-            if (P_val > 0) for(size_t j=0; j < (size_t)NR_out; ++j) for(size_t i=0; i < (size_t)P_val; ++i) C_actual_f[i+j*(size_t)P_val] = C_out_c[i+j*(size_t)LDC_c];
-            if (P_val > 0 && M_val > 0) for(size_t j=0; j < (size_t)M_val; ++j) for(size_t i=0; i < (size_t)P_val; ++i) D_actual_f[i+j*(size_t)P_val] = D_out_c[i+j*(size_t)LDD_c];
+            if (!A_out_c.empty()) for(size_t j=0; j < (size_t)NR_out; ++j) for(size_t i=0; i < (size_t)NR_out; ++i) A_actual_f[i+j*(size_t)NR_out] = A_out_c[i+j*(size_t)LDA_c];
+            if (M_val > 0 && !B_out_c.empty()) for(size_t j=0; j < (size_t)M_val; ++j) for(size_t i=0; i < (size_t)NR_out; ++i) B_actual_f[i+j*(size_t)NR_out] = B_out_c[i+j*(size_t)LDB_c];
+            if (P_val > 0 && !C_out_c.empty()) for(size_t j=0; j < (size_t)NR_out; ++j) for(size_t i=0; i < (size_t)P_val; ++i) C_actual_f[i+j*(size_t)P_val] = C_out_c[i+j*(size_t)LDC_c];
+            if (P_val > 0 && M_val > 0 && !D_out_c.empty()) for(size_t j=0; j < (size_t)M_val; ++j) for(size_t i=0; i < (size_t)P_val; ++i) D_actual_f[i+j*(size_t)P_val] = D_out_c[i+j*(size_t)LDD_c];
         }
 
         ASSERT_EQ(A_actual_f.size(), A_expected_f.size());
@@ -273,46 +275,66 @@ TEST_F(Td04adStaticGainTest, RowMajor) {
     VerifyOutputs(true);
 }
 
-class Td04adParamValidationTest : public Td04adStaticGainTest { 
+class Td04adParamValidationTest : public Td04adBaseTest { 
 protected:
-    void CallWrapper(char r, int m, int p, const int* idx, const double* dc, int lddc,
-                     const double* uc, int ldu1c, int ldu2c, double tl, 
-                     int* nro, double* ao, int ldao, double* bo, int ldbo,
-                     double* co, int ldco, double* dio, int lddio, int rm) {
-        INFO_out = slicot_td04ad(r,m,p,idx,dc,lddc,uc,ldu1c,ldu2c,tl,nro,ao,ldao,bo,ldbo,co,ldco,dio,lddio,rm);
+    void SetUpTestData() override { // Called by SetUpBase
+        // Common defaults for validation tests, specific tests will override parameters
+        TOL_val = 0.0;
+        // INFO_expected is set by each test case directly
     }
 };
 
 TEST_F(Td04adParamValidationTest, InvalidRowCol) {
-    SetUpBase(false); CallWrapper('X',M_val,P_val,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); EXPECT_EQ(INFO_out, -1);
+    ROWCOL_val = 'X'; M_val = 1; P_val = 1; INDEX_val = {0}; 
+    DCOEFF_c_layout = {1.0}; UCOEFF_c_layout = {1.0};
+    INFO_expected = -1; // Expect error for invalid ROWCOL
+    SetUpBase(false); 
+    INFO_out = slicot_td04ad(ROWCOL_val,M_val,P_val,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); 
+    ASSERT_EQ(INFO_out, INFO_expected);
 }
 TEST_F(Td04adParamValidationTest, InvalidM) {
-    SetUpBase(false); CallWrapper(ROWCOL_val,-1,P_val,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); EXPECT_EQ(INFO_out, -2);
+    ROWCOL_val = 'R'; M_val = -1; P_val = 1; INDEX_val = {0}; 
+    DCOEFF_c_layout = {1.0}; UCOEFF_c_layout = {1.0};
+    INFO_expected = -2; // Expect error for invalid M
+    SetUpBase(false);
+    INFO_out = slicot_td04ad(ROWCOL_val,M_val,P_val,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); 
+    ASSERT_EQ(INFO_out, INFO_expected);
 }
 TEST_F(Td04adParamValidationTest, InvalidP) {
-    SetUpBase(false); CallWrapper(ROWCOL_val,M_val,-1,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); EXPECT_EQ(INFO_out, -3);
+    ROWCOL_val = 'R'; M_val = 1; P_val = -1; INDEX_val = {0}; 
+    DCOEFF_c_layout = {1.0}; UCOEFF_c_layout = {1.0};
+    INFO_expected = -3; // Expect error for invalid P
+    SetUpBase(false);
+    INFO_out = slicot_td04ad(ROWCOL_val,M_val,P_val,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); 
+    ASSERT_EQ(INFO_out, INFO_expected);
 }
 TEST_F(Td04adParamValidationTest, NullIndexWhenNeeded) {
     ROWCOL_val = 'R'; P_val = 1; M_val = 0; 
     INDEX_val.clear(); 
+    DCOEFF_c_layout = {1.0}; UCOEFF_c_layout.clear(); 
+    INFO_expected = -4; // Expect error for NULL index when PORM > 0
     SetUpBase(false); 
-    CallWrapper(ROWCOL_val,M_val,P_val,nullptr,DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); 
-    EXPECT_EQ(INFO_out, -4); 
+    INFO_out = slicot_td04ad(ROWCOL_val,M_val,P_val,nullptr,DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.empty()? nullptr : UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); 
+    ASSERT_EQ(INFO_out, INFO_expected); 
 }
 TEST_F(Td04adParamValidationTest, InvalidIndexContent) {
-    ROWCOL_val = 'R'; P_val = 1; M_val = 1; INDEX_val = {-1}; 
+    ROWCOL_val = 'R'; P_val = 1; M_val = 1; 
+    INDEX_val = {-1}; 
+    DCOEFF_c_layout = {1.0}; 
+    UCOEFF_c_layout = {1.0}; 
+    INFO_expected = -4; // Expect error for negative value in INDEX
     SetUpBase(false); 
-    DCOEFF_c_layout = {1.0}; // Ensure DCOEFF is valid for this specific test
-    UCOEFF_c_layout = {1.0}; // Ensure UCOEFF is valid
-    if (PORM > 0) { CallWrapper(ROWCOL_val,M_val,P_val,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); EXPECT_EQ(INFO_out, -4); }
+    
+    INFO_out = slicot_td04ad(ROWCOL_val,M_val,P_val,INDEX_val.data(),DCOEFF_c_layout.data(),LDDCOE_c,UCOEFF_c_layout.data(),LDUCO1_c,LDUCO2_c,TOL_val,&NR_out,A_out_c.data(),LDA_c,B_out_c.data(),LDB_c,C_out_c.data(),LDC_c,D_out_c.data(),LDD_c,0); 
+    ASSERT_EQ(INFO_out, INFO_expected); 
 }
 
 class Td04adZeroDimTest : public Td04adBaseTest {
 protected:
     void SetUpTestData() override {
         ROWCOL_val = 'R'; M_val = 0; P_val = 0; TOL_val = 0.0;
-        INDEX_val = {}; NR_expected = 0; 
-        A_expected_f = {}; B_expected_f = {}; C_expected_f = {}; D_expected_f = {};
+        INDEX_val.clear(); NR_expected = 0; 
+        A_expected_f.clear(); B_expected_f.clear(); C_expected_f.clear(); D_expected_f.clear();
         INFO_expected = 0;
     }
 };

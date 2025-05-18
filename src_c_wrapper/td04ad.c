@@ -43,7 +43,6 @@ int slicot_td04ad(char rowcol_char, int m_in, int p_in, const int* index_in,
     double *dwork = NULL;
     int liwork_calc = 0;
     int ldwork_calc = 0;
-    // ldwork_f will be set by calculation, not query
     int ldwork_f = 0; 
 
     const double* dcoeff_ptr = NULL; 
@@ -74,7 +73,6 @@ int slicot_td04ad(char rowcol_char, int m_in, int p_in, const int* index_in,
     int dummy_int_array[1] = {0};
     double dummy_double_array[1] = {0.0};
 
-
     int max_mp = MAX(m_f, p_f); 
     int max_m_p_1 = MAX(1, max_mp); 
 
@@ -90,7 +88,10 @@ int slicot_td04ad(char rowcol_char, int m_in, int p_in, const int* index_in,
 
     if (porm > 0 && index_in != NULL) {
         for (int i = 0; i < porm; ++i) {
-            if (index_in[i] < 0) { info = -4; goto cleanup; }
+            if (index_in[i] < 0) { 
+                info = -4; 
+                goto cleanup; 
+            }
             n_sum += index_in[i];
             if (index_in[i] > max_idx_val) max_idx_val = index_in[i];
         }
@@ -101,11 +102,6 @@ int slicot_td04ad(char rowcol_char, int m_in, int p_in, const int* index_in,
         kdcoef = 1; 
     }
     
-    if (p_f == 1 && m_f == 1 && index_in && index_in[0] == -1 && rowcol_upper == 'R') {
-         fprintf(stderr, "DEBUG InvalidIndexContent path: porm=%d, kdcoef=%d, dcoeff_c is %sNULL, index_in[0]=%d. Current info=%d (before -5 check)\n",
-                 porm, kdcoef, dcoeff_c ? "NOT " : "", index_in[0], info);
-    }
-
     if (dcoeff_c == NULL && porm > 0 && kdcoef > 0) { info = -5; goto cleanup; }
     if (porm > 0 && kdcoef > 0 && dcoeff_c != NULL) { 
         if (row_major) { if (lddcoe_c < MAX(1, kdcoef)) { info = -6; goto cleanup; } } 
@@ -149,18 +145,14 @@ int slicot_td04ad(char rowcol_char, int m_in, int p_in, const int* index_in,
 
     if (info != 0) { goto cleanup; }
 
-    // Calculate IWORK size
     liwork_calc = n_sum + max_m_p_1;
     if (liwork_calc == 0) { iwork = NULL; } 
     else { iwork = (int*)malloc((size_t)MAX(1, liwork_calc) * sizeof(int)); CHECK_ALLOC(iwork); }
 
-    // Calculate DWORK size using the formula from Python wrapper / SLICOT docs
-    // ldwork = max(1, n_sum + max(n_sum, max(3*m, 3*p)))
     ldwork_calc = MAX(1, n_sum + MAX(n_sum, MAX(3 * m_f, 3 * p_f)));
     dwork = (double*)malloc((size_t)ldwork_calc * sizeof(double));
     CHECK_ALLOC(dwork);
     ldwork_f = ldwork_calc;
-
 
     size_t dcoeff_rows_f_dim = (rowcol_upper == 'R') ? MAX(1,p_f) : MAX(1,m_f);
     size_t dcoeff_cols_f_dim = MAX(1,kdcoef);
