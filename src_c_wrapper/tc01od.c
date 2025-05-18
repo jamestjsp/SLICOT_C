@@ -1,187 +1,183 @@
 /**
  * @file tc01od.c
- * @brief C wrapper implementation for SLICOT routine TC01OD
- *
- * This file provides a C wrapper implementation for the SLICOT routine TC01OD,
- * which finds the dual right (left) polynomial matrix representation
- * of a given left (right) polynomial matrix representation by transposing
- * the coefficient matrices.
+ * @brief C wrapper for SLICOT routine TC01OD.
+ * @details Computes the dual of a left/right polynomial matrix representation.
+ * PCOEFF and QCOEFF are modified in-place.
  */
 
- #include <stdlib.h>
- #include <ctype.h>
- #include <string.h> // For memcpy
- #include <stddef.h> // For size_t
+#include <stdlib.h>
+#include <ctype.h>
+#include <string.h> // For memcpy
 
- // Include the header file for this wrapper
- // #include "tc01od.h" // Assuming a header file exists
- // Include necessary SLICOT utility headers
- #include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines
- #include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
+#include "tc01od.h"
+#include "slicot_utils.h" // For CHECK_ALLOC, MAX, MIN, transpose functions
+#include "slicot_f77.h"   // For F77_FUNC
 
- /*
-  * Declare the external Fortran routine using the F77_FUNC macro.
-  * Note the 3D arrays PCOEFF, QCOEFF are passed as flat pointers.
-  * Hidden length for CHARACTER argument is added at the end.
-  */
- extern void F77_FUNC(tc01od, TC01OD)(
-     const char* leri,       // CHARACTER*1 LERI
-     const int* m,           // INTEGER M
-     const int* p,           // INTEGER P
-     const int* indlim,      // INTEGER INDLIM
-     double* pcoeff,         // DOUBLE PRECISION PCOEFF(LDPCO1,LDPCO2,*) (in/out)
-     const int* ldpco1,      // INTEGER LDPCO1
-     const int* ldpco2,      // INTEGER LDPCO2
-     double* qcoeff,         // DOUBLE PRECISION QCOEFF(LDQCO1,LDQCO2,*) (in/out) - Needs workspace
-     const int* ldqco1,      // INTEGER LDQCO1
-     const int* ldqco2,      // INTEGER LDQCO2
-     int* info,              // INTEGER INFO (output)
-     int leri_len            // Hidden length
- );
+// Fortran routine declaration
+extern void F77_FUNC(tc01od, TC01OD)(
+    const char* leri, const int* m, const int* p, const int* indlim,
+    double* pcoeff, const int* ldpco1, const int* ldpco2,
+    double* qcoeff, const int* ldqco1, const int* ldqco2,
+    int* info,
+    int leri_len);
 
+SLICOT_EXPORT
+int slicot_tc01od(char leri_c, int m_c, int p_c, int indlim_c,
+                  double* pcoeff_c, int ldpcoeff_c_rows, int ldpcoeff_c_cols,
+                  double* qcoeff_c, int ldqcoeff_c_rows, int ldqcoeff_c_cols,
+                  int row_major_flag) {
+    int info = 0;
+    char leri_f = toupper(leri_c);
 
- /* C wrapper function definition */
- SLICOT_EXPORT
- int slicot_tc01od(char leri, int m, int p, int indlim,
-                   double* pcoeff, int ldpco1, int ldpco2,
-                   double* qcoeff, int ldqco1, int ldqco2,
-                   int row_major)
- {
-     /* Local variables */
-     int info = 0;
-     // No workspace needed
+    double* pcoeff_f_ptr = pcoeff_c;
+    double* qcoeff_f_ptr = qcoeff_c;
 
-     const int leri_len = 1;
-     char leri_upper = toupper(leri);
+    double* pcoeff_cm = NULL;
+    double* qcoeff_cm = NULL;
 
-     /* Pointers for column-major copies if needed */
-     double *pcoeff_cm = NULL, *qcoeff_cm = NULL;
-     double *pcoeff_ptr, *qcoeff_ptr;
-     int ldpco1_f, ldpco2_f, ldqco1_f, ldqco2_f;
+    // Validate inputs
+    if (leri_f != 'L' && leri_f != 'R') { info = -1; goto cleanup; }
+    if (m_c < 0) { info = -2; goto cleanup; }
+    if (p_c < 0) { info = -3; goto cleanup; }
+    if (indlim_c < 1) { info = -4; goto cleanup; }
 
-     /* Determine dimensions based on LERI */
-     int porm = (leri_upper == 'L') ? p : m; // Input P(s) dimension
-     int porp = (leri_upper == 'L') ? m : p; // Input Q(s) other dimension
-     int maxmp = MAX(m, p);
+    int porm_f = (leri_f == 'L') ? p_c : m_c; // Dimension for PCOEFF (PxP or MxM)
+    
+    // Fortran leading dimensions for PCOEFF (LD1_F = rows, LD2_F = cols for Fortran view of PCOEFF)
+    int ldpco1_f_expected = MAX(1, porm_f); 
+    int ldpco2_f_expected = MAX(1, porm_f);
 
-     /* --- Input Parameter Validation --- */
-     if (leri_upper != 'L' && leri_upper != 'R') { info = -1; goto cleanup; }
-     if (m < 0) { info = -2; goto cleanup; }
-     if (p < 0) { info = -3; goto cleanup; }
-     if (indlim < 1) { info = -4; goto cleanup; }
+    // Fortran leading dimensions for QCOEFF (LD1_F = rows, LD2_F = cols for Fortran view of QCOEFF)
+    // Fortran's QCOEFF is dimensioned (LDQCO1, LDQCO2, INDLIM) where LDQCO1 >= MAX(1,M,P), LDQCO2 >= MAX(1,M,P)
+    int ldqco1_f_expected = MAX(1, MAX(m_c, p_c));
+    int ldqco2_f_expected = MAX(1, MAX(m_c, p_c));
 
-     // Check leading dimensions based on storage order
-     // Note: Fortran workspace requirements may mandate larger LDs than input/output sizes.
-     int min_ldpco1_f = MAX(1, porm);
-     int min_ldpco2_f = MAX(1, porm);
-     int min_ldqco1_f = MAX(1, maxmp); // Needs workspace (size MAXMP x MAXMP)
-     int min_ldqco2_f = MAX(1, maxmp); // Needs workspace (size MAXMP x MAXMP)
+    // Validate C leading dimensions
+    if (row_major_flag) {
+        // For PCOEFF, C slice is porm_f x porm_f. C ldpcoeff_c_cols is the number of columns in C's RM slice.
+        if (pcoeff_c != NULL && porm_f > 0 && (ldpcoeff_c_rows < porm_f || ldpcoeff_c_cols < porm_f)) { info = -6; goto cleanup; }
+        // For QCOEFF, C buffer slice must be at least MAX(P,M) x MAX(P,M) to hold input/output.
+        // C ldqcoeff_c_cols is the number of columns in C's RM slice.
+        if (qcoeff_c != NULL && (p_c > 0 || m_c > 0) && (ldqcoeff_c_rows < MAX(p_c, m_c) || ldqcoeff_c_cols < MAX(p_c, m_c))) { info = -9; goto cleanup; }
+    } else { // Column-major C
+        // C ldpcoeff_c_rows is Fortran's LD1, ldpcoeff_c_cols is Fortran's LD2
+        if (pcoeff_c != NULL && porm_f > 0 && (ldpcoeff_c_rows < ldpco1_f_expected || ldpcoeff_c_cols < ldpco2_f_expected)) { info = -6; goto cleanup; }
+        // C ldqcoeff_c_rows is Fortran's LD1, ldqcoeff_c_cols is Fortran's LD2
+        if (qcoeff_c != NULL && (p_c > 0 || m_c > 0) && (ldqcoeff_c_rows < ldqco1_f_expected || ldqcoeff_c_cols < ldqco2_f_expected)) { info = -9; goto cleanup; }
+    }
+    
+    if (pcoeff_c == NULL && porm_f > 0) { info = -5; goto cleanup; }
+    if (qcoeff_c == NULL && (p_c > 0 || m_c > 0) ) { info = -8; goto cleanup; }
 
-     if (row_major) {
-         // For row-major C, LD is number of columns (second dim for 3D slice)
-         int min_ldpco1_rm_rows = porm;
-         int min_ldpco2_rm_cols = porm;
-         int min_ldqco1_rm_rows = maxmp; // Needs workspace
-         int min_ldqco2_rm_cols = maxmp; // Needs workspace
+    if (info != 0) goto cleanup;
 
-         if (ldpco1 < min_ldpco1_rm_rows) { info = -6; goto cleanup; }
-         if (ldpco2 < min_ldpco2_rm_cols) { info = -7; goto cleanup; }
-         if (ldqco1 < min_ldqco1_rm_rows) { info = -9; goto cleanup; }
-         if (ldqco2 < min_ldqco2_rm_cols) { info = -10; goto cleanup; }
-     } else {
-         // For column-major C, LD is number of rows (Fortran style)
-         if (ldpco1 < min_ldpco1_f) { info = -6; goto cleanup; }
-         if (ldpco2 < min_ldpco2_f) { info = -7; goto cleanup; }
-         if (ldqco1 < min_ldqco1_f) { info = -9; goto cleanup; }
-         if (ldqco2 < min_ldqco2_f) { info = -10; goto cleanup; }
-     }
+    if (row_major_flag) {
+        // --- PCOEFF handling ---
+        if (porm_f > 0 && pcoeff_c != NULL) {
+            size_t pcoeff_slice_elems_f = (size_t)porm_f * porm_f; // Elements in one Fortran slice (porm x porm)
+            pcoeff_cm = (double*)malloc(pcoeff_slice_elems_f * indlim_c * sizeof(double));
+            CHECK_ALLOC(pcoeff_cm);
+            pcoeff_f_ptr = pcoeff_cm;
 
-     /* --- Workspace Allocation --- */
-     // No workspace needed for TC01OD
+            for (int k = 0; k < indlim_c; ++k) {
+                double* c_slice_k_start = pcoeff_c + k * (size_t)ldpcoeff_c_rows * ldpcoeff_c_cols;
+                double* f_slice_k_start = pcoeff_cm + k * pcoeff_slice_elems_f;
+                // C slice (porm_f x porm_f), C ld_src (cols) = ldpcoeff_c_cols
+                // Fortran slice (porm_f x porm_f), Fortran ld_dest (rows) = ldpco1_f_expected
+                slicot_transpose_to_fortran_with_ld(c_slice_k_start, f_slice_k_start, 
+                                                    porm_f, porm_f, 
+                                                    ldpcoeff_c_cols,    // ld_src for C (cols)
+                                                    ldpco1_f_expected,  // ld_dest for Fortran (rows)
+                                                    sizeof(double));
+            }
+        } else if (porm_f == 0) {
+            pcoeff_f_ptr = NULL; 
+        }
 
-     /* --- Prepare Arrays and Call Fortran Routine --- */
-     size_t elem_size = sizeof(double);
-     if (row_major) {
-         /* Calculate total sizes for allocation/transposition */
-         size_t pcoeff_slice_size = (size_t)porm * porm;
-         size_t qcoeff_slice_size = (size_t)maxmp * maxmp; // Use workspace size for copy
-         size_t pcoeff_total_size = pcoeff_slice_size * indlim;
-         size_t qcoeff_total_size = qcoeff_slice_size * indlim;
+        // --- QCOEFF handling ---
+        // Input is PxM, output is MxP. Fortran buffer is LDQCO1_F x LDQCO2_F.
+        size_t qcoeff_slice_elems_f = (size_t)ldqco1_f_expected * ldqco2_f_expected;
 
-         /* Allocate memory for column-major copies */
-         if (pcoeff_total_size > 0) { pcoeff_cm = (double*)malloc(pcoeff_total_size * elem_size); CHECK_ALLOC(pcoeff_cm); }
-         if (qcoeff_total_size > 0) { qcoeff_cm = (double*)malloc(qcoeff_total_size * elem_size); CHECK_ALLOC(qcoeff_cm); }
+        if ((p_c > 0 || m_c > 0) && qcoeff_c != NULL) { 
+            qcoeff_cm = (double*)malloc(qcoeff_slice_elems_f * indlim_c * sizeof(double));
+            CHECK_ALLOC(qcoeff_cm);
+            qcoeff_f_ptr = qcoeff_cm;
+            memset(qcoeff_cm, 0, qcoeff_slice_elems_f * indlim_c * sizeof(double)); 
 
-         /* Transpose each 2D slice from C (row-major) to Fortran (column-major) */
-         // Determine input dimensions for Q
-         int q_in_rows = p;
-         int q_in_cols = m;
-         size_t q_in_slice_size = (size_t)q_in_rows * q_in_cols;
+            // Transpose PxM input from user's C row-major qcoeff_c to top-left of qcoeff_cm slices
+            if (p_c > 0 && m_c > 0) { // Only if there's actual input data
+                 for (int k = 0; k < indlim_c; ++k) {
+                    double* c_slice_k_start = qcoeff_c + k * (size_t)ldqcoeff_c_rows * ldqcoeff_c_cols;
+                    double* f_slice_k_start = qcoeff_cm + k * qcoeff_slice_elems_f;
+                    // C slice is p_c x m_c, C ld_src (cols) = ldqcoeff_c_cols
+                    // Fortran slice is ldqco1_f_expected x ldqco2_f_expected, Fortran ld_dest (rows) = ldqco1_f_expected
+                    slicot_transpose_to_fortran_with_ld(c_slice_k_start, f_slice_k_start,
+                                                        p_c, m_c,
+                                                        ldqcoeff_c_cols,    // ld_src for C (cols)
+                                                        ldqco1_f_expected,  // ld_dest for Fortran (rows)
+                                                        sizeof(double));
+                }
+            }
+        } else { 
+             qcoeff_f_ptr = NULL;
+        }
+    } else { // Column-major C
+        // Fortran LDs are taken directly from C LDs
+        ldpco1_f_expected = ldpcoeff_c_rows;
+        ldpco2_f_expected = ldpcoeff_c_cols;
+        ldqco1_f_expected = ldqcoeff_c_rows;
+        ldqco2_f_expected = ldqcoeff_c_cols;
+        
+        if (porm_f == 0) pcoeff_f_ptr = NULL;
+        if (p_c == 0 && m_c == 0) qcoeff_f_ptr = NULL;
+    }
 
-         for (int k = 0; k < indlim; ++k) {
-             if (pcoeff_slice_size > 0 && pcoeff_cm) {
-                 slicot_transpose_to_fortran(pcoeff + k * pcoeff_slice_size, pcoeff_cm + k * pcoeff_slice_size, porm, porm, elem_size);
-             }
-             if (q_in_slice_size > 0 && qcoeff_cm) {
-                 // Transpose only the PxM part into the MAXMP x MAXMP buffer
-                 slicot_transpose_to_fortran(qcoeff + k * q_in_slice_size, qcoeff_cm + k * qcoeff_slice_size, q_in_rows, q_in_cols, elem_size);
-             }
-         }
+    // Call Fortran routine
+    F77_FUNC(tc01od, TC01OD)(&leri_f, &m_c, &p_c, &indlim_c,
+                             pcoeff_f_ptr, &ldpco1_f_expected, &ldpco2_f_expected,
+                             qcoeff_f_ptr, &ldqco1_f_expected, &ldqco2_f_expected,
+                             &info, 1);
 
-         /* Fortran leading dimensions (use workspace sizes) */
-         ldpco1_f = (porm > 0) ? porm : 1;
-         ldpco2_f = (porm > 0) ? porm : 1;
-         ldqco1_f = (maxmp > 0) ? maxmp : 1;
-         ldqco2_f = (maxmp > 0) ? maxmp : 1;
+    if (row_major_flag && info == 0) {
+        // --- PCOEFF transpose back ---
+        if (porm_f > 0 && pcoeff_cm != NULL && pcoeff_c != NULL) {
+            size_t pcoeff_slice_elems_f = (size_t)porm_f * porm_f;
+            for (int k = 0; k < indlim_c; ++k) {
+                double* f_slice_k_start = pcoeff_cm + k * pcoeff_slice_elems_f;
+                double* c_slice_k_start = pcoeff_c + k * (size_t)ldpcoeff_c_rows * ldpcoeff_c_cols;
+                // Fortran slice is porm_f x porm_f (col-major), Fortran ld_src (rows) = ldpco1_f_expected
+                // C slice is porm_f x porm_f (row-major), C ld_dest (cols) = ldpcoeff_c_cols
+                slicot_transpose_to_c_with_ld(f_slice_k_start, c_slice_k_start,
+                                              porm_f, porm_f,
+                                              ldpco1_f_expected, // ld_src for Fortran (rows)
+                                              ldpcoeff_c_cols,   // ld_dest for C (cols)
+                                              sizeof(double));
+            }
+        }
 
-         /* Set pointers */
-         pcoeff_ptr = pcoeff_cm;
-         qcoeff_ptr = qcoeff_cm;
+        // --- QCOEFF transpose back ---
+        // Output is MxP. Fortran buffer was LDQCO1_F x LDQCO2_F.
+        size_t qcoeff_slice_elems_f = (size_t)ldqco1_f_expected * ldqco2_f_expected;
 
-     } else {
-         /* Column-major case - use original arrays */
-         ldpco1_f = ldpco1; ldpco2_f = ldpco2;
-         ldqco1_f = ldqco1; ldqco2_f = ldqco2;
-         pcoeff_ptr = pcoeff;
-         qcoeff_ptr = qcoeff;
-     }
+        if ((m_c > 0 || p_c > 0) && qcoeff_cm != NULL && qcoeff_c != NULL) { 
+             if (m_c > 0 && p_c > 0) { // Only if output has non-zero dimensions
+                for (int k = 0; k < indlim_c; ++k) {
+                    double* f_slice_k_start = qcoeff_cm + k * qcoeff_slice_elems_f;
+                    double* c_slice_k_start = qcoeff_c + k * (size_t)ldqcoeff_c_rows * ldqcoeff_c_cols;
+                    // Fortran slice (output part) is m_c x p_c (col-major), Fortran ld_src (rows) = ldqco1_f_expected
+                    // C slice is m_c x p_c (row-major), C ld_dest (cols) = ldqcoeff_c_cols
+                    slicot_transpose_to_c_with_ld(f_slice_k_start, c_slice_k_start,
+                                                  m_c, p_c,
+                                                  ldqco1_f_expected, // ld_src for Fortran (rows)
+                                                  ldqcoeff_c_cols,   // ld_dest for C (cols)
+                                                  sizeof(double));
+                }
+            }
+        }
+    }
 
-     /* --- Call the computational routine --- */
-     F77_FUNC(tc01od, TC01OD)(&leri_upper, &m, &p, &indlim,
-                              pcoeff_ptr, &ldpco1_f, &ldpco2_f,
-                              qcoeff_ptr, &ldqco1_f, &ldqco2_f, &info,
-                              leri_len);
-
-     /* --- Copy results back to row-major format if needed --- */
-     if (row_major && info == 0) {
-         // Determine output dimensions
-         int porm_out = (leri_upper == 'L') ? m : p; // Output P'(s) dimension
-         int q_rows_out = m; // Output Q'(s) is M x P
-         int q_cols_out = p;
-         size_t pcoeff_out_slice_size = (size_t)porm_out * porm_out;
-         size_t qcoeff_out_slice_size = (size_t)q_rows_out * q_cols_out;
-
-         // Determine CM buffer slice sizes used by Fortran
-         size_t pcoeff_cm_slice_size = (size_t)porm * porm;
-         size_t qcoeff_cm_slice_size = (size_t)maxmp * maxmp;
-
-         for (int k = 0; k < indlim; ++k) {
-             if (pcoeff_out_slice_size > 0 && pcoeff_cm) {
-                 // Transpose from the CM buffer (which now holds P') to the original RM buffer
-                 slicot_transpose_to_c(pcoeff_cm + k * pcoeff_cm_slice_size, pcoeff + k * pcoeff_out_slice_size, porm_out, porm_out, elem_size);
-             }
-             if (qcoeff_out_slice_size > 0 && qcoeff_cm) {
-                 // Transpose from the CM buffer (which now holds Q') to the original RM buffer
-                 slicot_transpose_to_c(qcoeff_cm + k * qcoeff_cm_slice_size, qcoeff + k * qcoeff_out_slice_size, q_rows_out, q_cols_out, elem_size);
-             }
-         }
-     }
-     // In column-major case, PCOEFF, QCOEFF modified in place.
-
-  cleanup:
-     /* --- Cleanup --- */
-     free(pcoeff_cm);
-     free(qcoeff_cm);
-
-     return info;
- }
+cleanup:
+    free(pcoeff_cm);
+    free(qcoeff_cm);
+    return info;
+}
