@@ -43,27 +43,27 @@ extern "C" {
  * On exit, contains the transformed output matrix of dimension (p x NR).
  * Stored column-wise if row_major=0, row-wise if row_major=1.
  * @param ldc    Leading dimension of the C array storing C.
- * If row_major=0 (column-major), ldc >= max(1, p).
+ * If row_major=0 (column-major), ldc >= max(1, p) (if ROWCOL='R') or ldc >= max(1,m,p) (if ROWCOL='C').
  * If row_major=1 (row-major), ldc >= max(1, n) (number of columns).
  * @param d      (input) Matrix D of the state-space system. Dimensions (p x m).
  * Stored column-wise if row_major=0, row-wise if row_major=1.
  * @param ldd    Leading dimension of the C array storing D.
- * If row_major=0 (column-major), ldd >= max(1, p).
+ * If row_major=0 (column-major), ldd >= max(1, p) (if ROWCOL='R') or ldd >= max(1,m,p) (if ROWCOL='C').
  * If row_major=1 (row-major), ldd >= max(1, m) (number of columns).
  * @param[out] nr Pointer to store the order of the transformed state-space representation.
  * @param[out] index Integer array, dimension (porm), where porm = p if rowcol='R', else m.
- * Stores the degrees of the denominator polynomials.
- * @param[out] dcoeff Double precision array, dimension (porm x (max(index_val)+1)).
+ * Stores the degrees of the denominator polynomials. Can be NULL if porm is 0.
+ * @param[out] dcoeff Double precision array, dimension (porm x (max_deg_val+1)).
  * Stores the coefficients of each denominator polynomial.
  * DCOEFF(i,k) is the coefficient in s**(INDEX(i)-k) of the i-th denominator polynomial.
- * Must be allocated by the caller with dimensions (lddcoe_c x (max_n_expected+1)).
- * @param lddcoe_c Leading dimension of the C array dcoeff (number of rows, i.e., porm).
- * @param[out] ucoeff Double precision array, dimension (porm x porp x (max(index_val)+1)).
+ * Must be allocated by the caller with dimensions (lddcoe_c x (max_n_expected+1)). Can be NULL if porm is 0.
+ * @param lddcoe_c Leading dimension of the C array dcoeff (number of rows, i.e., porm). Ignored if dcoeff_out is NULL.
+ * @param[out] ucoeff Double precision array, dimension (porm x porp x (max_deg_val+1)).
  * Stores the coefficients of the numerator matrix U(s).
  * UCOEFF(i,j,k) is the coefficient in s**(INDEX(iorj)-k) of polynomial (i,j) of U(s).
- * Must be allocated by the caller with dimensions (lduco1_c x lduco2_c x (max_n_expected+1)).
- * @param lduco1_c First dimension of the C array ucoeff (porm).
- * @param lduco2_c Second dimension of the C array ucoeff (porp).
+ * Must be allocated by the caller. Can be NULL if porm or porp is 0.
+ * @param lduco1_c First dimension of the C array ucoeff (porm). Ignored if ucoeff_out is NULL.
+ * @param lduco2_c Second dimension of the C array ucoeff (porp). Ignored if ucoeff_out is NULL.
  * @param tol1   (input) Tolerance for determining transfer function coefficients. Default used if <= 0.
  * @param tol2   (input) Tolerance for separating controllable/observable subsystem. Default used if <= 0.
  * @param row_major Specifies matrix storage for A, B, C, D:

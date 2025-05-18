@@ -33,15 +33,15 @@ extern void F77_FUNC(tb04ad, TB04AD)(
 
 /* C wrapper function definition */
 SLICOT_EXPORT
-int slicot_tb04ad(const char* rowcol_in, int n, int m, int p,
-                  double* a, int lda_c,
-                  double* b, int ldb_c,
-                  double* c, int ldc_c,
-                  const double* d_in, int ldd_c,
-                  int* nr, int* index, double* dcoeff_out, int lddcoe_c,
+int slicot_tb04ad(const char* rowcol_in, int n_c, int m_c, int p_c,
+                  double* a_c, int lda_c,
+                  double* b_c, int ldb_c,
+                  double* c_c, int ldc_c,
+                  const double* d_c_in, int ldd_c,
+                  int* nr_out, int* index_out, double* dcoeff_out, int lddcoe_c,
                   double* ucoeff_out, int lduco1_c, int lduco2_c,
-                  double tol1, double tol2,
-                  int row_major)
+                  double tol1_in, double tol2_in,
+                  int row_major_flag)
 {
     // 1. Variable declarations
     int info = 0;
@@ -55,69 +55,72 @@ int slicot_tb04ad(const char* rowcol_in, int n, int m, int p,
     double* c_cm = NULL;
     double* d_cm = NULL;
 
-    char rowcol_upper_char;
-    int porm, porp;
+    char rowcol_f;
+    int porm_f, porp_f; // Dimensions based on ROWCOL for Fortran outputs INDEX, DCOEFF, UCOEFF
 
     // Initial check for rowcol_in
     if (rowcol_in == NULL || (rowcol_in[0] != 'R' && rowcol_in[0] != 'r' && rowcol_in[0] != 'C' && rowcol_in[0] != 'c')) {
         info = -1; goto cleanup;
     }
-    rowcol_upper_char = toupper(rowcol_in[0]);
+    rowcol_f = toupper(rowcol_in[0]);
 
-    if (rowcol_upper_char == 'R') {
-        porm = p;
-        porp = m;
-    } else {
-        porm = m;
-        porp = p;
+    if (rowcol_f == 'R') {
+        porm_f = p_c; 
+        porp_f = m_c; 
+    } else { // ROWCOL = 'C'
+        porm_f = m_c; 
+        porp_f = p_c; 
     }
     
     // 2. Input parameter validation
-    if (n < 0) { info = -2; goto cleanup; }
-    if (m < 0) { info = -3; goto cleanup; }
-    if (p < 0) { info = -4; goto cleanup; }
+    if (n_c < 0) { info = -2; goto cleanup; }
+    if (m_c < 0) { info = -3; goto cleanup; }
+    if (p_c < 0) { info = -4; goto cleanup; }
 
-    if (a == NULL && n > 0) { info = -5; goto cleanup; }
-    if (b == NULL && n > 0 && m > 0) { info = -7; goto cleanup; }
-    if (c == NULL && p > 0 && n > 0) { info = -9; goto cleanup; }
-    if (d_in == NULL && p > 0 && m > 0) { info = -11; goto cleanup; }
-    if (nr == NULL) { info = -12; goto cleanup; }
-    if (index == NULL && porm > 0) { info = -13; goto cleanup; }
-    if (dcoeff_out == NULL && porm > 0) { info = -14; goto cleanup; }
-    if (ucoeff_out == NULL && porm > 0 && porp > 0) { info = -16; goto cleanup; }
+    if (a_c == NULL && n_c > 0) { info = -5; goto cleanup; }
+    if (b_c == NULL && n_c > 0 && m_c > 0) { info = -7; goto cleanup; } 
+    if (c_c == NULL && p_c > 0 && n_c > 0) { info = -9; goto cleanup; } 
+    if (d_c_in == NULL && p_c > 0 && m_c > 0) { info = -11; goto cleanup; } 
+    if (nr_out == NULL) { info = -12; goto cleanup; }
+    
+    if (index_out == NULL && porm_f > 0) { info = -13; goto cleanup; }
+    if (dcoeff_out == NULL && porm_f > 0) { info = -14; goto cleanup; }
+    if (ucoeff_out == NULL && porm_f > 0 && porp_f > 0) { info = -16; goto cleanup; }
 
-    int min_lda_f = MAX(1, n);
-    int min_ldb_f = MAX(1, n);
-    int min_ldc_f_val = (rowcol_upper_char == 'R') ? MAX(1,p) : MAX(1, MAX(m,p));
-    int min_ldd_f_val = (rowcol_upper_char == 'R') ? MAX(1,p) : MAX(1, MAX(m,p));
+    // Fortran-side leading dimensions (number of rows for Fortran)
+    int lda_f_expected = MAX(1, n_c);
+    int ldb_f_expected = MAX(1, n_c); 
+    int ldc_f_expected = (rowcol_f == 'R') ? MAX(1,p_c) : MAX(1, MAX(m_c,p_c));
+    int ldd_f_expected = (rowcol_f == 'R') ? MAX(1,p_c) : MAX(1, MAX(m_c,p_c));
 
-    if (row_major) {
-        if (n > 0 && lda_c < n) { info = -6; goto cleanup; }
-        if (n > 0 && m > 0 && ldb_c < m) { info = -8; goto cleanup; }
-        if (p > 0 && n > 0 && ldc_c < n) { info = -10; goto cleanup; }
-        if (p > 0 && m > 0 && ldd_c < m) { info = -11; goto cleanup; }
-    } else { 
-        if (n > 0 && lda_c < min_lda_f) { info = -6; goto cleanup; }
-        if (n > 0 && m > 0 && ldb_c < min_ldb_f) { info = -8; goto cleanup; }
-        if ( (p > 0 || (rowcol_upper_char == 'C' && m > 0)) && n > 0 && ldc_c < min_ldc_f_val ) { info = -10; goto cleanup; }
-        if ( (p > 0 && m > 0) || (rowcol_upper_char == 'C' && (m>0 || p>0)) ) {
-             if (ldd_c < min_ldd_f_val) {info = -11; goto cleanup;}
+    if (row_major_flag) {
+        // C LDs are number of columns
+        if (n_c > 0 && lda_c < n_c) { info = -6; goto cleanup; } 
+        if (n_c > 0 && m_c > 0 && ldb_c < m_c) { info = -8; goto cleanup; } 
+        if (p_c > 0 && n_c > 0 && ldc_c < n_c) { info = -10; goto cleanup; } 
+        if (p_c > 0 && m_c > 0 && ldd_c < m_c) { info = -11; goto cleanup; } 
+    } else { // Column Major C
+        if (n_c > 0 && lda_c < lda_f_expected) { info = -6; goto cleanup; }
+        if (n_c > 0 && m_c > 0 && ldb_c < ldb_f_expected) { info = -8; goto cleanup; } 
+        if (n_c > 0 && (p_c > 0 || (rowcol_f == 'C' && (m_c > 0 || p_c > 0))) && ldc_c < ldc_f_expected ) { info = -10; goto cleanup; }
+        if ( (p_c > 0 && m_c > 0) || (rowcol_f == 'C' && (m_c > 0 || p_c > 0)) ) {
+             if (ldd_c < ldd_f_expected) {info = -11; goto cleanup;}
         }
     }
 
-    if (porm > 0 && lddcoe_c < porm) { info = -15; goto cleanup; }
-    if (porm > 0 && lduco1_c < porm) { info = -17; goto cleanup; }
-    if (porp > 0 && lduco2_c < porp) { info = -18; goto cleanup; }
+    if (porm_f > 0 && lddcoe_c < porm_f) { info = -15; goto cleanup; }
+    if (porm_f > 0 && lduco1_c < porm_f) { info = -17; goto cleanup; }
+    if (porp_f > 0 && lduco2_c < porp_f) { info = -18; goto cleanup; }
 
     if (info != 0) { goto cleanup; }
 
-    // 3. Internal Workspace Allocation (Method B: Formula based)
-    int mp_ws = (rowcol_upper_char == 'R') ? m : p;
-    int pm_ws = (rowcol_upper_char == 'R') ? p : m;
-    ldwork = MAX(1, n*(n+1) + MAX(n*mp_ws + 2*n + MAX(n,mp_ws), MAX(3*mp_ws, pm_ws)));
-    if (n==0 && m==0 && p==0 && ldwork < 1) ldwork=1; // Ensure ldwork >= 1 for all-zero case
+    // 3. Internal Workspace Allocation (Formula based)
+    int mp_ws = (rowcol_f == 'R') ? m_c : p_c;
+    int pm_ws = (rowcol_f == 'R') ? p_c : m_c;
+    ldwork = MAX(1, n_c*(n_c+1) + MAX(n_c*mp_ws + 2*n_c + MAX(n_c,mp_ws), MAX(3*mp_ws, pm_ws)));
+    if (n_c==0 && m_c==0 && p_c==0 && ldwork < 1) ldwork=1; 
 
-    liwork = n + MAX(m, p);
+    liwork = n_c + MAX(m_c, p_c);
     liwork = MAX(1, liwork);
 
     dwork = (double*)malloc((size_t)ldwork * sizeof(double));
@@ -125,136 +128,133 @@ int slicot_tb04ad(const char* rowcol_in, int n, int m, int p,
     iwork = (int*)malloc((size_t)liwork * sizeof(int));
     CHECK_ALLOC(iwork);
 
-    // 4. Memory allocation for column-major copies and Fortran pointers
-    size_t a_size_bytes = (n > 0) ? (size_t)n * n * sizeof(double) : 0;
-    size_t b_size_bytes = (n > 0 && m > 0) ? (size_t)n * m * sizeof(double) : 0;
-    
-    int lda_f = min_lda_f;
-    int ldb_f = min_ldb_f;
-    int ldc_f = min_ldc_f_val;
-    int ldd_f = min_ldd_f_val;
+    // 4. Prepare Fortran pointers and temporary column-major buffers if needed
+    double* a_f_ptr = a_c; // Default to C pointer
+    double* b_f_ptr = b_c;
+    double* c_f_ptr = c_c;
+    double* d_f_ptr = (double*)d_c_in; // Fortran D is not const if ROWCOL='C'
 
-    double* a_ptr = (n > 0 && a != NULL) ? a : NULL;
-    double* b_ptr = (n > 0 && m > 0 && b != NULL) ? b : NULL;
-    double* c_ptr = ( (p > 0 || (rowcol_upper_char == 'C' && m > 0)) && n > 0 && c != NULL) ? c : NULL;
-    double* d_ptr_fortran = NULL; // To be determined
+    // Fortran buffer element counts (rows_f * cols_f)
+    // These are the total elements Fortran might access in its view of the array
+    size_t a_f_buf_elems = (n_c > 0) ? (size_t)lda_f_expected * n_c : 0;
+    size_t b_f_buf_elems = (n_c > 0) ? (size_t)ldb_f_expected * MAX(1, (rowcol_f == 'R') ? m_c : MAX(m_c,p_c)) : 0;
+    size_t c_f_buf_elems = (n_c > 0) ? (size_t)ldc_f_expected * n_c : 0;
+    size_t d_f_buf_elems = (p_c > 0 || m_c > 0 || rowcol_f == 'C') ? /*D is PxM or MAX(M,P)xMAX(M,P) workspace*/
+                           (size_t)ldd_f_expected * MAX(1, (rowcol_f == 'R') ? m_c : MAX(m_c,p_c)) : 0;
 
-    size_t c_fortran_buf_size = 0;
-     if ( (p > 0 || (rowcol_upper_char == 'C' && m > 0)) && n > 0 ) {
-        c_fortran_buf_size = (size_t)ldc_f * n * sizeof(double);
-     }
 
-    size_t d_fortran_buf_size = 0;
-    if (rowcol_upper_char == 'R' && p > 0 && m > 0) {
-        d_fortran_buf_size = (size_t)ldd_f * m * sizeof(double);
-    } else if (rowcol_upper_char == 'C' && (m > 0 || p > 0)) {
-        d_fortran_buf_size = (size_t)ldd_f * MAX(1,MAX(m,p)) * sizeof(double);
-    }
+    if (row_major_flag) {
+        // For row_major, Fortran LDs are the number of rows in the conceptual Fortran matrix
+        // lda_f_expected, ldb_f_expected, ldc_f_expected, ldd_f_expected are already set.
 
-    if (row_major) {
-        lda_f = MAX(1, n); 
-        ldb_f = MAX(1, n); 
+        if (n_c > 0 && a_c != NULL) {
+            a_cm = (double*)malloc(a_f_buf_elems * sizeof(double)); CHECK_ALLOC(a_cm);
+            slicot_transpose_to_fortran_with_ld(a_c, a_cm, n_c, n_c, lda_c, lda_f_expected, sizeof(double));
+            a_f_ptr = a_cm;
+        } else { a_f_ptr = NULL; }
 
-        if (a_size_bytes > 0 && a != NULL) {
-            a_cm = (double*)malloc(a_size_bytes); CHECK_ALLOC(a_cm);
-            slicot_transpose_to_fortran_with_ld(a, a_cm, n, n, lda_c, lda_f, sizeof(double));
-            a_ptr = a_cm;
-        }
-
-        if (b_size_bytes > 0 && b != NULL) {
-            b_cm = (double*)malloc(b_size_bytes); CHECK_ALLOC(b_cm);
-            slicot_transpose_to_fortran_with_ld(b, b_cm, n, m, ldb_c, ldb_f, sizeof(double));
-            b_ptr = b_cm;
-        }
-        
-        if (c_fortran_buf_size > 0 && c != NULL) {
-            c_cm = (double*)malloc(c_fortran_buf_size); CHECK_ALLOC(c_cm);
-            memset(c_cm, 0, c_fortran_buf_size);
-            if (p > 0 && n > 0) { 
-                 slicot_transpose_to_fortran_with_ld(c, c_cm, p, n, ldc_c, ldc_f, sizeof(double));
+        if (n_c > 0 && b_c != NULL) { 
+            b_cm = (double*)malloc(b_f_buf_elems * sizeof(double)); CHECK_ALLOC(b_cm);
+            memset(b_cm, 0, b_f_buf_elems * sizeof(double)); 
+            if (m_c > 0) { 
+                slicot_transpose_to_fortran_with_ld(b_c, b_cm, n_c, m_c, ldb_c, ldb_f_expected, sizeof(double));
             }
-            c_ptr = c_cm;
-        }
+            b_f_ptr = b_cm;
+        } else { b_f_ptr = NULL; }
+        
+        if (n_c > 0 && c_c != NULL) { 
+            c_cm = (double*)malloc(c_f_buf_elems * sizeof(double)); CHECK_ALLOC(c_cm);
+            memset(c_cm, 0, c_f_buf_elems * sizeof(double)); 
+            if (p_c > 0) { 
+                slicot_transpose_to_fortran_with_ld(c_c, c_cm, p_c, n_c, ldc_c, ldc_f_expected, sizeof(double));
+            }
+            c_f_ptr = c_cm;
+        } else { c_f_ptr = NULL; }
 
-        if (d_fortran_buf_size > 0) {
-            d_cm = (double*)malloc(d_fortran_buf_size); CHECK_ALLOC(d_cm);
-            memset(d_cm, 0, d_fortran_buf_size);
-            if (d_in != NULL && p > 0 && m > 0) {
-                 if (rowcol_upper_char == 'R') {
-                    slicot_transpose_to_fortran_with_ld(d_in, d_cm, p, m, ldd_c, ldd_f, sizeof(double));
+        if (d_f_buf_elems > 0 ) { 
+            d_cm = (double*)malloc(d_f_buf_elems * sizeof(double)); CHECK_ALLOC(d_cm);
+            memset(d_cm, 0, d_f_buf_elems * sizeof(double));
+            if (d_c_in != NULL && p_c > 0 && m_c > 0) {
+                if (rowcol_f == 'R') {
+                    slicot_transpose_to_fortran_with_ld(d_c_in, d_cm, p_c, m_c, ldd_c, ldd_f_expected, sizeof(double));
                 } else { 
-                    double* temp_d_pxm_cm = (double*)malloc((size_t)p * m * sizeof(double));
+                    double* temp_d_pxm_cm = (double*)malloc((size_t)p_c * m_c * sizeof(double));
                     CHECK_ALLOC(temp_d_pxm_cm);
-                    slicot_transpose_to_fortran_with_ld(d_in, temp_d_pxm_cm, p, m, ldd_c, MAX(1,p), sizeof(double));
-                    for (int col_j = 0; col_j < m; ++col_j) {
-                        for (int row_i = 0; row_i < p; ++row_i) {
-                            d_cm[row_i + col_j * ldd_f] = temp_d_pxm_cm[row_i + col_j * MAX(1,p)];
+                    slicot_transpose_to_fortran_with_ld(d_c_in, temp_d_pxm_cm, p_c, m_c, ldd_c, MAX(1,p_c), sizeof(double));
+                    for (int col_j = 0; col_j < m_c; ++col_j) {
+                        for (int row_i = 0; row_i < p_c; ++row_i) {
+                            d_cm[row_i + col_j * ldd_f_expected] = temp_d_pxm_cm[row_i + col_j * MAX(1,p_c)];
                         }
                     }
                     free(temp_d_pxm_cm);
                 }
             }
-            d_ptr_fortran = d_cm;
+            d_f_ptr = d_cm;
         } else {
-            d_ptr_fortran = NULL; // If d_in is NULL or D has zero logical size for 'R'
+            d_f_ptr = NULL;
         }
 
     } else { // Column Major C
-        if (rowcol_upper_char == 'C' && d_fortran_buf_size > 0) {
-            d_cm = (double*)malloc(d_fortran_buf_size); CHECK_ALLOC(d_cm);
-            memset(d_cm, 0, d_fortran_buf_size);
-            if (d_in != NULL && p > 0 && m > 0) { 
-                for (int col_j = 0; col_j < m; ++col_j) {
-                    for (int row_i = 0; row_i < p; ++row_i) {
-                        d_cm[row_i + col_j * ldd_f] = d_in[row_i + col_j * ldd_c];
+        if (rowcol_f == 'C' && d_f_buf_elems > 0) {
+            d_cm = (double*)malloc(d_f_buf_elems * sizeof(double)); CHECK_ALLOC(d_cm);
+            memset(d_cm, 0, d_f_buf_elems * sizeof(double));
+            if (d_c_in != NULL && p_c > 0 && m_c > 0) { 
+                for (int col_j = 0; col_j < m_c; ++col_j) {
+                    for (int row_i = 0; row_i < p_c; ++row_i) {
+                        d_cm[row_i + col_j * ldd_f_expected] = d_c_in[row_i + col_j * ldd_c];
                     }
                 }
             }
-            d_ptr_fortran = d_cm;
-        } else if (d_fortran_buf_size > 0 && d_in != NULL){ // ROWCOL='R', make a copy
-             d_cm = (double*)malloc(d_fortran_buf_size); CHECK_ALLOC(d_cm);
-             if (p > 0 && m > 0) {
-                for(int j=0; j<m; ++j) { 
-                    for(int i=0; i<p; ++i) {
-                        d_cm[i + j*ldd_f] = d_in[i + j*ldd_c];
+            d_f_ptr = d_cm;
+        } else if (d_f_buf_elems > 0 && d_c_in != NULL){ 
+             d_cm = (double*)malloc(d_f_buf_elems * sizeof(double)); CHECK_ALLOC(d_cm);
+             if (p_c > 0 && m_c > 0) { 
+                for(int j=0; j<m_c; ++j) { 
+                    for(int i=0; i<p_c; ++i) {
+                        d_cm[i + j*ldd_f_expected] = d_c_in[i + j*ldd_c];
                     }
                 }
              }
-             d_ptr_fortran = d_cm;
-        } else { // d_in is NULL or D has zero logical size
-            d_ptr_fortran = NULL;
+             d_f_ptr = d_cm;
+        } else { 
+            d_f_ptr = NULL;
         }
+        // Ensure NULL is passed if logical size is 0 and input pointer is NULL
+        if (n_c == 0 && a_c == NULL) a_f_ptr = NULL;
+        if ((n_c == 0 || m_c == 0) && b_c == NULL) b_f_ptr = NULL;
+        if ((p_c == 0 || n_c == 0) && c_c == NULL) c_f_ptr = NULL;
     }
 
-    int f_lddcoe = MAX(1, porm);
-    int f_lduco1 = MAX(1, porm);
-    int f_lduco2 = MAX(1, porp);
+    // Fortran leading dimensions for output coefficient arrays
+    int f_lddcoe_fortran = MAX(1, porm_f);
+    int f_lduco1_fortran = MAX(1, porm_f);
+    int f_lduco2_fortran = MAX(1, porp_f);
     
-    int* index_pass = (porm > 0 ? index : NULL);
-    double* dcoeff_pass = (porm > 0 ? dcoeff_out : NULL);
-    double* ucoeff_pass = (porm > 0 && porp > 0 ? ucoeff_out : NULL);
-    if (porm == 0 && dcoeff_out != NULL) dcoeff_pass = dcoeff_out; // Allow dummy if porm=0 but user provided buffer
-    if ((porm == 0 || porp == 0) && ucoeff_out != NULL) ucoeff_pass = ucoeff_out;
-
+    int* index_f_pass = (porm_f > 0 ? index_out : NULL);
+    double* dcoeff_f_pass = (porm_f > 0 ? dcoeff_out : NULL);
+    double* ucoeff_f_pass = (porm_f > 0 && porp_f > 0 ? ucoeff_out : NULL);
 
     // 7. Call Fortran function
-    F77_FUNC(tb04ad, TB04AD)(&rowcol_upper_char, &n, &m, &p,
-                             a_ptr, &lda_f, b_ptr, &ldb_f, c_ptr, &ldc_f, d_ptr_fortran, &ldd_f,
-                             nr, index_pass, dcoeff_pass, &f_lddcoe,
-                             ucoeff_pass, &f_lduco1, &f_lduco2,
-                             &tol1, &tol2,
+    F77_FUNC(tb04ad, TB04AD)(&rowcol_f, &n_c, &m_c, &p_c,
+                             a_f_ptr, &lda_f_expected, 
+                             b_f_ptr, &ldb_f_expected, 
+                             c_f_ptr, &ldc_f_expected, 
+                             d_f_ptr, &ldd_f_expected,
+                             nr_out, index_f_pass, dcoeff_f_pass, &f_lddcoe_fortran,
+                             ucoeff_f_pass, &f_lduco1_fortran, &f_lduco2_fortran,
+                             &tol1_in, &tol2_in,
                              iwork, dwork, &ldwork, &info, 1);
 
     // 8. Convert results back to row-major
-    if (row_major && info == 0) {
-        if (n > 0 && a_cm != NULL && a != NULL) {
-            slicot_transpose_to_c_with_ld(a_cm, a, n, n, lda_f, lda_c, sizeof(double));
+    if (row_major_flag && info == 0) {
+        if (n_c > 0 && a_cm != NULL && a_c != NULL) { 
+            slicot_transpose_to_c_with_ld(a_cm, a_c, n_c, n_c, lda_f_expected, lda_c, sizeof(double));
         }
-        if (*nr > 0 && m > 0 && b_cm != NULL && b != NULL) {
-            slicot_transpose_to_c_with_ld(b_cm, b, *nr, m, ldb_f, ldb_c, sizeof(double));
+        if (*nr_out > 0 && m_c > 0 && b_cm != NULL && b_c != NULL) {
+            slicot_transpose_to_c_with_ld(b_cm, b_c, *nr_out, m_c, ldb_f_expected, ldb_c, sizeof(double));
         }
-        if (p > 0 && *nr > 0 && c_cm != NULL && c != NULL) {
-            slicot_transpose_to_c_with_ld(c_cm, c, p, *nr, ldc_f, ldc_c, sizeof(double));
+        if (p_c > 0 && *nr_out > 0 && c_cm != NULL && c_c != NULL) {
+            slicot_transpose_to_c_with_ld(c_cm, c_c, p_c, *nr_out, ldc_f_expected, ldc_c, sizeof(double));
         }
     }
 
