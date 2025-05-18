@@ -90,7 +90,7 @@ int slicot_tc01od(char leri_c, int m_c, int p_c, int indlim_c,
                                                     ldpco1_f_expected,  // ld_dest for Fortran (rows)
                                                     sizeof(double));
             }
-        } else if (porm_f == 0) {
+        } else if (porm_f == 0) { // If pcoeff is logically empty
             pcoeff_f_ptr = NULL; 
         }
 
@@ -118,11 +118,11 @@ int slicot_tc01od(char leri_c, int m_c, int p_c, int indlim_c,
                                                         sizeof(double));
                 }
             }
-        } else { 
+        } else { // If qcoeff is logically empty
              qcoeff_f_ptr = NULL;
         }
     } else { // Column-major C
-        // Fortran LDs are taken directly from C LDs
+        // Fortran LDs are taken directly from C LDs if C is column-major
         ldpco1_f_expected = ldpcoeff_c_rows;
         ldpco2_f_expected = ldpcoeff_c_cols;
         ldqco1_f_expected = ldqcoeff_c_rows;
