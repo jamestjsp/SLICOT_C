@@ -1,0 +1,9 @@
+numpy
+scipy
+matplotlib
+slycot
+control
+harold
+fortls
+fprettify
+findent
