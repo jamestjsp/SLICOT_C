@@ -5,8 +5,10 @@
 #include <iostream>  // For debugging
 #include <iomanip>   // For std::setprecision
 
-#include "mb03vy.h"       // Header for the C wrapper
+#include "mb03vd.h"
+#include "mb03vy.h"
 #include "slicot_utils.h" // For MAX, MIN if not in <algorithm> for C++
+#include "test_utils.h"
 
 // Helper function to get 3D array index for column-major storage
 // Fortran: A(row, col, page) (1-indexed)
@@ -17,247 +19,293 @@ size_t get_idx(int r, int c, int pg, int lda1, int lda2) {
            static_cast<size_t>(r);
 }
 
-
-// --- Test Fixture ---
-class MB03VYTest : public ::testing::Test {
+// --- Column-Major Test Fixture ---
+class MB03VYTestColMajor : public ::testing::Test {
 protected:
-    // Default parameters for basic tests
-    int N_default = 1;
-    int P_default = 1;
-    int ILO_default = 1;
-    int IHI_default = 1;
-    double check_tol = 1e-9; // Tolerance for checking numerical results
-
-    // Variables for tests
-    int N, P, ILO, IHI;
-    std::vector<double> A_data;
-    std::vector<double> TAU_data;
-    int LDA1, LDA2, LDTAU;
-
-    int info_result = -999; // Default to indicate not run
-
-    void SetUpDefault() {
-        N = N_default;
-        P = P_default;
-        ILO = ILO_default;
-        IHI = IHI_default;
-
+    // Test parameters from example
+    int N = 4;
+    int P = 2;
+    int ILO = 1;
+    int IHI = 4;
+    
+    // Verification tolerance
+    double check_tol = 1e-10;
+    
+    // Input matrices (column-major)
+    std::vector<double> A = {
+        // A1 (n×n)
+        1.5, 1.0, 1.5, 1.0,    // First column
+        -0.7, 0.0, -0.7, 0.0,  // Second column
+        3.5, 2.0, 2.5, 2.0,    // Third column
+        -0.7, 3.0, -0.3, 1.0,  // Fourth column
+        
+        // A2 (n×n)
+        1.5, 1.0, 1.5, 1.0,    // First column
+        -0.7, 0.0, -0.7, 0.0,  // Second column
+        3.5, 2.0, 2.5, 2.0,    // Third column
+        -0.7, 3.0, -0.3, 1.0   // Fourth column
+    };
+    
+    // Storage for TAU from MB03VD
+    std::vector<double> TAU;
+    
+    // Storage for matrices from MB03VD
+    std::vector<double> A_MB03VD;
+    
+    // Result info
+    int info_result = -999;
+    
+    // Leading dimensions
+    int LDA1;
+    int LDA2;
+    int LDTAU;
+    
+    void SetUp() override {
+        // Size output arrays
+        TAU.resize((N-1) * P);
+        A_MB03VD = A; // Copy for MB03VD input
+        
+        // Calculate leading dimensions
         LDA1 = std::max(1, N);
         LDA2 = std::max(1, N);
-        LDTAU = std::max(1, (N > 0 ? N - 1 : 0)); // N-1 can be 0 if N=1, or -1 if N=0. max(1,0)=1. max(1,-1)=1.
-                                                 // Corrected: LDTAU >= max(1, N-1). If N=0, N-1=-1, max(1,-1)=1. If N=1, N-1=0, max(1,0)=1.
-
-        // Allocate A: LDA1 * LDA2 * P
-        // A is (LDA1, LDA2, P) in Fortran.
-        // In C, flat storage for column major: P pages, each page is LDA2 columns, each col is LDA1 rows.
-        A_data.assign(static_cast<size_t>(LDA1) * LDA2 * P, 0.0);
-
-        // Allocate TAU: LDTAU * P
-        TAU_data.assign(static_cast<size_t>(LDTAU) * P, 0.0);
+        LDTAU = std::max(1, N-1);
+        
+        // Run MB03VD first to get the elementary reflectors
+        info_result = slicot_mb03vd(N, P, ILO, IHI,
+                                  A_MB03VD.data(), LDA1, LDA2,
+                                  TAU.data(), LDTAU,
+                                  0 /* row_major = false */);
+        ASSERT_EQ(info_result, 0);
     }
+};
 
+// --- Row-Major Test Fixture ---
+class MB03VYTestRowMajor : public ::testing::Test {
+protected:
+    // Test parameters from example
+    int N = 4;
+    int P = 2;
+    int ILO = 1;
+    int IHI = 4;
+    
+    // Verification tolerance
+    double check_tol = 1e-10;
+    
+    // Input matrices (row-major format)
+    std::vector<double> A_rm = {
+        // A1 (n×n) in row-major format
+        1.5, -0.7, 3.5, -0.7,  // First row
+        1.0, 0.0, 2.0, 3.0,    // Second row
+        1.5, -0.7, 2.5, -0.3,  // Third row
+        1.0, 0.0, 2.0, 1.0,    // Fourth row
+        
+        // A2 (n×n) in row-major format
+        1.5, -0.7, 3.5, -0.7,  // First row
+        1.0, 0.0, 2.0, 3.0,    // Second row
+        1.5, -0.7, 2.5, -0.3,  // Third row
+        1.0, 0.0, 2.0, 1.0     // Fourth row
+    };
+    
+    // Storage for TAU from MB03VD
+    std::vector<double> TAU_rm;
+    
+    // Storage for matrices from MB03VD
+    std::vector<double> A_MB03VD_rm;
+    
+    // Result info
+    int info_result = -999;
+    
+    // Leading dimensions
+    int LDA1;
+    int LDA2;
+    int LDTAU;
+    
     void SetUp() override {
-        SetUpDefault();
+        // Size output arrays
+        TAU_rm.resize((N-1) * P);
+        A_MB03VD_rm = A_rm; // Copy for MB03VD input
+        
+        // Calculate leading dimensions for row-major
+        LDA1 = std::max(1, N);  // Number of rows in each 2D slice
+        LDA2 = std::max(1, N);  // Number of columns in 2D slice
+        LDTAU = std::max(1, N-1); // Stride between columns in TAU
+        
+        // Run MB03VD first to get the elementary reflectors
+        info_result = slicot_mb03vd(N, P, ILO, IHI,
+                                  A_MB03VD_rm.data(), LDA1, LDA2,
+                                  TAU_rm.data(), LDTAU,
+                                  1 /* row_major = true */);
+        ASSERT_EQ(info_result, 0);
     }
 };
 
 // --- Test Cases ---
 
-TEST_F(MB03VYTest, ParameterValidation) {
-    // N invalid
-    info_result = slicot_mb03vy(-1, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -1);
-
-    // P invalid
-    SetUpDefault(); // Reset params
-    info_result = slicot_mb03vy(N, 0, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -2);
-
-    // ILO invalid (<1)
-    SetUpDefault();
-    info_result = slicot_mb03vy(N, P, 0, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -3);
-
-    // ILO invalid (>N, for N>0)
-    SetUpDefault(); N = 3; ILO = 4; IHI = 3; LDA1=3; LDA2=3; LDTAU=std::max(1,N-1); A_data.assign(LDA1*LDA2*P,0); TAU_data.assign(LDTAU*P,0);
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -3);
+// Test: Generate Q matrices (Column-Major)
+TEST_F(MB03VYTestColMajor, GenerateQMatrices) {
+    // Copy the output of MB03VD as input for MB03VY
+    std::vector<double> A_MB03VY = A_MB03VD;
     
-    // IHI invalid (<ILO, for N>0)
-    SetUpDefault(); N = 3; ILO = 2; IHI = 1; LDA1=3; LDA2=3; LDTAU=std::max(1,N-1); A_data.assign(LDA1*LDA2*P,0); TAU_data.assign(LDTAU*P,0);
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -4);
-
-    // IHI invalid (>N, for N>0)
-    SetUpDefault(); N = 3; ILO = 1; IHI = 4; LDA1=3; LDA2=3; LDTAU=std::max(1,N-1); A_data.assign(LDA1*LDA2*P,0); TAU_data.assign(LDTAU*P,0);
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -4);
-
-    // LDA1 invalid
-    SetUpDefault(); N = 3; LDA1 = 2; LDA2=3; LDTAU=std::max(1,N-1); A_data.assign(LDA1*LDA2*P,0); TAU_data.assign(LDTAU*P,0);
-    info_result = slicot_mb03vy(N, P, 1, N, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -6);
-
-    // LDA2 invalid
-    SetUpDefault(); N = 3; LDA1 = 3; LDA2=2; LDTAU=std::max(1,N-1); A_data.assign(LDA1*LDA2*P,0); TAU_data.assign(LDTAU*P,0);
-    info_result = slicot_mb03vy(N, P, 1, N, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -7);
-
-    // LDTAU invalid
-    SetUpDefault(); N = 3; LDA1 = 3; LDA2=3; LDTAU=1; // N-1 = 2, so LDTAU must be >= 2
-    if (N > 1) { // Only test if N-1 is relevant
-       A_data.assign(LDA1*LDA2*P,0); TAU_data.assign(LDTAU*P,0);
-       info_result = slicot_mb03vy(N, P, 1, N, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-       EXPECT_EQ(info_result, -9);
-    }
-    SetUpDefault(); N = 1; LDA1 = 1; LDA2=1; LDTAU=0; // N-1=0, max(1,0)=1. LDTAU must be >=1
-    A_data.assign(LDA1*LDA2*P,0); TAU_data.assign(LDTAU*P,0); // This will make TAU_data empty if LDTAU=0
-    // The wrapper might not catch LDTAU=0 if N-1 is also 0, but Fortran might.
-    // The current wrapper validation is `ldtau < MAX(1, n - 1)`. If N=1, `n-1=0`, `MAX(1,0)=1`. So `ldtau < 1` is an error.
-    info_result = slicot_mb03vy(N, P, 1, N, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, -9);
-
-
-    // Test with NULL pointers for A and TAU when N > 0 or P > 0
-    SetUpDefault(); N = 1; P = 1; // Valid N, P
-    LDA1=1; LDA2=1; LDTAU=1;
-    // A is NULL
-    info_result = slicot_mb03vy(N, P, ILO, IHI, nullptr, LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    // The wrapper doesn't explicitly check for A == NULL, but Fortran will likely crash or error.
-    // SLICOT wrappers typically check for NULL on required arrays. MB03VY.c does not for A and TAU.
-    // This is a deviation from typical robust wrapper practice. For now, we expect it to pass wrapper validation.
-    // If it crashes, it means the Fortran layer is hit.
-    // Let's assume the Fortran layer would return a negative info for its argument if A is required and NULL.
-    // A is arg 5.
-    // For now, this test might not be meaningful if the wrapper passes it.
-    // EXPECT_EQ(info_result, -5); // This would be the expectation if wrapper checked.
-
-    // TAU is NULL
-    A_data.assign(LDA1*LDA2*P,0);
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, nullptr, LDTAU, 0);
-    // TAU is arg 8.
-    // EXPECT_EQ(info_result, -8); // This would be the expectation if wrapper checked.
-}
-
-TEST_F(MB03VYTest, ZeroDimensionN) {
-    N = 0;
-    P = 1;
-    // As per docs: 1 <= ILO <= max(1,N) => ILO = 1
-    // min(ILO,N) <= IHI <= N => min(1,0)=0 <= IHI <= 0 => IHI = 0
-    ILO = 1;
-    IHI = 0;
-
-    LDA1 = std::max(1, N); // Should be 1
-    LDA2 = std::max(1, N); // Should be 1
-    LDTAU = std::max(1, (N > 0 ? N - 1 : 0)); // N=0 => N-1=-1. max(1,-1)=1. Should be 1.
-
-    A_data.assign(static_cast<size_t>(LDA1) * LDA2 * P, 0.0); // 1*1*1 = 1 element
-    TAU_data.assign(static_cast<size_t>(LDTAU) * P, 0.0);   // 1*1 = 1 element
-
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, 0); // Should succeed with N=0
-}
-
-
-TEST_F(MB03VYTest, BasicFunctionality_N1_P1_ILO1_IHI1) {
-    N = 1;
-    P = 1;
-    ILO = 1;
-    IHI = 1; // ihi-1 < ilo, so no reflectors applied. Q should be Identity.
-
-    LDA1 = std::max(1, N);
-    LDA2 = std::max(1, N);
-    LDTAU = std::max(1, (N > 0 ? N - 1 : 0)); // For N=1, LDTAU >= 1
-
-    A_data.assign(static_cast<size_t>(LDA1) * LDA2 * P, 0.0);
-    TAU_data.assign(static_cast<size_t>(LDTAU) * P, 0.0);
-
-    // Input A(0,0,0) can be anything, e.g., 5.0
-    // Fortran A(1,1,1)
-    if (!A_data.empty()) {
-        A_data[get_idx(0,0,0, LDA1, LDA2)] = 5.0; // A(1,1,1)
-    }
-    // TAU is not used in this case.
-
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
-    EXPECT_EQ(info_result, 0);
-
-    // Check if A(1,1,1) is 1.0 (Identity)
-    if (N==1 && P==1 && !A_data.empty()) {
-        EXPECT_NEAR(A_data[get_idx(0,0,0, LDA1, LDA2)], 1.0, check_tol);
-    }
-}
-
-TEST_F(MB03VYTest, RowMajorFlagIgnored) {
-    // This test verifies that passing row_major = 1 behaves the same as row_major = 0,
-    // because the wrapper states it ignores this flag for array 'a'.
-    // We use the N=1, P=1, ILO=1, IHI=1 case which should result in Q=Identity.
-    N = 1;
-    P = 1;
-    ILO = 1;
-    IHI = 1;
-
-    LDA1 = std::max(1, N);
-    LDA2 = std::max(1, N);
-    LDTAU = std::max(1, (N > 0 ? N - 1 : 0));
-
-    A_data.assign(static_cast<size_t>(LDA1) * LDA2 * P, 0.0);
-    TAU_data.assign(static_cast<size_t>(LDTAU) * P, 0.0);
-    if (!A_data.empty()) A_data[get_idx(0,0,0, LDA1, LDA2)] = 5.0;
-
-
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 1); // row_major = 1
-    EXPECT_EQ(info_result, 0);
-    if (N==1 && P==1 && !A_data.empty()) {
-        EXPECT_NEAR(A_data[get_idx(0,0,0, LDA1, LDA2)], 1.0, check_tol);
-    }
-}
-
-// More complex smoke test for N > 1.
-// This requires setting up A and TAU as if MB03VD produced them.
-// For simplicity, we will just call with valid dimensions and some dummy data,
-// and expect info = 0. We cannot verify the numerical output of A without MB03VD's logic.
-TEST_F(MB03VYTest, SmokeTest_N3_P2) {
-    N = 3;
-    P = 2;
-    ILO = 1;
-    IHI = N; // Apply all possible reflectors for the range
-
-    LDA1 = std::max(1, N);
-    LDA2 = std::max(1, N);
-    LDTAU = std::max(1, (N > 0 ? N - 1 : 0)); // N-1 = 2. LDTAU >= 2.
-
-    A_data.assign(static_cast<size_t>(LDA1) * LDA2 * P, 0.0);
-    TAU_data.assign(static_cast<size_t>(LDTAU) * P, 0.0);
-
-    // Fill A and TAU with some dummy values.
-    // A's lower triangular parts are inputs.
-    // For A(i,j,k) where i > j
-    for (int k_pg = 0; k_pg < P; ++k_pg) { // Page
-        for (int j_col = 0; j_col < N; ++j_col) { // Column
-            for (int i_row = j_col + 1; i_row < N; ++i_row) { // Row (strictly lower)
-                 if ( (size_t)LDA1 * LDA2 * P > 0) // check if A_data is allocated
-                    A_data[get_idx(i_row, j_col, k_pg, LDA1, LDA2)] = static_cast<double>(i_row + j_col + k_pg + 1) / 10.0;
+    // Call MB03VY to generate the orthogonal matrices Q
+    info_result = slicot_mb03vy(N, P, ILO, IHI,
+                              A_MB03VY.data(), LDA1, LDA2,
+                              TAU.data(), LDTAU,
+                              0 /* row_major = false */);
+    
+    // Verify return code
+    ASSERT_EQ(info_result, 0);
+    
+    // Verify orthogonality property for each Q matrix by computing Q'*Q = I
+    for (int k = 0; k < P; ++k) {
+        double* Q = &A_MB03VY[k * N * N];
+        std::vector<double> QTQ(N * N, 0.0); // Initialize Q'*Q to zeros
+        
+        // Compute Q'*Q using matrix multiplication
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < N; ++j) {
+                double sum = 0.0;
+                for (int l = 0; l < N; ++l) {
+                    sum += Q[l * N + i] * Q[l * N + j]; // Q[l,i] * Q[l,j]
+                }
+                QTQ[i * N + j] = sum;
             }
         }
-        // Fill diagonal with 1s for identity part of reflectors (conceptual)
-        for (int d_idx = 0; d_idx < N; ++d_idx) {
-            if ( (size_t)LDA1 * LDA2 * P > 0)
-                A_data[get_idx(d_idx, d_idx, k_pg, LDA1, LDA2)] = 1.0;
-        }
-
-        // Fill TAU
-        // TAU(i,j) -> tau for reflector H_j(i)
-        // For MB03VD, TAU(k,j) stores tau for H_j(k) where k from ILO to IHI-1
-        // So, for TAU(LDTAU,P), we need to fill TAU(i, k_pg) for i from 0 to (IHI-1)-(ILO)+1 - 1
-        for (int i_tau_row = 0; i_tau_row < (IHI - ILO); ++i_tau_row) { // Reflectors from H(ilo) to H(ihi-1)
-            if (static_cast<size_t>(LDTAU * P) > 0) // check if TAU_data is allocated
-                 TAU_data[static_cast<size_t>(k_pg) * LDTAU + i_tau_row] = 0.5; // Dummy tau value
+        
+        // Check that Q'*Q is close to the identity matrix
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < N; ++j) {
+                if (i == j) {
+                    EXPECT_NEAR(QTQ[i * N + j], 1.0, check_tol) 
+                        << "Non-identity diagonal in Q'*Q at (" << i << "," << j << ") for k=" << k;
+                } else {
+                    EXPECT_NEAR(QTQ[i * N + j], 0.0, check_tol)
+                        << "Non-zero off-diagonal in Q'*Q at (" << i << "," << j << ") for k=" << k;
+                }
+            }
         }
     }
+}
+
+// Test: Generate Q matrices (Row-Major)
+TEST_F(MB03VYTestRowMajor, GenerateQMatrices) {
+    // Copy the output of MB03VD as input for MB03VY
+    std::vector<double> A_MB03VY_rm = A_MB03VD_rm;
     
-    info_result = slicot_mb03vy(N, P, ILO, IHI, A_data.data(), LDA1, LDA2, TAU_data.data(), LDTAU, 0);
+    // Call MB03VY to generate the orthogonal matrices Q with row_major=true
+    info_result = slicot_mb03vy(N, P, ILO, IHI,
+                              A_MB03VY_rm.data(), LDA1, LDA2,
+                              TAU_rm.data(), LDTAU,
+                              1 /* row_major = true */);
+    
+    // Verify return code
+    ASSERT_EQ(info_result, 0);
+    
+    // Verify orthogonality property for each Q matrix by computing Q*Q' = I
+    // Note: In row-major, we're computing Q*Q' since matrices are transposed compared to column-major
+    for (int k = 0; k < P; ++k) {
+        double* Q = &A_MB03VY_rm[k * N * N];
+        std::vector<double> QQT(N * N, 0.0); // Initialize Q*Q' to zeros
+        
+        // Compute Q*Q' using matrix multiplication
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < N; ++j) {
+                double sum = 0.0;
+                for (int l = 0; l < N; ++l) {
+                    sum += Q[i * N + l] * Q[j * N + l]; // Q[i,l] * Q[j,l]
+                }
+                QQT[i * N + j] = sum;
+            }
+        }
+        
+        // Check that Q*Q' is close to the identity matrix
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < N; ++j) {
+                if (i == j) {
+                    EXPECT_NEAR(QQT[i * N + j], 1.0, check_tol) 
+                        << "Non-identity diagonal in Q*Q' at (" << i << "," << j << ") for k=" << k;
+                } else {
+                    EXPECT_NEAR(QQT[i * N + j], 0.0, check_tol)
+                        << "Non-zero off-diagonal in Q*Q' at (" << i << "," << j << ") for k=" << k;
+                }
+            }
+        }
+    }
+}
+
+// Test: Parameter Validation
+TEST_F(MB03VYTestColMajor, ParameterValidation) {
+    // Use properly sized arrays for all tests to avoid segfaults
+    std::vector<double> dummy_A(N*N*P, 0.0); 
+    std::vector<double> dummy_tau(std::max(1, N-1) * P, 0.0);
+    
+    // Test invalid N
+    info_result = slicot_mb03vy(-1, P, ILO, IHI,
+                               dummy_A.data(), N, N,
+                               dummy_tau.data(), N-1, 0);
+    EXPECT_EQ(info_result, -1);
+    
+    // Test invalid P
+    info_result = slicot_mb03vy(N, 0, ILO, IHI,
+                               dummy_A.data(), N, N,
+                               dummy_tau.data(), N-1, 0);
+    EXPECT_EQ(info_result, -2);
+    
+    // Test invalid ILO (< 1)
+    info_result = slicot_mb03vy(N, P, 0, IHI,
+                               dummy_A.data(), N, N,
+                               dummy_tau.data(), N-1, 0);
+    EXPECT_EQ(info_result, -3);
+    
+    // Test invalid IHI (> N)
+    info_result = slicot_mb03vy(N, P, ILO, N+1,
+                               dummy_A.data(), N, N,
+                               dummy_tau.data(), N-1, 0);
+    EXPECT_EQ(info_result, -4);
+    
+    // Test invalid LDA1
+    info_result = slicot_mb03vy(N, P, ILO, IHI,
+                               dummy_A.data(), 0, N,
+                               dummy_tau.data(), N-1, 0);
+    EXPECT_EQ(info_result, -6);
+    
+    // Test invalid LDA2
+    info_result = slicot_mb03vy(N, P, ILO, IHI,
+                               dummy_A.data(), N, 0,
+                               dummy_tau.data(), N-1, 0);
+    EXPECT_EQ(info_result, -7);
+    
+    // Test invalid LDTAU
+    info_result = slicot_mb03vy(N, P, ILO, IHI,
+                               dummy_A.data(), N, N,
+                               dummy_tau.data(), 0, 0);
+    EXPECT_EQ(info_result, -9);
+    
+    // Test NULL pointer for A when N > 0
+    info_result = slicot_mb03vy(N, P, ILO, IHI,
+                               nullptr, N, N,
+                               dummy_tau.data(), N-1, 0);
+    EXPECT_EQ(info_result, -5);
+    
+    // Test NULL pointer for TAU when N > 1 and IHI > ILO
+    if (N > 1 && IHI > ILO) {
+        info_result = slicot_mb03vy(N, P, ILO, IHI,
+                                  dummy_A.data(), N, N,
+                                  nullptr, N-1, 0);
+        EXPECT_EQ(info_result, -8);
+    }
+}
+
+// Test: Zero Dimension Case
+TEST_F(MB03VYTestColMajor, ZeroDimension) {
+    int zero_n = 0;
+    std::vector<double> dummy_tau(1);
+    
+    // Call wrapper with N=0
+    // We expect IHI=0 since the constraint is min(ILO,N) <= IHI <= N
+    // When N=0, this means IHI should be at most 0
+    info_result = slicot_mb03vy(zero_n, P, 1, 0,
+                               nullptr, 1, 1,
+                               dummy_tau.data(), 1, 0);
     EXPECT_EQ(info_result, 0);
-    // Cannot easily verify the content of A_data without replicating MB03VD logic.
 }
 

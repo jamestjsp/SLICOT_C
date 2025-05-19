@@ -30,29 +30,33 @@ extern "C" {
  * @param[in] ilo       Lower row/column index used in MB03VD.
  * @param[in] ihi       Upper row/column index used in MB03VD.
  * 1 <= ilo <= max(1,n); min(ilo,n) <= ihi <= n.
- * @param[in,out] a     Double array, dimension (lda1, lda2, p) stored contiguously
- * in **column-major (Fortran-style)** order.
+ * @param[in,out] a     Double array, dimension (lda1, lda2, p) stored contiguously.
  * On entry, the strictly lower triangular parts contain reflector
  * data from MB03VD.
  * On exit, contains the computed orthogonal matrices Q_1 to Q_p.
- * @param[in] lda1      The first leading dimension of A. >= max(1,n).
- * @param[in] lda2      The second leading dimension of A. >= max(1,n).
+ * @param[in] lda1      The first dimension of A:
+ *                      If row_major=0, this is the leading dimension (stride between rows). >= max(1,n).
+ *                      If row_major=1, this is the number of rows in each 2D slice. >= n.
+ * @param[in] lda2      The second dimension of A:
+ *                      If row_major=0, this is the second dimension (stride between columns). >= max(1,n).
+ *                      If row_major=1, this is the leading dimension (stride between columns). >= n.
  * @param[in] tau       Double array, dimension (ldtau, p). Contains scalar factors
  * of the elementary reflectors from MB03VD.
  * @param[in] ldtau     The leading dimension of TAU. >= max(1,n-1).
- * @param[in] row_major This flag is ignored for the 3D array 'a'. The data for 'a'
- * **must** be provided in column-major (Fortran-style) layout.
+ * @param[in] row_major Specifies matrix storage format:
+ *                      0 for column-major (Fortran-style) layout.
+ *                      1 for row-major (C-style) layout.
  *
  * @return info         Error indicator:
  * = 0: successful exit
  * < 0: if info = -i, the i-th argument had an illegal value.
- * Memory allocation errors may also be returned by the wrapper.
+ * = SLICOT_MEMORY_ERROR (-1010): internal memory allocation failed.
  */
 SLICOT_EXPORT
 int slicot_mb03vy(int n, int p, int ilo, int ihi,
                   double* a, int lda1, int lda2,
                   const double* tau, int ldtau,
-                  int row_major); // row_major ignored for 'a'
+                  int row_major);
 
 #ifdef __cplusplus
 }
