@@ -41,30 +41,41 @@ extern "C" {
  * @param[in] iloz      Lower row index for applying transformations to Z.
  * @param[in] ihiz      Upper row index for applying transformations to Z.
  * 1 <= iloz <= ilo; ihi <= ihiz <= n.
- * @param[in,out] h     Double array, dimension (ldh1, ldh2, p) stored contiguously
- * in **column-major (Fortran-style)** order.
+ * @param[in,out] h     Double array, dimension (ldh1, ldh2, p) stored contiguously.
  * On entry, contains H_1 (Hessenberg) and H_2..H_p (triangular).
  * On exit (if job='S'), contains Schur factors T_1..T_p.
  * If job='E', contents are unspecified on exit.
- * @param[in] ldh1      The first leading dimension of H. >= max(1,n).
- * @param[in] ldh2      The second leading dimension of H. >= max(1,n).
- * @param[in,out] z     Double array, dimension (ldz1, ldz2, p) stored contiguously
- * in **column-major (Fortran-style)** order.
+ * @param[in] ldh1      The first dimension of H:
+ *                      If row_major=0, this is the leading dimension (stride between rows). >= max(1,n).
+ *                      If row_major=1, this is the number of rows in each 2D slice. >= n.
+ * @param[in] ldh2      The second dimension of H:
+ *                      If row_major=0, this is the second dimension (stride between columns). >= max(1,n).
+ *                      If row_major=1, this is the leading dimension (stride between columns). >= n.
+ * @param[in,out] z     Double array, dimension (ldz1, ldz2, p) stored contiguously.
  * If compz='V', contains input orthogonal matrices on entry.
  * On exit (if compz='I' or 'V'), contains the computed/updated
  * Schur vectors Z_1 to Z_p. Not referenced if compz='N'.
- * @param[in] ldz1      The first leading dimension of Z. >=1 if compz='N', >=max(1,n) otherwise.
- * @param[in] ldz2      The second leading dimension of Z. >=1 if compz='N', >=max(1,n) otherwise.
+ * @param[in] ldz1      The first dimension of Z:
+ *                      If row_major=0, this is the leading dimension (stride between rows).
+ *                      >=1 if compz='N', >=max(1,n) otherwise.
+ *                      If row_major=1, this is the number of rows in each 2D slice.
+ *                      >=1 if compz='N', >=n otherwise.
+ * @param[in] ldz2      The second dimension of Z:
+ *                      If row_major=0, this is the second dimension (stride between columns).
+ *                      >=1 if compz='N', >=max(1,n) otherwise.
+ *                      If row_major=1, this is the leading dimension (stride between columns).
+ *                      >=1 if compz='N', >=n otherwise.
  * @param[out] wr       Double array, dimension (n). Real parts of eigenvalues.
  * @param[out] wi       Double array, dimension (n). Imaginary parts of eigenvalues.
- * @param[in] row_major This flag is ignored for the 3D arrays 'h' and 'z'. The data
- * **must** be provided in column-major (Fortran-style) layout.
+ * @param[in] row_major Specifies matrix storage format:
+ *                      0 for column-major (Fortran-style) layout.
+ *                      1 for row-major (C-style) layout.
  *
  * @return info         Error indicator:
  * = 0: successful exit
  * < 0: if info = -i, the i-th argument had an illegal value.
  * > 0: if info = i, QR algorithm failed to compute eigenvalues i+1:ihi.
- * Memory allocation errors may also be returned by the wrapper (though unlikely here).
+ * = SLICOT_MEMORY_ERROR (-1010): internal memory allocation failed.
  */
 SLICOT_EXPORT
 int slicot_mb03wd(char job, char compz, int n, int p, int ilo, int ihi,
@@ -72,7 +83,7 @@ int slicot_mb03wd(char job, char compz, int n, int p, int ilo, int ihi,
                   double* h, int ldh1, int ldh2,
                   double* z, int ldz1, int ldz2,
                   double* wr, double* wi,
-                  int row_major); // row_major ignored for 'h', 'z'
+                  int row_major);
 
 #ifdef __cplusplus
 }
