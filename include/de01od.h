@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine DE01OD.
  */
 
-#ifndef SLICOT_WRAPPER_DE01OD_H
-#define SLICOT_WRAPPER_DE01OD_H
+#ifndef DE01OD_H
+#define DE01OD_H
 
 #include "slicot_utils.h"
 
@@ -43,4 +43,4 @@ int slicot_de01od(char conv, int n, double* a, double* b, int row_major);
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_DE01OD_H */
+#endif /* DE01OD_H */

@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine TB01ID.
  */
 
-#ifndef SLICOT_WRAPPER_TB01ID_H
-#define SLICOT_WRAPPER_TB01ID_H
+#ifndef TB01ID_H
+#define TB01ID_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -57,4 +57,4 @@ int slicot_tb01id(
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_TB01ID_H */
+#endif /* TB01ID_H */

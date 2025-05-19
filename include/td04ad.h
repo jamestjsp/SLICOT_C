@@ -6,8 +6,8 @@
  * polynomial vectors over denominator polynomials.
  */
 
-#ifndef SLICOT_WRAPPER_TD04AD_H
-#define SLICOT_WRAPPER_TD04AD_H
+#ifndef TD04AD_H
+#define TD04AD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -122,4 +122,4 @@ int slicot_td04ad(char rowcol, int m, int p, const int* index,
 }
 #endif
 
-#endif // SLICOT_WRAPPER_TD04AD_H
+#endif // TD04AD_H

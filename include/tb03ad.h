@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine TB03AD.
  */
 
-#ifndef SLICOT_WRAPPER_TB03AD_H
-#define SLICOT_WRAPPER_TB03AD_H
+#ifndef TB03AD_H
+#define TB03AD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -99,4 +99,4 @@ int slicot_tb03ad(
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_TB03AD_H */
+#endif /* TB03AD_H */

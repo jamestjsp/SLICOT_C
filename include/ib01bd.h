@@ -8,8 +8,8 @@
  * **Workspace (IWORK, DWORK, BWORK) is allocated internally.**
  */
 
- #ifndef SLICOT_WRAPPER_IB01BD_H
- #define SLICOT_WRAPPER_IB01BD_H
+ #ifndef IB01BD_H
+ #define IB01BD_H
  
  #include <stdbool.h>      // Include for bool type (though not directly used in signature)
  #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
@@ -123,5 +123,5 @@
  }
  #endif
  
- #endif /* SLICOT_WRAPPER_IB01BD_H */
+ #endif /* IB01BD_H */
  

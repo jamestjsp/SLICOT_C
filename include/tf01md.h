@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine TF01MD.
  */
 
- #ifndef SLICOT_WRAPPER_TF01MD_H // Use unique guard
- #define SLICOT_WRAPPER_TF01MD_H
+ #ifndef TF01MD_H // Use unique guard
+ #define TF01MD_H
  
  #include "slicot_utils.h" // Provides SLICOT_EXPORT macro, MAX, MIN etc.
  
@@ -96,5 +96,5 @@
  }
  #endif
  
- #endif /* SLICOT_WRAPPER_TF01MD_H */
+ #endif /* TF01MD_H */
  

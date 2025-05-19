@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine TB05AD.  
  */
 
-#ifndef SLICOT_WRAPPER_TB05AD_H
-#define SLICOT_WRAPPER_TB05AD_H
+#ifndef TB05AD_H
+#define TB05AD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -96,4 +96,4 @@ int slicot_tb05ad(char baleig, char inita, int n, int m, int p,
 }  
 #endif
 
-#endif /* SLICOT_WRAPPER_TB05AD_H */
+#endif /* TB05AD_H */

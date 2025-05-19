@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine SB10HD.
  */
 
-#ifndef SLICOT_WRAPPER_SB10HD_H
-#define SLICOT_WRAPPER_SB10HD_H
+#ifndef SB10HD_H
+#define SB10HD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -70,4 +70,4 @@ int slicot_sb10hd(int n_param, int m_param, int np_param, int ncon_param, int nm
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_SB10HD_H */
+#endif /* SB10HD_H */

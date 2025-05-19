@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine TB04AD.
  */
 
-#ifndef SLICOT_WRAPPER_TB04AD_H
-#define SLICOT_WRAPPER_TB04AD_H
+#ifndef TB04AD_H
+#define TB04AD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -90,4 +90,4 @@ int slicot_tb04ad(const char* rowcol, int n, int m, int p,
 }
 #endif
 
-#endif // SLICOT_WRAPPER_TB04AD_H
+#endif // TB04AD_H

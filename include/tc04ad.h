@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine TC04AD.
  */
 
-#ifndef SLICOT_WRAPPER_TC04AD_H
-#define SLICOT_WRAPPER_TC04AD_H
+#ifndef TC04AD_H
+#define TC04AD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -74,4 +74,4 @@ int slicot_tc04ad(char leri, int m_c, int p_c, const int* index_c,
 }
 #endif
 
-#endif // SLICOT_WRAPPER_TC04AD_H
+#endif // TC04AD_H

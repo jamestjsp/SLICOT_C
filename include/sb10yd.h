@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine SB10YD.
  */
 
-#ifndef SLICOT_WRAPPER_SB10YD_H
-#define SLICOT_WRAPPER_SB10YD_H
+#ifndef SB10YD_H
+#define SB10YD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro and slicot_complex_double
 
@@ -58,4 +58,4 @@ int slicot_sb10yd(int discfl, int flag, int lendat,
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_SB10YD_H */
+#endif /* SB10YD_H */

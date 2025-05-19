@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine SB10JD.
  */
 
-#ifndef SLICOT_WRAPPER_SB10JD_H
-#define SLICOT_WRAPPER_SB10JD_H
+#ifndef SB10JD_H
+#define SB10JD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -60,4 +60,4 @@ int slicot_sb10jd(int n_param, int m_param, int np_param,
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_SB10JD_H */
+#endif /* SB10JD_H */

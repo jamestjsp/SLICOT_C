@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine SB10FD.
  */
 
-#ifndef SLICOT_WRAPPER_SB10FD_H
-#define SLICOT_WRAPPER_SB10FD_H
+#ifndef SB10FD_H
+#define SB10FD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -83,4 +83,4 @@ int slicot_sb10fd(int n, int m, int np, int ncon, int nmeas,
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_SB10FD_H */
+#endif /* SB10FD_H */

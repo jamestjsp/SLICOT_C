@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine TC01OD.
  */
 
-#ifndef SLICOT_WRAPPER_TC01OD_H
-#define SLICOT_WRAPPER_TC01OD_H
+#ifndef TC01OD_H
+#define TC01OD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -69,4 +69,4 @@ int slicot_tc01od(char leri, int m, int p, int indlim,
 }
 #endif
 
-#endif // SLICOT_WRAPPER_TC01OD_H
+#endif // TC01OD_H

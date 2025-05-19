@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine SG03AD.
  */
 
-#ifndef SLICOT_WRAPPER_SG03AD_H
-#define SLICOT_WRAPPER_SG03AD_H
+#ifndef SG03AD_H
+#define SG03AD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -67,4 +67,4 @@ int slicot_sg03ad(
 }
 #endif
 
-#endif /* SLICOT_WRAPPER_SG03AD_H */
+#endif /* SG03AD_H */

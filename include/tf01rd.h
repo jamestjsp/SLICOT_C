@@ -5,8 +5,8 @@
  * from the parameters (A,B,C) of a linear time-invariant system.
  */
 
-#ifndef SLICOT_WRAPPER_TF01RD_H
-#define SLICOT_WRAPPER_TF01RD_H
+#ifndef TF01RD_H
+#define TF01RD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -69,4 +69,4 @@ int slicot_tf01rd(int na, int nb, int nc, int N_in,
 }
 #endif
 
-#endif // SLICOT_WRAPPER_TF01RD_H
+#endif // TF01RD_H

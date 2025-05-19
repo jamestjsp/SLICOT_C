@@ -11,8 +11,8 @@
  * allocation internally.
  */
 
- #ifndef SLICOT_WRAPPER_IB01AD_H
- #define SLICOT_WRAPPER_IB01AD_H
+ #ifndef IB01AD_H
+ #define IB01AD_H
  
  #include "slicot_utils.h" // For SLICOT_EXPORT macro
  
@@ -71,5 +71,5 @@
  }
  #endif
  
- #endif /* SLICOT_WRAPPER_IB01AD_H */
+ #endif /* IB01AD_H */
  

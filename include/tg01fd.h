@@ -6,8 +6,8 @@
  * (Q'*A*Z-lambda Q'*E*Z, Q'*B, C*Z) is in a SVD-like coordinate form.
  */
 
-#ifndef SLICOT_WRAPPER_TG01FD_H
-#define SLICOT_WRAPPER_TG01FD_H
+#ifndef TG01FD_H
+#define TG01FD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -99,4 +99,4 @@ int slicot_tg01fd(char compq, char compz, char joba,
 }
 #endif
 
-#endif // SLICOT_WRAPPER_TG01FD_H
+#endif // TG01FD_H

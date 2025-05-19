@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine DK01MD.  
  */
 
-#ifndef SLICOT_WRAPPER_DK01MD_H
-#define SLICOT_WRAPPER_DK01MD_H
+#ifndef DK01MD_H
+#define DK01MD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -46,4 +46,4 @@ int slicot_dk01md(char type, int n, double* a, int row_major);
 }  
 #endif
 
-#endif /* SLICOT_WRAPPER_DK01MD_H */
+#endif /* DK01MD_H */

@@ -5,8 +5,8 @@
  * corresponding to a descriptor triple (A-lambda E,B,C).
  */
 
-#ifndef SLICOT_WRAPPER_TG01AD_H
-#define SLICOT_WRAPPER_TG01AD_H
+#ifndef TG01AD_H
+#define TG01AD_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -85,4 +85,4 @@ int slicot_tg01ad(char job, int l, int n, int m, int p, double thresh,
 }
 #endif
 
-#endif // SLICOT_WRAPPER_TG01AD_H
+#endif // TG01AD_H

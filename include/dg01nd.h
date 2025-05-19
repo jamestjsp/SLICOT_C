@@ -3,8 +3,8 @@
  * @brief Header for C wrapper of SLICOT routine DG01ND.  
  */
 
-#ifndef SLICOT_WRAPPER_DG01ND_H
-#define SLICOT_WRAPPER_DG01ND_H
+#ifndef DG01ND_H
+#define DG01ND_H
 
 #include "slicot_utils.h" // Provides SLICOT_EXPORT macro
 
@@ -53,4 +53,4 @@ int slicot_dg01nd(char indi, int n, double* xr, double* xi, int row_major);
 }  
 #endif
 
-#endif /* SLICOT_WRAPPER_DG01ND_H */
+#endif /* DG01ND_H */
