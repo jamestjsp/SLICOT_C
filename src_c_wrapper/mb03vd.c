@@ -6,13 +6,11 @@
  * which reduces a product of p real general matrices A = A_1*...*A_p
  * to periodic Hessenberg form H = H_1*...*H_p using orthogonal
  * similarity transformations.
- * NOTE: This wrapper assumes the 3D array 'a' is passed in column-major order.
- * The 'row_major' flag is ignored for 'a'.
- * Refactored to align with ab01nd.c structure.
  */
 
 #include <stdlib.h>
 #include <stddef.h> // For size_t
+#include <string.h> // For memcpy
 
 // Include the header file for this wrapper
 #include "mb03vd.h"
@@ -44,11 +42,16 @@ SLICOT_EXPORT
 int slicot_mb03vd(int n, int p, int ilo, int ihi,
                   double* a, int lda1, int lda2,
                   double* tau, int ldtau,
-                  int row_major) // row_major ignored for 'a'
+                  int row_major)
 {
     /* Local variables */
     int info = 0;
     double* dwork = NULL; // Workspace
+    double* a_cm = NULL;  // Column-major copy if row_major=1
+    double* tau_cm = NULL; // Column-major copy of tau if row_major=1
+    int ldtau_cm = 0;     // Leading dimension for tau in column-major format
+    int lda1_cm = 0;      // Leading dimension for Fortran a (rows)
+    int lda2_cm = 0;      // Second dimension for Fortran a (cols)
     int dwork_size = 0;
 
     /* --- Input Parameter Validation --- */
@@ -57,44 +60,111 @@ int slicot_mb03vd(int n, int p, int ilo, int ihi,
     if (p < 1) { info = -2; goto cleanup; }
     if (ilo < 1 || ilo > MAX(1, n)) { info = -3; goto cleanup; }
     if (ihi < MIN(ilo, n) || ihi > n) { info = -4; goto cleanup; }
-    // Add NULL pointer checks
-    if (a == NULL && n > 0) { info = -5; goto cleanup; }
-    if (lda1 < MAX(1, n)) { info = -6; goto cleanup; }
-    if (lda2 < MAX(1, n)) { info = -7; goto cleanup; }
+    
+    // For row-major, validate dimensions differently
+    if (row_major) {
+        if (a == NULL && n > 0) { info = -5; goto cleanup; }
+        if (lda1 < n) { info = -6; goto cleanup; }   // Number of rows in 2D slice
+        if (lda2 < n) { info = -7; goto cleanup; }   // Number of columns in 2D slice
+    } else {
+        // For column-major
+        if (a == NULL && n > 0) { info = -5; goto cleanup; }
+        if (lda1 < MAX(1, n)) { info = -6; goto cleanup; }   // Leading dimension (rows)
+        if (lda2 < MAX(1, n)) { info = -7; goto cleanup; }   // Second dimension (cols)
+    }
+    
     if (tau == NULL && n > 1) { info = -8; goto cleanup; }
     if (ldtau < MAX(1, n - 1)) { info = -9; goto cleanup; }
 
+    if (info != 0) goto cleanup;
+
     /* --- Workspace Allocation --- */
-
-    // Allocate DWORK (size N) - No query needed
-    dwork_size = MAX(1, n); // Ensure minimum size 1
+    
+    // Set up Fortran dimensions
+    lda1_cm = MAX(1, n);  // Fortran leading dimension (rows)
+    lda2_cm = MAX(1, n);  // Fortran second dimension (cols)
+    ldtau_cm = MAX(1, n-1); // Fortran leading dimension for tau
+    
+    // Allocate DWORK (size N)
+    dwork_size = MAX(1, n);
     dwork = (double*)malloc((size_t)dwork_size * sizeof(double));
-    CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
+    CHECK_ALLOC(dwork);
 
-    /* --- Prepare Arrays and Call Fortran Routine --- */
+    /* --- Prepare Arrays for Fortran Routine --- */
+    
+    double* a_f_ptr = a;     // Pointer to pass to Fortran
+    double* tau_f_ptr = tau; // Pointer to pass to Fortran
 
-    // NOTE: Assuming 'a' is already in column-major (Fortran) layout.
-    // No transposition is performed for the 3D array 'a'.
-    // The 'row_major' flag is effectively ignored for 'a'.
-    // Similarly, TAU is assumed column-major (N-1 x P).
-
-    if (row_major) {
-        // Print a warning or log that row_major is ignored for 3D arrays?
+    if (row_major && n > 0) {
+        // Allocate temporary column-major arrays
+        size_t a_cm_size = (size_t)lda1_cm * lda2_cm * p;
+        a_cm = (double*)malloc(a_cm_size * sizeof(double));
+        CHECK_ALLOC(a_cm);
+        
+        // Copy from row-major to column-major, slice by slice
+        for (int k = 0; k < p; ++k) {
+            // Calculate starting positions for this slice
+            double* a_rm_slice = a + (size_t)k * lda1 * lda2;
+            double* a_cm_slice = a_cm + (size_t)k * lda1_cm * lda2_cm;
+            
+            // Transpose each 2D slice
+            for (int i = 0; i < n; ++i) {
+                for (int j = 0; j < n; ++j) {
+                    a_cm_slice[j * lda1_cm + i] = a_rm_slice[i * lda2 + j];
+                }
+            }
+        }
+        
+        a_f_ptr = a_cm; // Pass the column-major copy to Fortran
+        
+        // For tau, allocate column-major buffer if needed
+        if (n > 1) {
+            size_t tau_cm_size = (size_t)ldtau_cm * p;
+            tau_cm = (double*)malloc(tau_cm_size * sizeof(double));
+            CHECK_ALLOC(tau_cm);
+            memset(tau_cm, 0, tau_cm_size * sizeof(double));
+            tau_f_ptr = tau_cm;
+        }
     }
 
-    /* Call the Fortran routine directly */
+    /* Call the Fortran routine */
     F77_FUNC(mb03vd, MB03VD)(&n, &p, &ilo, &ihi,
-                             a, &lda1, &lda2,
-                             tau, &ldtau,
+                             a_f_ptr, &lda1_cm, &lda2_cm,
+                             tau_f_ptr, &ldtau_cm,
                              dwork, &info);
-    // A and TAU are modified in place.
 
-    /* No copy-back needed as column-major is assumed for A and TAU */
+    /* Copy results back for row-major case */
+    if (row_major && n > 0 && info == 0) {
+        // Copy from column-major to row-major, slice by slice
+        for (int k = 0; k < p; ++k) {
+            // Calculate starting positions for this slice
+            double* a_rm_slice = a + (size_t)k * lda1 * lda2;
+            double* a_cm_slice = a_cm + (size_t)k * lda1_cm * lda2_cm;
+            
+            // Transpose each 2D slice
+            for (int i = 0; i < n; ++i) {
+                for (int j = 0; j < n; ++j) {
+                    a_rm_slice[i * lda2 + j] = a_cm_slice[j * lda1_cm + i];
+                }
+            }
+        }
+        
+        // Copy tau from column-major to row-major if n > 1
+        if (n > 1 && tau_cm != NULL && tau != NULL) {
+            for (int j = 0; j < p; ++j) {
+                for (int i = 0; i < n-1; ++i) {
+                    tau[j * ldtau + i] = tau_cm[j * ldtau_cm + i];
+                }
+            }
+        }
+    }
 
 cleanup:
     /* --- Cleanup --- */
     free(dwork);
+    free(a_cm);
+    free(tau_cm);
 
-    /* Return the info code from the Fortran routine or SLICOT_MEMORY_ERROR */
+    /* Return the info code from the Fortran routine or memory error */
     return info;
 }

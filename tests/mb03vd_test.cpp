@@ -82,35 +82,35 @@ protected:
     // Verification tolerance - increased to account for numerical precision
     double check_tol = 1e-4;
     
-    // Input matrices (column-major format since row_major flag is ignored)
-    // Because row_major is ignored, we need to provide column-major data even when row_major=1
+    // Input matrices (row-major format)
+    // For row-major, we need to transpose the data compared to column-major
     std::vector<double> A_rm = {
-        // A1 (n×n) in column-major format
-        1.5, 1.0, 1.5, 1.0,    // First column
-        -0.7, 0.0, -0.7, 0.0,  // Second column
-        3.5, 2.0, 2.5, 2.0,    // Third column
-        -0.7, 3.0, -0.3, 1.0,  // Fourth column
+        // A1 (n×n) in row-major format
+        1.5, -0.7, 3.5, -0.7,  // First row
+        1.0, 0.0, 2.0, 3.0,    // Second row
+        1.5, -0.7, 2.5, -0.3,  // Third row
+        1.0, 0.0, 2.0, 1.0,    // Fourth row
         
-        // A2 (n×n) in column-major format
-        1.5, 1.0, 1.5, 1.0,    // First column
-        -0.7, 0.0, -0.7, 0.0,  // Second column
-        3.5, 2.0, 2.5, 2.0,    // Third column
-        -0.7, 3.0, -0.3, 1.0   // Fourth column
+        // A2 (n×n) in row-major format
+        1.5, -0.7, 3.5, -0.7,  // First row
+        1.0, 0.0, 2.0, 3.0,    // Second row
+        1.5, -0.7, 2.5, -0.3,  // Third row
+        1.0, 0.0, 2.0, 1.0     // Fourth row
     };
     
-    // Expected results (from documentation example)
-    std::vector<double> A_expected_cm = {
-        // H1 (n×n, upper Hessenberg)
-        -2.3926, 4.1417, 0.0000, 0.0000,  // First column
-        2.7042, -1.7046, -1.6247, 0.0000,  // Second column
-        -0.9598, 1.3001, -0.2534, -0.0169,  // Third column
-        -1.2335, -1.3120, 1.6453, -0.4451,  // Fourth column
+    // Expected results (from documentation example, converted to row-major)
+    std::vector<double> A_expected_rm = {
+        // H1 (n×n, upper Hessenberg) in row-major format
+        -2.3926, 2.7042, -0.9598, -1.2335,  // First row
+        4.1417, -1.7046, 1.3001, -1.3120,   // Second row
+        0.0000, -1.6247, -0.2534, 1.6453,   // Third row
+        0.0000, 0.0000, -0.0169, -0.4451,   // Fourth row
         
-        // H2 (n×n, upper triangular)
-        -2.5495, 0.0000, 0.0000, 0.0000,  // First column
-        2.3402, 1.9725, 0.0000, 0.0000,   // Second column
-        4.7021, -0.2483, -0.6290, 0.0000,  // Third column
-        0.2329, -2.3493, -0.5975, -0.4426  // Fourth column
+        // H2 (n×n, upper triangular) in row-major format
+        -2.5495, 2.3402, 4.7021, 0.2329,    // First row
+        0.0000, 1.9725, -0.2483, -2.3493,   // Second row
+        0.0000, 0.0000, -0.6290, -0.5975,   // Third row
+        0.0000, 0.0000, 0.0000, -0.4426     // Fourth row
     };
     
     // Output Tau (ldtau×p)
@@ -128,10 +128,10 @@ protected:
         // Size output arrays
         TAU_rm.resize((N-1) * P);
         
-        // Calculate leading dimensions for "row-major" (actually still column-major)
-        LDA1 = std::max(1, N);
-        LDA2 = std::max(1, N);
-        LDTAU = std::max(1, N-1);
+        // Calculate leading dimensions for row-major
+        LDA1 = std::max(1, N);  // Number of rows in each 2D slice
+        LDA2 = std::max(1, N);  // Stride between columns
+        LDTAU = std::max(1, N-1); // Stride between columns in TAU
     }
 };
 
@@ -181,23 +181,23 @@ TEST_F(MB03VDTestRowMajor, DocExample) {
     // Make a copy of the input data since it will be modified
     std::vector<double> A_rm_copy = A_rm;
     
-    // Call C wrapper function with row_major = true (ignored)
-    // NOTE: Even though row_major=1, data is provided in column-major format
+    // Call C wrapper function with row_major = true
+    // Now with proper row-major support
     info_result = slicot_mb03vd(N, P, ILO, IHI,
                                A_rm_copy.data(), LDA1, LDA2,
                                TAU_rm.data(), LDTAU,
-                               1 /* row_major = true but ignored */);
+                               1 /* row_major = true */);
     
     // Verify return code
     ASSERT_EQ(info_result, 0);
     
-    // Verify output directly against expected values
+    // Verify output directly against row-major expected values
     // For A1 (upper Hessenberg)
-    for (int j = 0; j < N; j++) {
-        for (int i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
             // Only check upper triangle and first subdiagonal for H1
             if (i <= j+1) {
-                EXPECT_NEAR(A_rm_copy[j*N + i], A_expected_cm[j*N + i], check_tol)
+                EXPECT_NEAR(A_rm_copy[i*N + j], A_expected_rm[i*N + j], check_tol)
                     << "H1 mismatch at position (" << i << "," << j << ")";
             }
         }
@@ -205,11 +205,11 @@ TEST_F(MB03VDTestRowMajor, DocExample) {
     
     // For A2 (upper triangular)
     int offset = N*N;  // Offset to second matrix in 3D array
-    for (int j = 0; j < N; j++) {
-        for (int i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
             // Only check upper triangle for H2
             if (i <= j) {
-                EXPECT_NEAR(A_rm_copy[offset + j*N + i], A_expected_cm[offset + j*N + i], check_tol)
+                EXPECT_NEAR(A_rm_copy[offset + i*N + j], A_expected_rm[offset + i*N + j], check_tol)
                     << "H2 mismatch at position (" << i << "," << j << ")";
             }
         }
