@@ -5,6 +5,11 @@
 #include <algorithm> // For std::max, std::min
 #include <iostream>
 
+// Define M_PI if not already defined
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "sb10yd.h"       // Include the wrapper header
 #include "slicot_utils.h" // For transpose functions if needed for A
 
