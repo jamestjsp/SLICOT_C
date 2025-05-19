@@ -1,254 +1,252 @@
 /**
  * @file tg01fd.c
- * @brief C wrapper implementation for SLICOT routine TG01FD
- *
- * This file provides a C wrapper implementation for the SLICOT routine TG01FD,
- * which computes an orthogonal reduction of a descriptor system
- * (A-lambda E,B,C) to a SVD-like coordinate form.
+ * @brief C wrapper for SLICOT routine TG01FD.
  */
 
 #include <stdlib.h>
-#include <ctype.h>
-#include <string.h> // For memcpy
-#include <stddef.h> // For size_t
+#include <string.h> // For memcpy, memset
+#include <ctype.h>  // For toupper
+#include <stdio.h>  // For debugging if needed
 
-// Include the header file for this wrapper
-// #include "tg01fd.h" // Assuming a header file exists
-// Include necessary SLICOT utility headers
-#include "slicot_utils.h" // Assumed to contain MAX, MIN, CHECK_ALLOC, SLICOT_MEMORY_ERROR, transpose routines, set_identity
-#include "slicot_f77.h"   // For F77_FUNC macro and Fortran interface conventions
+#include "tg01fd.h"
+#include "slicot_utils.h" // Provides MAX, MIN, CHECK_ALLOC, transpose functions
+#include "slicot_f77.h"   // Provides F77_FUNC
 
-/*
- * Declare the external Fortran routine using the F77_FUNC macro.
- * Hidden lengths for CHARACTER arguments are added at the end.
- */
+/* External Fortran routine declaration */
 extern void F77_FUNC(tg01fd, TG01FD)(
-    const char* compq,      // CHARACTER*1 COMPQ
-    const char* compz,      // CHARACTER*1 COMPZ
-    const char* joba,       // CHARACTER*1 JOBA
-    const int* l,           // INTEGER L
-    const int* n,           // INTEGER N
-    const int* m,           // INTEGER M
-    const int* p,           // INTEGER P
-    double* a,              // DOUBLE PRECISION A(LDA,*) (in/out)
-    const int* lda,         // INTEGER LDA
-    double* e,              // DOUBLE PRECISION E(LDE,*) (in/out)
-    const int* lde,         // INTEGER LDE
-    double* b,              // DOUBLE PRECISION B(LDB,*) (in/out)
-    const int* ldb,         // INTEGER LDB
-    double* c,              // DOUBLE PRECISION C(LDC,*) (in/out)
-    const int* ldc,         // INTEGER LDC
-    double* q,              // DOUBLE PRECISION Q(LDQ,*) (in/out)
-    const int* ldq,         // INTEGER LDQ
-    double* z,              // DOUBLE PRECISION Z(LDZ,*) (in/out)
-    const int* ldz,         // INTEGER LDZ
-    int* ranke,             // INTEGER RANKE (output)
-    int* rnka22,            // INTEGER RNKA22 (output)
-    const double* tol,      // DOUBLE PRECISION TOL
-    int* iwork,             // INTEGER IWORK(*)
-    double* dwork,          // DOUBLE PRECISION DWORK(*)
-    const int* ldwork,      // INTEGER LDWORK
-    int* info,              // INTEGER INFO (output)
-    int compq_len,          // Hidden length
-    int compz_len,          // Hidden length
-    int joba_len            // Hidden length
-);
+    const char* compq, const char* compz, const char* joba,
+    const int* l, const int* n, const int* m, const int* p,
+    double* a, const int* lda,
+    double* e, const int* lde,
+    double* b, const int* ldb,
+    double* c, const int* ldc,
+    double* q, const int* ldq,
+    double* z, const int* ldz,
+    int* ranke, int* rnka22,
+    const double* tol, int* iwork, double* dwork, const int* ldwork,
+    int* info,
+    size_t compq_len, size_t compz_len, size_t joba_len);
 
-
-/* C wrapper function definition */
 SLICOT_EXPORT
-int slicot_tg01fd(char compq, char compz, char joba, int l, int n, int m, int p,
-                  double* a, int lda, double* e, int lde,
-                  double* b, int ldb, double* c, int ldc,
-                  double* q, int ldq, double* z, int ldz,
-                  int* ranke, int* rnka22, double tol, int row_major)
+int slicot_tg01fd(char compq_in, char compz_in, char joba_in,
+                  int l_in, int n_in, int m_in, int p_in,
+                  double* a_c, int lda_c,
+                  double* e_c, int lde_c,
+                  double* b_c, int ldb_c,
+                  double* c_c, int ldc_c,
+                  double* q_c, int ldq_c,
+                  double* z_c, int ldz_c,
+                  int* ranke_out, int* rnka22_out,
+                  double tol_in, int row_major)
 {
-    /* Local variables */
     int info = 0;
-    int ldwork = -1; /* Use -1 for workspace query */
-    double dwork_query;
-    double* dwork = NULL;
-    int* iwork = NULL;
-    int iwork_size = 0;
+    char compq_upper, compz_upper, joba_upper;
 
-    const int compq_len = 1, compz_len = 1, joba_len = 1;
-    char compq_upper = toupper(compq);
-    char compz_upper = toupper(compz);
-    char joba_upper = toupper(joba);
+    int l_f = l_in; int n_f = n_in; int m_f = m_in; int p_f = p_in;
 
-    /* Pointers for column-major copies if needed */
-    double *a_cm = NULL, *e_cm = NULL, *b_cm = NULL, *c_cm = NULL;
-    double *q_cm = NULL, *z_cm = NULL;
-    double *a_ptr, *e_ptr, *b_ptr, *c_ptr, *q_ptr, *z_ptr;
-    int lda_f, lde_f, ldb_f, ldc_f, ldq_f, ldz_f;
+    double* a_ptr = a_c; double* e_ptr = e_c;
+    double* b_ptr = b_c; double* c_ptr = c_c;
+    double* q_ptr = q_c; double* z_ptr = z_c;
 
-    /* --- Input Parameter Validation --- */
-    if (compq_upper != 'N' && compq_upper != 'I' && compq_upper != 'U') { info = -1; goto cleanup; }
-    if (compz_upper != 'N' && compz_upper != 'I' && compz_upper != 'U') { info = -2; goto cleanup; }
-    if (joba_upper != 'N' && joba_upper != 'R' && joba_upper != 'T') { info = -3; goto cleanup; }
-    if (l < 0) { info = -4; goto cleanup; }
-    if (n < 0) { info = -5; goto cleanup; }
-    if (m < 0) { info = -6; goto cleanup; }
-    if (p < 0) { info = -7; goto cleanup; }
-    // Tol checked by Fortran, but user check is good practice:
-    // if (tol <= 0.0) { info = -21; goto cleanup; } // Allow TOL=0? Check docs. SLICOT usually requires TOL >= 0.
+    int lda_f = lda_c; int lde_f = lde_c;
+    int ldb_f = ldb_c; int ldc_f = ldc_c;
+    int ldq_f = ldq_c; int ldz_f = ldz_c;
 
-    // Check leading dimensions based on storage order
-    int min_lda_f = MAX(1, l);
-    int min_lde_f = MAX(1, l);
-    int min_ldb_f = (m > 0) ? MAX(1, l) : 1; // B is L x M
-    int min_ldc_f = MAX(1, p);             // C is P x N
-    int min_ldq_f = (compq_upper == 'N') ? 1 : MAX(1, l); // Q is L x L
-    int min_ldz_f = (compz_upper == 'N') ? 1 : MAX(1, n); // Z is N x N
+    double *a_cm = NULL; double *e_cm = NULL;
+    double *b_cm = NULL; double *c_cm = NULL;
+    double *q_cm = NULL; double *z_cm = NULL;
+
+    int *iwork = NULL;
+    double *dwork = NULL;
+    int ldwork_calc;
+    
+    double dummy_double_array[1] = {0.0}; 
+    int dummy_int_array[1] = {0};
+
+
+    // --- 1. Validate input parameters ---
+    compq_upper = toupper(compq_in); compz_upper = toupper(compz_in); joba_upper  = toupper(joba_in);
+
+    if (compq_upper!='N' && compq_upper!='I' && compq_upper!='U') { info = -1; goto cleanup; }
+    if (compz_upper!='N' && compz_upper!='I' && compz_upper!='U') { info = -2; goto cleanup; }
+    if (joba_upper!='N' && joba_upper!='R' && joba_upper!='T') { info = -3; goto cleanup; }
+
+    if (l_f < 0) { info = -4; goto cleanup; }
+    if (n_f < 0) { info = -5; goto cleanup; }
+    if (m_f < 0) { info = -6; goto cleanup; }
+    if (p_f < 0) { info = -7; goto cleanup; }
+    // TOL is checked by Fortran (tol < 1.0 by SLICOT docs, but not for >= 0 in TG01FD specifically)
+
+    // A, E (l x n)
+    if (l_f > 0 && n_f > 0) {
+        if (a_c == NULL) { info = -8; goto cleanup; }
+        if (row_major) { if (lda_c < MAX(1,n_f)) { info = -9; goto cleanup; } }
+        else { if (lda_c < MAX(1,l_f)) { info = -9; goto cleanup; } }
+        if (e_c == NULL) { info = -10; goto cleanup; }
+        if (row_major) { if (lde_c < MAX(1,n_f)) { info = -11; goto cleanup; } }
+        else { if (lde_c < MAX(1,l_f)) { info = -11; goto cleanup; } }
+    } else { 
+        if (a_c != NULL && lda_c < 1) { info = -9; goto cleanup; }
+        if (e_c != NULL && lde_c < 1) { info = -11; goto cleanup; }
+    }
+    
+    // B (l x m)
+    if (m_f > 0) { 
+        if (l_f > 0 && b_c == NULL) { info = -12; goto cleanup; }
+        if (l_f > 0 && b_c != NULL) {
+            if (row_major) { if (ldb_c < MAX(1,m_f)) { info = -13; goto cleanup; } }
+            else { if (ldb_c < MAX(1,l_f)) { info = -13; goto cleanup; } }
+        } else if (l_f == 0 && b_c != NULL && ldb_c < 1 ) {info = -13; goto cleanup;}
+    } else { 
+        if (b_c != NULL && ldb_c < 1) { info = -13; goto cleanup; } 
+    }
+
+    // C (p x n)
+    if (p_f > 0) { 
+        if (n_f > 0 && c_c == NULL) { info = -14; goto cleanup; }
+        if (n_f > 0 && c_c != NULL) {
+            if (row_major) { if (ldc_c < MAX(1,n_f)) { info = -15; goto cleanup; } }
+            else { if (ldc_c < MAX(1,p_f)) { info = -15; goto cleanup; } }
+        } else if (n_f == 0 && c_c != NULL && ldc_c < 1) {info = -15; goto cleanup;}
+    } else { 
+        if (c_c != NULL && ldc_c < 1) { info = -15; goto cleanup; }
+    }
+    
+    // Q (l x l)
+    if (compq_upper != 'N') {
+        if (l_f > 0 && q_c == NULL) { info = -16; goto cleanup; }
+        if (l_f > 0 && q_c != NULL) {
+             if (row_major) { if (ldq_c < MAX(1,l_f)) { info = -17; goto cleanup; } }
+             else { if (ldq_c < MAX(1,l_f)) { info = -17; goto cleanup; } }
+        } else if (l_f == 0 && q_c != NULL && ldq_c < 1) { info = -17; goto cleanup;}
+    } else { if (q_c != NULL && ldq_c < 1) { info = -17; goto cleanup;} }
+
+    // Z (n x n)
+    if (compz_upper != 'N') {
+        if (n_f > 0 && z_c == NULL) { info = -18; goto cleanup; }
+        if (n_f > 0 && z_c != NULL) {
+            if (row_major) { if (ldz_c < MAX(1,n_f)) { info = -19; goto cleanup; } }
+            else { if (ldz_c < MAX(1,n_f)) { info = -19; goto cleanup; } }
+        } else if (n_f == 0 && z_c != NULL && ldz_c < 1 ) { info = -19; goto cleanup;}
+    } else { if (z_c != NULL && ldz_c < 1) { info = -19; goto cleanup;} }
+
+    if (ranke_out == NULL) { info = -20; goto cleanup; }
+    if (joba_upper != 'N' && rnka22_out == NULL) { info = -21; goto cleanup; }
+    
+    if (info != 0) { goto cleanup; }
+
+    // --- 2. Allocate Workspace ---
+    if (n_f > 0) {
+        iwork = (int*)malloc((size_t)n_f * sizeof(int)); CHECK_ALLOC(iwork);
+    } else { iwork = dummy_int_array; } // Pass dummy if N=0
+    
+    ldwork_calc = MAX(1, n_f + p_f);
+    ldwork_calc = MAX(ldwork_calc, MIN(l_f, n_f) + MAX(MAX(1, 3*n_f-1), MAX(m_f, l_f)));
+    ldwork_calc = MAX(1, ldwork_calc); 
+
+    dwork = (double*)malloc((size_t)ldwork_calc * sizeof(double));
+    CHECK_ALLOC(dwork);
+
+    // --- 3. Handle row_major conversions & Fortran LDs ---
+    size_t a_e_size_elems = (size_t)l_f * n_f;
+    size_t b_size_elems = (size_t)l_f * m_f;
+    size_t c_size_elems = (size_t)p_f * n_f;
+    size_t q_size_elems = (size_t)l_f * l_f;
+    size_t z_size_elems = (size_t)n_f * n_f;
+
+    // Set Fortran leading dimensions
+    lda_f = MAX(1, l_f); lde_f = MAX(1, l_f);
+    ldb_f = (m_f > 0) ? MAX(1, l_f) : 1;
+    ldc_f = (p_f > 0) ? MAX(1, p_f) : 1;
+    ldq_f = (compq_upper != 'N' && l_f > 0) ? MAX(1, l_f) : 1;
+    ldz_f = (compz_upper != 'N' && n_f > 0) ? MAX(1, n_f) : 1;
 
 
     if (row_major) {
-        // For row-major C, LD is number of columns
-        int min_lda_rm_cols = n;
-        int min_lde_rm_cols = n;
-        int min_ldb_rm_cols = m;
-        int min_ldc_rm_cols = n;
-        int min_ldq_rm_cols = (compq_upper == 'N') ? 1 : l;
-        int min_ldz_rm_cols = (compz_upper == 'N') ? 1 : n;
-        if (lda < min_lda_rm_cols) { info = -9; goto cleanup; }
-        if (lde < min_lde_rm_cols) { info = -11; goto cleanup; }
-        if (m > 0 && ldb < min_ldb_rm_cols) { info = -13; goto cleanup; } // Check only if m > 0
-        if (ldc < min_ldc_rm_cols) { info = -15; goto cleanup; }
-        if (ldq < min_ldq_rm_cols) { info = -17; goto cleanup; }
-        if (ldz < min_ldz_rm_cols) { info = -19; goto cleanup; }
-    } else {
-        // For column-major C, LD is number of rows (Fortran style)
-        if (lda < min_lda_f) { info = -9; goto cleanup; }
-        if (lde < min_lde_f) { info = -11; goto cleanup; }
-        if (ldb < min_ldb_f) { info = -13; goto cleanup; } // Check even if m=0
-        if (ldc < min_ldc_f) { info = -15; goto cleanup; }
-        if (ldq < min_ldq_f) { info = -17; goto cleanup; }
-        if (ldz < min_ldz_f) { info = -19; goto cleanup; }
-    }
-
-    /* --- Prepare arrays for column-major format if using row-major --- */
-    size_t elem_size = sizeof(double);
-    if (row_major) {
-        // Determine sizes for potential copies
-        size_t a_rows = l; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-        size_t e_rows = l; size_t e_cols = n; size_t e_size = e_rows * e_cols;
-        size_t b_rows = l; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-        size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-        size_t q_rows = l; size_t q_cols = l; size_t q_size = q_rows * q_cols;
-        size_t z_rows = n; size_t z_cols = n; size_t z_size = z_rows * z_cols;
-
-        /* Allocate memory for column-major copies */
-        if (a_size > 0) { a_cm = (double*)malloc(a_size * elem_size); CHECK_ALLOC(a_cm); }
-        if (e_size > 0) { e_cm = (double*)malloc(e_size * elem_size); CHECK_ALLOC(e_cm); }
-        if (b_size > 0) { b_cm = (double*)malloc(b_size * elem_size); CHECK_ALLOC(b_cm); }
-        if (c_size > 0) { c_cm = (double*)malloc(c_size * elem_size); CHECK_ALLOC(c_cm); }
-        if (compq_upper != 'N' && q_size > 0) { q_cm = (double*)malloc(q_size * elem_size); CHECK_ALLOC(q_cm); }
-        if (compz_upper != 'N' && z_size > 0) { z_cm = (double*)malloc(z_size * elem_size); CHECK_ALLOC(z_cm); }
-
-        /* Transpose C inputs to Fortran copies */
-        if (a_cm) slicot_transpose_to_fortran(a, a_cm, a_rows, a_cols, elem_size);
-        if (e_cm) slicot_transpose_to_fortran(e, e_cm, e_rows, e_cols, elem_size);
-        if (b_cm) slicot_transpose_to_fortran(b, b_cm, b_rows, b_cols, elem_size);
-        if (c_cm) slicot_transpose_to_fortran(c, c_cm, c_rows, c_cols, elem_size);
-        if (compq_upper == 'U' && q_cm) { // Copy Q if updating
-            slicot_transpose_to_fortran(q, q_cm, q_rows, q_cols, elem_size);
-        } else if (compq_upper == 'I' && q_cm) { // Initialize Q if requested
-            set_identity(l, q_cm, l, 0); // Initialize CM Q to identity
+        if (l_f > 0 && n_f > 0) {
+            if (a_c) { a_cm = (double*)malloc(a_e_size_elems * sizeof(double)); CHECK_ALLOC(a_cm);
+                       slicot_transpose_to_fortran_with_ld(a_c, a_cm, l_f, n_f, lda_c, lda_f, sizeof(double)); a_ptr = a_cm; }
+            if (e_c) { e_cm = (double*)malloc(a_e_size_elems * sizeof(double)); CHECK_ALLOC(e_cm);
+                       slicot_transpose_to_fortran_with_ld(e_c, e_cm, l_f, n_f, lde_c, lde_f, sizeof(double)); e_ptr = e_cm; }
         }
-        if (compz_upper == 'U' && z_cm) { // Copy Z if updating
-            slicot_transpose_to_fortran(z, z_cm, z_rows, z_cols, elem_size);
-        } else if (compz_upper == 'I' && z_cm) { // Initialize Z if requested
-            set_identity(n, z_cm, n, 0); // Initialize CM Z to identity
+        if (l_f > 0 && m_f > 0 && b_c) {
+            b_cm = (double*)malloc(b_size_elems * sizeof(double)); CHECK_ALLOC(b_cm);
+            slicot_transpose_to_fortran_with_ld(b_c, b_cm, l_f, m_f, ldb_c, ldb_f, sizeof(double)); b_ptr = b_cm;
         }
-
-        /* Fortran leading dimensions */
-        lda_f = (l > 0) ? l : 1;
-        lde_f = (l > 0) ? l : 1;
-        ldb_f = (l > 0) ? l : 1;
-        ldc_f = (p > 0) ? p : 1;
-        ldq_f = (l > 0) ? l : 1;
-        ldz_f = (n > 0) ? n : 1;
-
-        /* Set pointers */
-        a_ptr = a_cm; e_ptr = e_cm; b_ptr = b_cm; c_ptr = c_cm;
-        q_ptr = q_cm; z_ptr = z_cm;
-
-    } else {
-        /* Column-major case - use original arrays */
-        lda_f = lda; lde_f = lde; ldb_f = ldb; ldc_f = ldc; ldq_f = ldq; ldz_f = ldz;
-        a_ptr = a; e_ptr = e; b_ptr = b; c_ptr = c; q_ptr = q; z_ptr = z;
-        /* Initialize Q/Z if requested */
-        if (compq_upper == 'I') set_identity(l, q_ptr, ldq_f, 0);
-        if (compz_upper == 'I') set_identity(n, z_ptr, ldz_f, 0);
+        if (p_f > 0 && n_f > 0 && c_c) {
+            c_cm = (double*)malloc(c_size_elems * sizeof(double)); CHECK_ALLOC(c_cm);
+            slicot_transpose_to_fortran_with_ld(c_c, c_cm, p_f, n_f, ldc_c, ldc_f, sizeof(double)); c_ptr = c_cm;
+        }
+        if (compq_upper != 'N' && l_f > 0 && q_c) {
+            q_cm = (double*)malloc(q_size_elems * sizeof(double)); CHECK_ALLOC(q_cm);
+            if (compq_upper == 'U') { 
+                slicot_transpose_to_fortran_with_ld(q_c, q_cm, l_f, l_f, ldq_c, ldq_f, sizeof(double));
+            } 
+            q_ptr = q_cm;
+        }
+        if (compz_upper != 'N' && n_f > 0 && z_c) {
+            z_cm = (double*)malloc(z_size_elems * sizeof(double)); CHECK_ALLOC(z_cm);
+            if (compz_upper == 'U') { 
+                slicot_transpose_to_fortran_with_ld(z_c, z_cm, n_f, n_f, ldz_c, ldz_f, sizeof(double));
+            }
+            z_ptr = z_cm;
+        }
+    } else { 
+        // For column-major C, pointers and LDs are already set, just ensure safety for zero-dim
+        if (!(l_f > 0 && n_f > 0)) { a_ptr = NULL; e_ptr = NULL; }
+        if (!(l_f > 0 && m_f > 0)) { b_ptr = NULL; }
+        if (!(p_f > 0 && n_f > 0)) { c_ptr = NULL; }
+        if (!(compq_upper != 'N' && l_f > 0)) { q_ptr = NULL; }
+        if (!(compz_upper != 'N' && n_f > 0)) { z_ptr = NULL; }
     }
-
-
-    /* --- Workspace Allocation --- */
-
-    // Allocate IWORK
-    iwork_size = n; // Size is N
-    if (iwork_size < 1) iwork_size = 1;
-    iwork = (int*)malloc((size_t)iwork_size * sizeof(int));
-    CHECK_ALLOC(iwork);
-
-    // Perform workspace query with small dwork array
-    double dwork_temp[2]; // Small array to receive query result
-    ldwork = -1; // Query mode
     
-    F77_FUNC(tg01fd, TG01FD)(&compq_upper, &compz_upper, &joba_upper, &l, &n, &m, &p,
-                             a_ptr, &lda_f, e_ptr, &lde_f, b_ptr, &ldb_f, c_ptr, &ldc_f,
-                             q_ptr, &ldq_f, z_ptr, &ldz_f,
-                             ranke, rnka22, &tol,
-                             iwork, dwork_temp, &ldwork, &info,
-                             compq_len, compz_len, joba_len);
+    // Use dummy arrays for Fortran if logically zero-sized or not referenced and ptr is NULL
+    double* final_a_ptr = (l_f > 0 && n_f > 0 && a_ptr != NULL) ? a_ptr : dummy_double_array;
+    double* final_e_ptr = (l_f > 0 && n_f > 0 && e_ptr != NULL) ? e_ptr : dummy_double_array;
+    double* final_b_ptr = (m_f > 0 && l_f > 0 && b_ptr != NULL) ? b_ptr : dummy_double_array; // B not ref if m=0
+    double* final_c_ptr = (p_f > 0 && n_f > 0 && c_ptr != NULL) ? c_ptr : dummy_double_array; // C not ref if p=0
+    double* final_q_ptr = (compq_upper != 'N' && l_f > 0 && q_ptr != NULL) ? q_ptr : dummy_double_array; // Q not ref if compq='N'
+    double* final_z_ptr = (compz_upper != 'N' && n_f > 0 && z_ptr != NULL) ? z_ptr : dummy_double_array; // Z not ref if compz='N'
+    int* final_iwork_ptr = (n_f > 0 && iwork != NULL) ? iwork : dummy_int_array;
 
-    if (info < 0 && info != -20) { goto cleanup; } // Query failed due to invalid argument (allow INFO=-20 from query)
-    info = 0; // Reset info after query
 
-    // Get the required dwork size from query result
-    ldwork = (int)dwork_temp[0]; // First element contains optimal ldwork
-    
-    // Check against minimum documented size
-    int min_ldwork = MAX(1, MAX(n + p, MIN(l, n) + MAX(3 * n - 1, MAX(m, l))));
-    ldwork = MAX(ldwork, min_ldwork);
+    // --- 4. Call Fortran routine ---
+    F77_FUNC(tg01fd, TG01FD)(&compq_upper, &compz_upper, &joba_upper,
+                             &l_f, &n_f, &m_f, &p_f,
+                             final_a_ptr, &lda_f, final_e_ptr, &lde_f,
+                             final_b_ptr, &ldb_f, final_c_ptr, &ldc_f,
+                             final_q_ptr, &ldq_f, final_z_ptr, &ldz_f,
+                             ranke_out, rnka22_out, &tol_in,
+                             final_iwork_ptr, dwork, &ldwork_calc, &info,
+                             (size_t)1, (size_t)1, (size_t)1);
 
-    dwork = (double*)malloc((size_t)ldwork * sizeof(double));
-    CHECK_ALLOC(dwork); // Sets info and jumps to cleanup on failure
-
-    /* --- Call the computational routine --- */
-    // RANKE, RNKA22 are scalar outputs, no transposition needed
-    F77_FUNC(tg01fd, TG01FD)(&compq_upper, &compz_upper, &joba_upper, &l, &n, &m, &p,
-                             a_ptr, &lda_f, e_ptr, &lde_f, b_ptr, &ldb_f, c_ptr, &ldc_f,
-                             q_ptr, &ldq_f, z_ptr, &ldz_f,
-                             ranke, rnka22, &tol,
-                             iwork, dwork, &ldwork, &info,
-                             compq_len, compz_len, joba_len);
-
-    /* --- Copy results back to row-major format if needed --- */
+    // --- 5. Transpose results back if row_major and successful ---
     if (row_major && info == 0) {
-        size_t a_rows = l; size_t a_cols = n; size_t a_size = a_rows * a_cols;
-        size_t e_rows = l; size_t e_cols = n; size_t e_size = e_rows * e_cols;
-        size_t b_rows = l; size_t b_cols = m; size_t b_size = b_rows * b_cols;
-        size_t c_rows = p; size_t c_cols = n; size_t c_size = c_rows * c_cols;
-        size_t q_rows = l; size_t q_cols = l; size_t q_size = q_rows * q_cols;
-        size_t z_rows = n; size_t z_cols = n; size_t z_size = z_rows * z_cols;
-
-        if (a_size > 0 && a_cm) slicot_transpose_to_c(a_cm, a, a_rows, a_cols, elem_size);
-        if (e_size > 0 && e_cm) slicot_transpose_to_c(e_cm, e, e_rows, e_cols, elem_size);
-        if (b_size > 0 && b_cm) slicot_transpose_to_c(b_cm, b, b_rows, b_cols, elem_size);
-        if (c_size > 0 && c_cm) slicot_transpose_to_c(c_cm, c, c_rows, c_cols, elem_size);
-        if (compq_upper != 'N' && q_size > 0 && q_cm) slicot_transpose_to_c(q_cm, q, q_rows, q_cols, elem_size);
-        if (compz_upper != 'N' && z_size > 0 && z_cm) slicot_transpose_to_c(z_cm, z, z_rows, z_cols, elem_size);
-        // RANKE, RNKA22 modified directly
+        if (l_f > 0 && n_f > 0) {
+            if (a_cm && a_c) slicot_transpose_to_c_with_ld(a_cm, a_c, l_f, n_f, lda_f, lda_c, sizeof(double));
+            if (e_cm && e_c) slicot_transpose_to_c_with_ld(e_cm, e_c, l_f, n_f, lde_f, lde_c, sizeof(double));
+        }
+        if (l_f > 0 && m_f > 0 && b_cm && b_c) {
+            slicot_transpose_to_c_with_ld(b_cm, b_c, l_f, m_f, ldb_f, ldb_c, sizeof(double));
+        }
+        if (p_f > 0 && n_f > 0 && c_cm && c_c) {
+            slicot_transpose_to_c_with_ld(c_cm, c_c, p_f, n_f, ldc_f, ldc_c, sizeof(double));
+        }
+        if (compq_upper != 'N' && l_f > 0 && q_cm && q_c) {
+            slicot_transpose_to_c_with_ld(q_cm, q_c, l_f, l_f, ldq_f, ldq_c, sizeof(double));
+        }
+        if (compz_upper != 'N' && n_f > 0 && z_cm && z_c) {
+            slicot_transpose_to_c_with_ld(z_cm, z_c, n_f, n_f, ldz_f, ldz_c, sizeof(double));
+        }
     }
-    // In column-major case, A, E, B, C, Q, Z, RANKE, RNKA22 modified in place.
 
- cleanup:
-    /* --- Cleanup --- */
+cleanup:
+    if (iwork != dummy_int_array) free(iwork); // Only free if not dummy
     free(dwork);
-    free(iwork);
-    free(a_cm); free(e_cm); free(b_cm); free(c_cm);
-    free(q_cm); free(z_cm);
-
+    if (row_major) {
+        free(a_cm); free(e_cm);
+        free(b_cm); free(c_cm);
+        free(q_cm); free(z_cm);
+    }
     return info;
 }
