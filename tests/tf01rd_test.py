@@ -1,88 +1,111 @@
 import numpy as np
 import slycot.transform
 
-def print_matrix_f(name, matrix, rows, cols):
-    """Helper to print matrices in Fortran column-major style (transposed)."""
-    print(f"{name} ({rows}x{cols}, as stored Fortran column-major, printed row-wise):")
-    if matrix is None or matrix.size == 0:
-        print("  None or Empty")
-    else:
-        # Print row by row, but it's column data
-        temp_matrix = matrix.reshape((cols, rows)).T # Reshape to (rows, cols) for printing
-        with np.printoptions(precision=4, suppress=True, linewidth=120):
-            print(temp_matrix)
+def print_matrix_details(name, matrix_data, shape, order='F'):
+    """Prints matrix details and its representation."""
+    print(f"--- {name} ---")
+    print(f"Shape: {shape}")
+    print(f"Input flat data (Fortran column-major order): {matrix_data.tolist()}")
+    matrix = matrix_data.reshape(shape, order=order)
+    print(f"Matrix as used by Slycot (numpy default print, effectively row-major view of {shape} matrix):")
+    print(matrix)
     print("-" * 20)
 
-def print_slycot_h(name, h_matrix, nc, nb, N):
-    print(f"{name} ({nc}x{N*nb}) from Slycot (effectively row-major of concatenated M_k):")
-    if h_matrix is None or h_matrix.size == 0:
-        print("  None or Empty")
-    else:
-        with np.printoptions(precision=4, suppress=True, linewidth=120):
-            print(h_matrix) # Slycot returns H as p x (N*m)
-    print("Decomposed Markov Parameters M(k):")
-    for k in range(N):
-        mk = h_matrix[:, k*nb:(k+1)*nb]
-        print(f"M({k+1}):\n{mk}")
-    print("-" * 20)
+# Parameters from TF01RD.html "Program Data"
+N_param = 5
+NA_param = 3
+NB_param = 2
+NC_param = 2
 
+print("=== Input Parameters ===")
+print(f"N : {N_param}")
+print(f"NA: {NA_param}")
+print(f"NB: {NB_param}")
+print(f"NC: {NC_param}\n")
 
-# Data from TF01RD.html "Program Data"
-na = 3
-nb = 2
-nc = 2
-N_in = 5
-
-# A (Fortran column-major order, then reshaped to 3x3 for Slycot)
-# SLICOT example reads: ( ( A(I,J), I = 1,NA ), J = 1,NA )
+# Matrix A: (NA x NA) = 3x3
+# Fortran reads: ( ( A(I,J), I = 1,NA ), J = 1,NA )
+# Data lines from HTML:
 #   0.000 -0.070  0.015
 #   1.000  0.800 -0.150
 #   0.000  0.000  0.500
-a_f_flat = np.array([0.0, 1.0, 0.0, -0.070, 0.800, 0.000, 0.015, -0.150, 0.500])
-a_slycot = a_f_flat.reshape((na, na), order='F')
-# print_matrix_f("A_slycot (input to slycot.tf01rd)", a_slycot, na, na)
+# This implies flat column-major order:
+A_flat_f = np.array([0.000, 1.000, 0.000, -0.070, 0.800, 0.000, 0.015, -0.150, 0.500])
+A_slycot = A_flat_f.reshape((NA_param, NA_param), order='F')
+print_matrix_details("Matrix A", A_flat_f, (NA_param, NA_param))
 
+# Matrix B: (NA x NB) = 3x2
+# Fortran reads: ( ( B(I,J), I = 1,NA ), J = 1,NB )
+# Data lines from HTML:
+#   0.000  2.000  1.000  (Column 1 of B)
+#  -1.000 -0.100  1.000  (Column 2 of B)
+# This implies flat column-major order:
+B_flat_f = np.array([0.000, 2.000, 1.000, -1.000, -0.100, 1.000])
+B_slycot = B_flat_f.reshape((NA_param, NB_param), order='F')
+print_matrix_details("Matrix B", B_flat_f, (NA_param, NB_param))
 
-# B (Fortran column-major order, then reshaped to NAxNB for Slycot)
-# SLICOT example reads: ( ( B(I,J), I = 1,NA ), J = 1,NB )
-#   0.000  2.000  1.000  (col 1 of B)
-#  -1.000 -0.100  1.000  (col 2 of B)
-b_f_flat = np.array([0.0, 2.0, 1.0, -1.0, -0.100, 1.000])
-b_slycot = b_f_flat.reshape((na, nb), order='F')
-# print_matrix_f("B_slycot (input to slycot.tf01rd)", b_slycot, na, nb)
-
-
-# C (Fortran column-major order, then reshaped to NCxNA for Slycot)
-# SLICOT example reads: ( ( C(I,J), I = 1,NC ), J = 1,NA )
-#   0.000  1.000  (col 1 of C)
-#  -1.000  0.000  (col 2 of C)
-#   0.000  0.000  (col 3 of C)
-c_f_flat = np.array([0.0, 1.0, -1.0, 0.0, 0.0, 0.0])
-c_slycot = c_f_flat.reshape((nc, na), order='F')
-# print_matrix_f("C_slycot (input to slycot.tf01rd)", c_slycot, nc, na)
+# Matrix C: (NC x NA) = 2x3
+# Fortran reads: ( ( C(I,J), I = 1,NC ), J = 1,NA )
+# Data lines from HTML (this part is tricky, assuming numbers are read sequentially to fill columns):
+#   0.000  1.000  0.000
+#   0.000  1.000  0.000
+# C(1,1)=0.000, C(2,1)=0.000 (from first two numbers of "0.000  1.000  0.000")
+# C(1,2)=1.000, C(2,2)=1.000 (from last of first line, first of second line if numbers are split, or next two if all on one line)
+# The example data file for TF01RD.f has C as:
+# 0.000  1.000
+# -1.000  0.000
+# 0.000  0.000
+# This corresponds to C = [[0, -1, 0], [1, 0, 0]] (standard display)
+# Flat column major: 0.0, 1.0,  -1.0, 0.0,  0.0, 0.0
+C_flat_f = np.array([0.0, 1.0, -1.0, 0.0, 0.0, 0.0])
+C_slycot = C_flat_f.reshape((NC_param, NA_param), order='F')
+print_matrix_details("Matrix C", C_flat_f, (NC_param, NA_param))
 
 # Call Slycot's tf01rd
-# ldwork >= max(1, 2*na*nc) = max(1, 2*3*2) = max(1,12) = 12
+# ldwork >= max(1, 2*na*nc) = max(1, 2*3*2) = 12
 try:
-    H_slycot = slycot.transform.tf01rd(na, nb, nc, N_in, a_slycot, b_slycot, c_slycot, ldwork=12)
-    print_slycot_h("H_slycot (output)", H_slycot, nc, nb, N_in)
-
-    # Convert H_slycot (which is NC x N*NB, row-major like) to Fortran column-major flat string for C++ test
-    # H_fortran_flat will be [M(1)(:,0), M(1)(:,1), M(2)(:,0), M(2)(:,1), ...]
-    H_fortran_flat_list = []
-    for k in range(N_in): # Iterate through M_k
-        for j in range(nb): # Iterate through columns of M_k
-            for i in range(nc): # Iterate through rows of M_k
-                H_fortran_flat_list.append(H_slycot[i, k*nb + j])
+    H_slycot_output = slycot.transform.tf01rd(NA_param, NB_param, NC_param, N_param, 
+                                              A_slycot, B_slycot, C_slycot, ldwork=12)
     
+    print("\n=== Output H Matrix (from Slycot) ===")
+    print(f"Shape: ({H_slycot_output.shape[0]} x {H_slycot_output.shape[1]})")
+    print("H (Slycot returns it as NC x (N*NB), effectively row-major of concatenated M_k):")
+    with np.printoptions(precision=4, suppress=True, linewidth=120):
+        print(H_slycot_output)
+    
+    print("\nDecomposed Markov Parameters M(k) from H_slycot_output:")
+    for k_idx in range(N_param):
+        mk = H_slycot_output[:, k_idx*NB_param:(k_idx+1)*NB_param]
+        print(f"M({k_idx+1}):\n{mk}")
+
+    # Convert H_slycot_output to the flattened Fortran column-major order
+    # for the C++ test's H_expected_f vector.
+    # H_expected_f stores [M(1)(col1), M(1)(col2), ..., M(N)(col1), M(N)(col2)]
+    # where each M(k)(col_j) is a column vector of length NC.
+    H_fortran_flat_list = []
+    for k_loop in range(N_param):      # For each Markov parameter M(k)
+        for j_loop in range(NB_param): # For each column in M(k)
+            for i_loop in range(NC_param): # For each row in M(k)
+                H_fortran_flat_list.append(H_slycot_output[i_loop, k_loop*NB_param + j_loop])
+    
+    print("\n-------------------------------------------------------------")
     print("H_expected_f for C++ test (Fortran column-major flattened):")
+    print("-------------------------------------------------------------")
     print("{", end="")
     for i, val in enumerate(H_fortran_flat_list):
         print(f"{val:.4f}", end="")
         if i < len(H_fortran_flat_list) - 1:
             print(", ", end="")
+        if (i + 1) % (NC_param * NB_param) == 0 and i < len(H_fortran_flat_list) - 1 : # Newline after each M(k) block
+             print(f", // M({(i+1)//(NC_param*NB_param)})")
+             print(" ", end="")
+        elif (i + 1) % NC_param == 0 and NB_param > 1 and (i+1) % (NC_param * NB_param) != 0  and i < len(H_fortran_flat_list) - 1 : # Space between columns of M(k)
+             print(", ", end="")
+
+
     print("};")
+    print("-------------------------------------------------------------")
 
 except Exception as e:
-    print(f"Error calling slycot.tf01rd: {e}")
+    print(f"\nError calling slycot.tf01rd: {e}")
 

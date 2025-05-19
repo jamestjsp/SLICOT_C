@@ -4,6 +4,7 @@
 #include <string>
 #include <algorithm> // For std::max
 #include <numeric>   // For std::accumulate
+#include <cctype>    // For toupper C++ style
 
 #include "tf01rd.h"       // Wrapper header
 #include "slicot_utils.h" // For transpose functions
@@ -78,20 +79,26 @@ protected:
         if(!H_out_c.empty()){ 
              ASSERT_EQ(H_out_c.size(), (size_t)expected_h_rows * expected_h_cols);
         } else {
-            FAIL() << "H_out_c is empty but expected H is not.";
+            // This case should ideally not be hit if H_expected_f is not empty
+            if (!H_expected_f.empty()) {
+                 FAIL() << "H_out_c is empty but expected H is not.";
+            } else {
+                 // Both are empty, which is fine.
+            }
         }
 
 
         std::vector<double> H_actual_f(H_expected_f.size());
+         if (H_expected_f.empty()) { // If H is expected to be empty, nothing to compare
+            return;
+        }
+
 
         if (is_row_major_input) {
-            // LDH_c is num_cols of H_out_c
-            // Fortran LDH for H_actual_f is num_rows (NC_val)
             slicot_transpose_to_fortran_with_ld(H_out_c.data(), H_actual_f.data(), 
                                                 expected_h_rows, expected_h_cols, 
                                                 LDH_c, std::max(1, NC_val), sizeof(double));
-        } else { // Column-major C input, H_out_c is already Fortran-like
-            // LDH_c is num_rows of H_out_c
+        } else { 
             if (LDH_c == expected_h_rows) { 
                  H_actual_f = H_out_c;
             } else { 
@@ -121,18 +128,18 @@ protected:
         // Input A, B, C from TF01RD.html "Program Data" 
         // These are defined as flat arrays in Fortran column-major order.
         // A_c_layout will be used directly for ColMajor test, transposed for RowMajor test.
-        A_c_layout = {0.0, 1.0, 0.0, -0.070, 0.800, 0.000, 0.015, -0.150, 0.500};
-        B_c_layout = {0.0, 2.0, 1.0, -1.0, -0.100, 1.000};
+        A_c_layout = {0.000, 1.000, 0.000, -0.070, 0.800, 0.000, 0.015, -0.150, 0.500};
+        B_c_layout = {0.000, 2.000, 1.000, -1.000, -0.100, 1.000};
         C_c_layout = {0.0, 1.0, -1.0, 0.0, 0.0, 0.0};
 
         // Expected H computed by Python script using Slycot with the above A,B,C
         // H is (NC x N*NB) = 2x10, Fortran column-major flattened.
         H_expected_f = {
-            -2.0000,  0.0000,  0.1000, -1.0000, // M(1)
-            -1.4500, -0.1250,  1.2300,  0.0220, // M(2)
-            -0.9600, -0.0940,  1.0370,  0.0936, // M(3)
-            -0.6365, -0.0635,  0.7735,  0.0763, // M(4)
-            -0.4270, -0.0427,  0.5612,  0.0560  // M(5)
+            -2.0000, 0.0000, 0.1000, -1.0000, // M(1)
+            -1.4500, -0.1250, 1.2300, 0.0220,  // M(2)
+            -0.9600, -0.0940, 1.0370, 0.0936,  // M(3)
+            -0.6365, -0.0635, 0.7735, 0.0763,  // M(4)
+            -0.4270, -0.0427, 0.5612, 0.0560   // M(5)
         };
     }
 };
@@ -153,19 +160,19 @@ TEST_F(Tf01rdDocExampleTest, ColMajor) {
 TEST_F(Tf01rdDocExampleTest, RowMajor) {
     SetUpBase(true); // Row-major C setup
 
-    // Original A, B, C from SetUpTestData are in Fortran column-major.
-    // Transpose them to row-major for A_c_layout, B_c_layout, C_c_layout for this test.
-    std::vector<double> A_f_temp = {0.0, 1.0, 0.0, -0.070, 0.800, 0.000, 0.015, -0.150, 0.500};
-    std::vector<double> B_f_temp = {0.0, 2.0, 1.0, -1.0, -0.100, 1.000};
-    std::vector<double> C_f_temp = {0.0, 1.0, -1.0, 0.0, 0.0, 0.0};
+    // Original A_c_layout, B_c_layout, C_c_layout from SetUpTestData are in Fortran column-major.
+    // Create temporary row-major versions for this test.
+    std::vector<double> A_f_colmajor = {0.000, 1.000, 0.000, -0.070, 0.800, 0.000, 0.015, -0.150, 0.500};
+    std::vector<double> B_f_colmajor = {0.000, 2.000, 1.000, -1.000, -0.100, 1.000};
+    std::vector<double> C_f_colmajor = {0.0, 1.0, -1.0, 0.0, 0.0, 0.0};
 
-    A_c_layout.resize(A_f_temp.size());
-    B_c_layout.resize(B_f_temp.size());
-    C_c_layout.resize(C_f_temp.size());
+    A_c_layout.resize(A_f_colmajor.size());
+    B_c_layout.resize(B_f_colmajor.size());
+    C_c_layout.resize(C_f_colmajor.size());
 
-    slicot_transpose_to_c_with_ld(A_f_temp.data(), A_c_layout.data(), NA_val, NA_val, NA_val, NA_val, sizeof(double));
-    slicot_transpose_to_c_with_ld(B_f_temp.data(), B_c_layout.data(), NA_val, NB_val, NA_val, NB_val, sizeof(double));
-    slicot_transpose_to_c_with_ld(C_f_temp.data(), C_c_layout.data(), NC_val, NA_val, NC_val, NA_val, sizeof(double));
+    slicot_transpose_to_c_with_ld(A_f_colmajor.data(), A_c_layout.data(), NA_val, NA_val, NA_val, NA_val, sizeof(double));
+    slicot_transpose_to_c_with_ld(B_f_colmajor.data(), B_c_layout.data(), NA_val, NB_val, NA_val, NB_val, sizeof(double));
+    slicot_transpose_to_c_with_ld(C_f_colmajor.data(), C_c_layout.data(), NC_val, NA_val, NC_val, NA_val, sizeof(double));
 
     INFO_out = slicot_tf01rd(NA_val, NB_val, NC_val, N_val,
                              A_c_layout.data(), LDA_c,
