@@ -273,7 +273,7 @@ int slicot_ib03ad(
     else if (alg_upper == 'D' && stor_upper == 'P') l2_val = nx_calc*(nx_calc+1LL)/2LL;
     else /* ALG = 'I' */ l2_val = 3LL*nx_calc + nsmp_ll*l_ll;
 
-    lw4 = MAX( 5LL, nsmp_ll*l_ll + 2LL*nx_calc + nsmp_ll*l_ll*( bsn + lths ) +
+    lw4 = MAX( 30LL, nsmp_ll*l_ll + 2LL*nx_calc + nsmp_ll*l_ll*( bsn + lths ) +
                   MAX( MAX( l1_val + nx_calc, nsmp_ll*l_ll + l1_val), l2_val ) );
 
     ldwork_calc = (int)MAX(lw1, MAX(lw2_val, MAX(lw3, lw4)));

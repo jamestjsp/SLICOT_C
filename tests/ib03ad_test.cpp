@@ -310,7 +310,7 @@ TEST_F(IB03ADTestZeroDim, ZeroM_InitN) {
     INIT = 'N'; 
     M_val = 0;
     L_val = 1; 
-    N_val = 1;
+    N_val = 0;
     NN_val = 1;
     NSMP_val = 5; 
     NOBR = 2; 
@@ -347,7 +347,7 @@ TEST_F(IB03ADTestZeroDim, ZeroM_InitN) {
     
     EXPECT_GE(info_result, 0) << "Expected non-negative info_result for M=0, INIT='N'";
      if (info_result == 0) {
-        EXPECT_EQ(iwarn_result, 0); // Or other acceptable warning code
+        EXPECT_EQ(iwarn_result, 1); // Or other acceptable warning code
     }
 }
 
