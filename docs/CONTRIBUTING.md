@@ -1,6 +1,6 @@
 # SLICOT_C Contribution Guidelines for AI Coding Agents
 
-**Version 8**
+**Version 9**
 
 This document provides structured guidelines for AI coding agents to efficiently implement C wrappers and corresponding C++ tests for the SLICOT library, focusing on consistency, clarity, and reducing misinterpretations.
 
@@ -10,29 +10,29 @@ This document provides structured guidelines for AI coding agents to efficiently
 Create a C wrapper function (e.g., `slicot_function_name`) that calls the corresponding SLICOT Fortran routine (`F77_FUNC(function_name, FUNCTION_NAME)`).
 
 ### Workspace
-The C wrapper must allocate and free workspace arrays (`iwork`, `dwork`, etc.) internally using `malloc`/`free`. Calculate sizes based on formulas in SLICOT documentation (see rep96-1.pdf, Sec 2.2.10). For routines that support it (check SLICOT routine documentation), query the Fortran routine for optimal workspace size first (e.g., returned in `DWORK(1)`), then fall back to documented formulas if the query fails or is not supported. **Do not expect the caller to provide workspace.**
+The C wrapper **must allocate and free workspace arrays** (`iwork`, `dwork`, etc.) internally using `malloc`/`free`. Calculate sizes based on formulas in SLICOT documentation (see `rep96-1.pdf`, Sec 2.2.10). For routines that support it (check SLICOT routine documentation), query the Fortran routine for optimal workspace size first (e.g., returned in `DWORK(1)`), then fall back to documented formulas if the query fails or is not supported. **Do not expect the caller to provide workspace.**
 
 ### Row-Major Handling
 The wrapper must accept a `row_major` flag. If `row_major` is true (1), the wrapper must:
 
-1. Allocate temporary column-major buffers (`_cm`) for input/output matrices passed by the C caller.
-2. Transpose row-major C input matrices into the temporary column-major buffers before calling Fortran.
-3. Pass the column-major buffers and corresponding Fortran-style leading dimensions (number of rows) to the Fortran routine.
-4. If the Fortran routine modifies inputs or computes outputs, transpose results from column-major buffers back to the original C row-major arrays after the Fortran call (if `info == 0`).
+1. Allocate temporary column-major buffers (`_cm`) for input/output matrices passed by the C caller
+2. Transpose row-major C input matrices into the temporary column-major buffers before calling Fortran
+3. Pass the column-major buffers and corresponding Fortran-style leading dimensions (number of rows) to the Fortran routine
+4. If the Fortran routine modifies inputs or computes outputs, transpose results from column-major buffers back to the original C row-major arrays after the Fortran call (if `info == 0`)
 
 ### Leading Dimensions (LD)
-- **Fortran (and Column-Major C)**: `LDA`, `LDB`, etc., always refer to the number of rows allocated for the matrix in memory.
-- **Row-Major C**: `LDA`, `LDB`, etc., passed to the C wrapper refer to the number of columns allocated for the matrix in memory. The wrapper must calculate the required Fortran LDA (rows) internally.
+- **Fortran (and Column-Major C):** `LDA`, `LDB`, etc., always refer to the number of **rows** allocated for the matrix in memory
+- **Row-Major C:** `LDA`, `LDB`, etc., passed to the C wrapper refer to the number of **columns** allocated for the matrix in memory. The wrapper must calculate the required Fortran LDA (rows) internally
 
 ### Parameter Validation and Zero Dimensions
-- Validate inputs rigorously in the C wrapper before calling Fortran.
-- **Crucially**, for zero-dimension cases (e.g., `N=0`, `M=0`), the C wrapper's validation must align with the underlying SLICOT Fortran routine's behavior. Many SLICOT routines handle zero dimensions as valid inputs, often performing a quick exit with `INFO=0` (see rep96-1.pdf, Sec 2.3.10). The C wrapper should not erroneously flag such cases as errors if the Fortran routine would accept them.
-- Pay close attention to the SLICOT documentation for each routine to understand if `NULL` pointers are acceptable for arrays that become zero-sized (e.g., an L-by-N matrix where N=0). If `NULL` is passed, ensure corresponding Fortran leading dimensions are still set to valid values (e.g., 1) if the Fortran interface expects them, even if the pointer itself is `NULL`.
+- Validate inputs rigorously in the C wrapper before calling Fortran
+- **Crucially**, for zero-dimension cases (e.g., `N=0`, `M=0`), the C wrapper's validation must align with the underlying SLICOT Fortran routine's behavior. Many SLICOT routines handle zero dimensions as valid inputs, often performing a quick exit with `INFO=0` (see `rep96-1.pdf`, Sec 2.3.10). The C wrapper should not erroneously flag such cases as errors if the Fortran routine would accept them
+- Pay close attention to the SLICOT documentation for each routine to understand if `NULL` pointers are acceptable for arrays that become zero-sized (e.g., an L-by-N matrix where N=0). If `NULL` is passed, ensure corresponding Fortran leading dimensions are still set to valid values (e.g., 1) if the Fortran interface expects them, even if the pointer itself is `NULL`
 
 ### Testing
-- Use GTest fixtures (`ColMajor`, `RowMajor`).
-- For small datasets (e.g., ~10 samples), embed data directly in the test fixture.
-- For larger datasets, create a CSV file in the `tests/data/` directory and use the `load_test_data_from_csv` utility.
+- Use GTest fixtures (`ColMajor`, `RowMajor`)
+- For small datasets (e.g., ~10 samples), embed data directly in the test fixture
+- For larger datasets, create a CSV file in the `tests/data/` directory and use the `load_test_data_from_csv` utility
 - **CSV Data Loading**: Use the correct function signature:
   ```cpp
   bool load_test_data_from_csv(
@@ -43,17 +43,18 @@ The wrapper must accept a `row_major` flag. If `row_major` is true (1), the wrap
       std::vector<double>& y,
       int& num_samples);
   ```
-- **CSV Data Format**: The `load_test_data_from_csv` utility reads the specified columns (e.g., "U1", "U2") and loads them into separate vectors.
-- **Data Rearrangement**: For multi-column time-series data loaded via CSV, the test fixture must handle the loaded vectors appropriately for the expected matrix storage format.
-- The CSV header names **MUST** exactly match the `input_columns`/`output_columns` specified in the test fixture.
-- `SetUp` loads/defines data, performs necessary rearrangements, updates `NSMP` (number of samples), calculates LDs, and sizes output vectors.
-- Tests call the C wrapper, `ASSERT_EQ` the info code, and `EXPECT_NEAR` the numerical results.
-- **Numerical Tolerance**: Use realistic tolerances for numerical comparisons. Start with `1e-3` but adjust to `5e-3` or higher if the algorithm shows natural numerical variations. The computed results should be very close to expected values but may have small differences due to compiler optimizations, different numerical libraries, or natural precision variations in iterative algorithms.
-- **Verify Expected Results**: Double-check expected results (`.res` files, documentation examples, original Fortran example programs `examples/*.f` as per rep96-1.pdf Ch. 4 & App. C) against independent simulations (e.g., using Python control libraries) if possible, as documentation examples may contain errors. Use the verified results in the test fixture. **Important**: If computed results are consistently close to each other but slightly different from documentation values, trust the computed results and adjust expected values accordingly.
+- **CSV Data Format**: The `load_test_data_from_csv` utility reads the specified columns (e.g., "U1", "U2") and loads them into separate vectors
+- **Data Rearrangement**: For multi-column time-series data loaded via CSV, the test fixture must handle the loaded vectors appropriately for the expected matrix storage format
+- The CSV header names **MUST** exactly match the `input_columns`/`output_columns` specified in the test fixture
+- `SetUp` loads/defines data, performs necessary rearrangements, updates `NSMP` (number of samples), calculates LDs, and sizes output vectors
+- Tests call the C wrapper, `ASSERT_EQ` the info code, and `EXPECT_NEAR` the numerical results
+- **Numerical Tolerance**: Use realistic tolerances for numerical comparisons. Start with `1e-3` but adjust to `5e-3` or higher if the algorithm shows natural numerical variations. The computed results should be very close to expected values but may have small differences due to compiler optimizations, different numerical libraries, or natural precision variations in iterative algorithms
+- **Verify Expected Results**: Double-check expected results (`.res` files, documentation examples, original Fortran example programs `examples/*.f` as per `rep96-1.pdf` Ch. 4 & App. C) against independent simulations (e.g., using Python control libraries) if possible, as documentation examples may contain errors. Use the verified results in the test fixture. **Important**: If computed results are consistently close to each other but slightly different from documentation values, trust the computed results and adjust expected values accordingly
+- Include specific test cases for zero-dimension inputs to ensure correct handling by the wrapper and alignment with Fortran routine behavior
 
 ### Additional Requirements
-- **Filenames**: All C source and header files must use lowercase naming (e.g., `ab05od.c`, not `AB05OD.c`).
-- **Error Handling**: Use `CHECK_ALLOC` after `malloc`. Implement `goto cleanup` for error exits. Free all allocated memory in the cleanup block. Return appropriate info codes (negative for wrapper errors, Fortran info otherwise).
+- **Filenames**: All C source and header files must use lowercase naming (e.g., `ab05od.c`, not `AB05OD.c`)
+- **Error Handling**: Use `CHECK_ALLOC` after `malloc`. Implement `goto cleanup` for error exits. Free all allocated memory in the cleanup block. Return appropriate info codes (negative for wrapper errors, Fortran info otherwise)
 
 ## 1. Project Structure
 
@@ -78,21 +79,21 @@ SLICOT_C/
 Follow this sequence precisely:
 
 ### 2.1 Analyze Documentation (Crucial for Edge Cases)
-- Review the function's HTML documentation (e.g., `doc/AB05OD.html`).
-- Study the corresponding Fortran example files (`examples/*.dat`, `examples/*.res`, `examples/T*.f`).
-- Consult the general SLICOT standards (rep96-1.pdf), especially sections on:
-  - User Interface Standards (Sec 2.2), particularly problem dimensions (2.2.6) and leading dimensions (2.2.7).
-  - Programming Standards (Sec 2.3), particularly error checking for input parameters and zero dimensions (2.3.10).
-  - Workspace formulas and query mechanisms (Sec 2.2.10).
-- Pay extremely close attention to how the specific Fortran routine is documented to handle zero-dimension inputs (e.g., `N=0`, `M=0`). Understand if it's a valid quick-exit case (often `INFO=0`) or an error. This dictates the C wrapper's validation logic.
-- Determine if `NULL` pointers are acceptable for arrays that become effectively zero-sized due to other dimension parameters.
+- Review the function's HTML documentation (e.g., `doc/AB05OD.html`)
+- Study the corresponding Fortran example files (`examples/*.dat`, `examples/*.res`, `examples/T*.f`)
+- Consult the general SLICOT standards (`rep96-1.pdf`), especially sections on:
+  - User Interface Standards (Sec 2.2), particularly problem dimensions (2.2.6) and leading dimensions (2.2.7)
+  - Programming Standards (Sec 2.3), particularly error checking for input parameters and zero dimensions (2.3.10)
+  - Workspace formulas and query mechanisms (Sec 2.2.10)
+- Pay extremely close attention to how the specific Fortran routine is documented to handle zero-dimension inputs (e.g., `N=0`, `M=0`). Understand if it's a valid quick-exit case (often `INFO=0`) or an error. This dictates the C wrapper's validation logic
+- Determine if `NULL` pointers are acceptable for arrays that become effectively zero-sized due to other dimension parameters
 
 ### 2.2 Prepare/Verify Test Data
 **Option A (For larger datasets):**
-- Locate the `.dat` file in `examples/` (and the corresponding `.f` example program and `.res` results file). These are primary sources for understanding data structure and expected outputs.
-- Create a corresponding CSV file in `tests/data/`. Use lowercase for the filename.
-- The first row **MUST** be a header. Choose clear, unique names.
-- Copy numerical data from `.dat` into subsequent CSV rows.
+- Locate the `.dat` file in `examples/` (and the corresponding `.f` example program and `.res` results file). These are primary sources for understanding data structure and expected outputs
+- Create a corresponding CSV file in `tests/data/`. Use lowercase for the filename
+- The first row **MUST** be a header. Choose clear, unique names
+- Copy numerical data from `.dat` into subsequent CSV rows
 
 **Option B (Preferred for small datasets ~10 samples):** 
 Define test data directly in the C++ test fixture.
@@ -100,19 +101,19 @@ Define test data directly in the C++ test fixture.
 **Verification:** Crucially, verify expected output data (from `.res` file or documentation) against an independent source (e.g., Python simulation). If discrepancies arise, trust verified simulation results and document this.
 
 ### 2.3 Implementation Steps
-1. **Extract Key Information**: Note parameters, types, dimensions, LD rules, workspace formulas, and specific behaviors for zero-dimension inputs from the Fortran documentation.
-2. **Identify Similar Wrappers**: Find wrappers in `src_c_wrapper/` for similar routines as a reference, but always prioritize the specific documentation for the target routine.
-3. **Create C Wrapper**: Implement the `.c` file using the Internal Workspace Allocation template (Section 3).
-   - Ensure correct `row_major` handling.
-   - Calculate workspace based on formulas/queries.
-   - Implement C-level parameter validation that is consistent with, and not overly restrictive compared to, the documented behavior of the Fortran routine, especially for zero-dimension cases.
-4. **Create Header File**: Implement the `.h` file in `include/` using the template (Section 3.1). Document parameters clearly, especially `row_major` handling and conditions for `NULL` pointers.
-5. **Create Test Cases**: Implement the `_test.cpp` file using the GTest template (Section 4).
-   - If using CSV, define `input_columns` and `output_columns` to exactly match CSV headers. Use `load_test_data_from_csv`.
-   - **Data Rearrangement**: For multi-column time-series data from CSV, explicitly rearrange to Fortran column-major order in `SetUp`.
-   - If embedding data, define it preferably in Fortran column-major order.
-   - Implement tests for column-major, row-major, and parameter validation.
-   - **Crucially**, add specific test cases for various zero-dimension scenarios (e.g., `N=0`, `M=0`, `NSMP=0`, combinations thereof) to verify the wrapper's validation logic and alignment with expected Fortran behavior.
+1. **Extract Key Information**: Note parameters, types, dimensions, LD rules, workspace formulas, and specific behaviors for zero-dimension inputs from the Fortran documentation
+2. **Identify Similar Wrappers**: Find wrappers in `src_c_wrapper/` for similar routines as a reference, but always prioritize the specific documentation for the target routine
+3. **Create C Wrapper**: Implement the `.c` file using the Internal Workspace Allocation template (Section 3)
+   - Ensure correct `row_major` handling
+   - Calculate workspace based on formulas/queries
+   - Implement C-level parameter validation that is consistent with, and not overly restrictive compared to, the documented behavior of the Fortran routine, especially for zero-dimension cases
+4. **Create Header File**: Implement the `.h` file in `include/` using the template (Section 3.1). Document parameters clearly, especially `row_major` handling and conditions for `NULL` pointers
+5. **Create Test Cases**: Implement the `_test.cpp` file using the GTest template (Section 4)
+   - If using CSV, define `input_columns` and `output_columns` to exactly match CSV headers. Use `load_test_data_from_csv`
+   - **Data Rearrangement**: For multi-column time-series data from CSV, explicitly rearrange to Fortran column-major order in `SetUp`
+   - If embedding data, define it preferably in Fortran column-major order
+   - Implement tests for column-major, row-major, and parameter validation
+   - **Crucially**, add specific test cases for various zero-dimension scenarios (e.g., `N=0`, `M=0`, `NSMP=0`, combinations thereof) to verify the wrapper's validation logic and alignment with expected Fortran behavior
 
 ## 3. C Wrapper Template (Internal Workspace Allocation)
 
@@ -402,17 +403,17 @@ This section is critical for developing robust C wrappers.
 
 ### 5.1 Zero Dimensions (N=0, M=0, L=0, NSMP=0, etc.)
 
-- SLICOT routines often have specific, documented behavior for zero dimensions. Many will perform a "quick exit" with `INFO = 0` (see rep96-1.pdf, Sec 2.3.10: "If zero dimensions are encountered, which lead to immediate termination, the subroutine must set INFO = 0 and return...").
-- Your C wrapper's validation logic must not be stricter than the Fortran routine. If the Fortran routine gracefully handles `N=0` by returning `INFO=0`, your C wrapper should allow `N=0` to pass through to the Fortran layer, rather than flagging it as a C-level error (unless `N<0`, which is always an error).
+- SLICOT routines often have specific, documented behavior for zero dimensions. Many will perform a "quick exit" with `INFO = 0` (see `rep96-1.pdf`, Sec 2.3.10: "If zero dimensions are encountered, which lead to immediate termination, the subroutine must set INFO = 0 and return...")
+- Your C wrapper's validation logic must not be stricter than the Fortran routine. If the Fortran routine gracefully handles `N=0` by returning `INFO=0`, your C wrapper should allow `N=0` to pass through to the Fortran layer, rather than flagging it as a C-level error (unless `N<0`, which is always an error)
 - Check the "Arguments" section of the SLICOT HTML documentation carefully. For example, if `N=0`, an array like `A(LDA,N)` becomes `A(LDA,0)`. The documentation might state "If N=0, this array is not referenced."
 
 ### 5.2 NULL Pointers for Zero-Sized Arrays
 
-- If a dimension parameter (e.g., `N`) causes an array to become zero-sized (e.g., A becomes N-by-0 or 0-by-0), the corresponding C pointer argument (`a`) can often be `NULL`.
+- If a dimension parameter (e.g., `N`) causes an array to become zero-sized (e.g., A becomes N-by-0 or 0-by-0), the corresponding C pointer argument (`a`) can often be `NULL`
 - Verify this by:
-  - Checking if the SLICOT documentation says the array "is not referenced" under those dimensional conditions.
-  - Testing: Pass `NULL` in your GTest cases for these scenarios.
-- If the Fortran routine does expect a non-NULL pointer even for a zero-sized array (less common, but possible for some interfaces or older code), the C wrapper might need to pass a pointer to a dummy 1-element static array. However, aim to pass `NULL` if the Fortran routine doesn't reference the data.
+  - Checking if the SLICOT documentation says the array "is not referenced" under those dimensional conditions
+  - Testing: Pass `NULL` in your GTest cases for these scenarios
+- If the Fortran routine does expect a non-NULL pointer even for a zero-sized array (less common, but possible for some interfaces or older code), the C wrapper might need to pass a pointer to a dummy 1-element static array. However, aim to pass `NULL` if the Fortran routine doesn't reference the data
 - **Transpose Function Names**: When converting between row-major and column-major formats, use the correct function names from `slicot_utils.h`:
   - `slicot_transpose_to_fortran_with_ld()` - convert from C row-major to Fortran column-major
   - `slicot_transpose_to_c_with_ld()` - convert from Fortran column-major to C row-major
@@ -420,15 +421,13 @@ This section is critical for developing robust C wrappers.
 
 ### 5.3 Leading Dimensions (LDs) for NULL or Zero-Sized Arrays
 
-- Even if an array pointer is `NULL` (because the array is zero-sized), the corresponding Fortran leading dimension argument (e.g., `LDA_F`) passed to the Fortran call should still be a valid positive integer, typically `MAX(1, relevant_dimension_for_ld)`. 
-- For example, if `A_PTR` is `NULL` because `N=0`, `LDA_F` should still be passed as 1 (or `MAX(1,N)` which evaluates to 1). This is because the Fortran subroutine signature expects an integer, and some compilers/linkers might have issues with `LD=0` even if the array isn't accessed. 
-- The SLICOT standard (rep96-1.pdf, Sec 2.3.10) implies non-positive leading dimensions are errors if the array is to be used. For unreferenced zero-sized arrays, `LD=1` is a safe default.
+- Even if an array pointer is `NULL` (because the array is zero-sized), the corresponding Fortran leading dimension argument (e.g., `LDA_F`) passed to the Fortran call should still be a valid positive integer, typically `MAX(1, relevant_dimension_for_ld)`
+- For example, if `A_PTR` is `NULL` because `N=0`, `LDA_F` should still be passed as 1 (or `MAX(1,N)` which evaluates to 1). This is because the Fortran subroutine signature expects an integer, and some compilers/linkers might have issues with `LD=0` even if the array isn't accessed
+- The SLICOT standard (`rep96-1.pdf`, Sec 2.3.10) implies non-positive leading dimensions are errors if the array is to be used. For unreferenced zero-sized arrays, `LD=1` is a safe default
 
 ### 5.4 Workspace for Zero Dimensions
 
 Workspace calculation formulas might simplify or evaluate to small values (e.g., `MAX(1, N)` becomes 1 if `N=0`). Ensure the allocated workspace is at least the minimum specified by the documentation (often `MAX(1, ...)` or `MAX(2, ...)`). If a formula legitimately yields 0 and the routine needs no workspace for that case, passing `NULL` for the workspace pointer and 0 for its size might be acceptable if the Fortran routine handles it. When in doubt, allocate a minimal valid workspace (e.g., 1 element).
-
-By meticulously checking the specific SLICOT routine's documentation and applying these principles, the C wrapper can more accurately mirror the Fortran routine's intended behavior, especially for edge cases.
 
 ## 6. Helper Function Reference
 
@@ -542,3 +541,5 @@ int loaded_samples = 0;
 bool success = load_test_data_from_csv(filepath, input_columns, output_columns,
                                       loaded_u, loaded_y, loaded_samples);
 ```
+
+By meticulously checking the specific SLICOT routine's documentation and applying these principles, the C wrapper can more accurately mirror the Fortran routine's intended behavior, especially for edge cases.
