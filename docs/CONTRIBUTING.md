@@ -429,3 +429,116 @@ This section is critical for developing robust C wrappers.
 Workspace calculation formulas might simplify or evaluate to small values (e.g., `MAX(1, N)` becomes 1 if `N=0`). Ensure the allocated workspace is at least the minimum specified by the documentation (often `MAX(1, ...)` or `MAX(2, ...)`). If a formula legitimately yields 0 and the routine needs no workspace for that case, passing `NULL` for the workspace pointer and 0 for its size might be acceptable if the Fortran routine handles it. When in doubt, allocate a minimal valid workspace (e.g., 1 element).
 
 By meticulously checking the specific SLICOT routine's documentation and applying these principles, the C wrapper can more accurately mirror the Fortran routine's intended behavior, especially for edge cases.
+
+## 6. Helper Function Reference
+
+To prevent hallucination and ensure correct usage, here are the exact function signatures available in the project:
+
+### 6.1 Matrix Transpose Functions (from slicot_utils.h)
+
+```c
+// Basic transpose functions (compatible default leading dimensions)
+void slicot_transpose_to_fortran(const void *src, void *dest, int rows, int cols, size_t elem_size);
+void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size_t elem_size);
+
+// Transpose functions with custom leading dimensions
+void slicot_transpose_to_fortran_with_ld(const void *src, void *dest, int rows, int cols,
+                                        int ld_src, int ld_dest, size_t elem_size);
+void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols,
+                                  int ld_src, int ld_dest, size_t elem_size);
+
+// In-place transpose for square matrices
+int slicot_transpose_inplace(void *matrix, int rows, int cols, size_t elem_size);
+
+// Symmetric matrix handling
+void slicot_copy_symmetric_part(const void *src, void *dest, int n, char uplo, int ld, size_t elem_size);
+void slicot_transpose_symmetric_to_fortran(const void *src, void *dest, int n, char uplo, size_t elem_size);
+void slicot_transpose_symmetric_to_c(const void *src, void *dest, int n, char uplo, size_t elem_size);
+```
+
+### 6.2 Utility Functions (from slicot_utils.h)
+
+```c
+// Matrix initialization
+void set_identity(int n, double* mat, int ld, int row_major);
+
+// Debug/printing utilities
+void printMatrixD(const char* name, const double* data, int rows, int cols, int ld, int rowMajor);
+```
+
+### 6.3 Test Data Loading (from test_utils.h)
+
+```cpp
+// CSV data loading function
+bool load_test_data_from_csv(
+    const std::string& filepath,
+    const std::vector<std::string>& input_cols,
+    const std::vector<std::string>& output_cols,
+    std::vector<double>& u,
+    std::vector<double>& y,
+    int& num_samples);
+```
+
+### 6.4 Essential Macros (from slicot_utils.h)
+
+```c
+// Memory allocation checking
+#define CHECK_ALLOC(ptr) \
+    do { \
+        if ((ptr) == NULL) { \
+            info = SLICOT_MEMORY_ERROR; \
+            goto cleanup; \
+        } \
+    } while (0)
+
+// Error codes
+#define SLICOT_MEMORY_ERROR -1010
+
+// Math utilities
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+
+// Export/import macros
+#define SLICOT_EXPORT // Platform-specific DLL export/import handling
+
+// Complex number handling
+#define SLICOT_COMPLEX_REAL(z) // Gets real part of complex number
+```
+
+### 6.5 **IMPORTANT**: Function Name Corrections
+
+**DO NOT USE these function names (they do not exist):**
+- `slicot_transpose_from_fortran_with_ld()` ❌
+- `slicot_transpose_from_c_with_ld()` ❌
+- `load_csv_data()` ❌
+- `load_test_csv()` ❌
+
+**ALWAYS USE these correct function names:**
+- `slicot_transpose_to_fortran_with_ld()` ✅
+- `slicot_transpose_to_c_with_ld()` ✅
+- `load_test_data_from_csv()` ✅
+
+### 6.6 Common Usage Patterns
+
+**Converting from row-major to column-major (for Fortran calls):**
+```c
+slicot_transpose_to_fortran_with_ld(src_row_major, dest_col_major, rows, cols, 
+                                   row_major_ld, fortran_ld, sizeof(double));
+```
+
+**Converting from column-major to row-major (after Fortran calls):**
+```c
+slicot_transpose_to_c_with_ld(src_col_major, dest_row_major, rows, cols, 
+                             fortran_ld, row_major_ld, sizeof(double));
+```
+
+**Loading test data from CSV:**
+```cpp
+std::vector<std::string> input_columns = {"U1", "U2"};
+std::vector<std::string> output_columns = {"Y1"};
+std::vector<double> loaded_u, loaded_y;
+int loaded_samples = 0;
+
+bool success = load_test_data_from_csv(filepath, input_columns, output_columns,
+                                      loaded_u, loaded_y, loaded_samples);
+```
