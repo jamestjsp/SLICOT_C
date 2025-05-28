@@ -543,3 +543,111 @@ bool success = load_test_data_from_csv(filepath, input_columns, output_columns,
 ```
 
 By meticulously checking the specific SLICOT routine's documentation and applying these principles, the C wrapper can more accurately mirror the Fortran routine's intended behavior, especially for edge cases.
+
+## 7. Building the Project and Running Tests
+
+This section provides instructions for AI agents and developers on how to build the project and run tests.
+
+### 7.1 CMake Presets Overview
+
+The project uses CMake presets (defined in `CMakePresets.json`) to standardize build configurations across different platforms and compiler toolchains. These presets define common configurations for Windows (Intel and MinGW toolchains) and macOS.
+
+### 7.2 Configuring the Project
+
+To configure the project using a preset:
+
+```bash
+# List available configuration presets
+cmake --list-presets
+
+# Configure using a specific preset (example: macOS debug)
+cmake --preset macos-x64-debug
+```
+
+Available configuration presets include:
+- `windows-x64-debug-intel`: Windows with Intel compilers (Debug)
+- `windows-x64-release-intel`: Windows with Intel compilers (Release)
+- `windows-x64-debug-mingw`: Windows with MinGW toolchain (Debug)
+- `windows-x64-release-mingw`: Windows with MinGW toolchain (Release)
+- `macos-x64-debug`: macOS with clang/gfortran toolchain (Debug)
+- `macos-x64-release`: macOS with clang/gfortran toolchain (Release)
+
+### 7.3 Building the Project
+
+After configuration, build the project using the corresponding build preset:
+
+```bash
+# List available build presets
+cmake --list-presets=build
+
+# Build using a specific preset (example: macOS debug)
+cmake --build --preset macos-x64-debug-build
+```
+
+Build presets are named with the `-build` suffix (e.g., `macos-x64-debug-build`).
+
+### 7.4 Running Tests with CTest
+
+Once the project is built, you can run the tests using CTest:
+
+```bash
+# Run all tests for a specific configuration
+cd build/macos-x64-debug  # Navigate to the build directory
+ctest
+```
+
+#### 7.4.1 Running Specific Tests
+
+To run specific tests that match a pattern:
+
+```bash
+# Run all tests containing "function_name" in their name
+ctest -R function_name
+```
+
+#### 7.4.2 Verbose Test Output
+
+For more detailed test output, use the `--verbose` flag:
+
+```bash
+# Run tests with detailed output
+ctest --verbose
+
+# Combine with -R to run specific tests with detailed output
+ctest -R function_name --verbose
+```
+
+#### 7.4.3 Running Tests via CMake Presets
+
+Alternatively, you can run tests using the test presets:
+
+```bash
+# List available test presets
+cmake --list-presets=test
+
+# Run tests using a specific preset (example: macOS debug)
+cmake --build --preset macos-x64-debug-test
+```
+
+Test presets are named with the `-test` suffix (e.g., `macos-x64-debug-test`).
+
+### 7.5 Build and Test Examples
+
+Complete workflow example for macOS:
+
+```bash
+# Configure
+cmake --preset macos-x64-debug
+
+# Build
+cmake --build --preset macos-x64-debug-build
+
+# Run all tests
+cd build/macos-x64-debug
+ctest
+
+# Run specific tests with detailed output
+ctest -R ab01od --verbose
+```
+
+AI agents implementing C wrappers should ensure all tests pass for both column-major and row-major storage formats and test edge cases thoroughly.
