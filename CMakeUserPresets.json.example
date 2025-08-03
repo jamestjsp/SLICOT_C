@@ -1,0 +1,35 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "user-custom-debug",
+      "displayName": "User Custom Debug Configuration",
+      "description": "Example user preset inheriting from base preset with custom paths",
+      "inherits": "linux-x64-debug",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/bin/gcc-11",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11",
+        "CMAKE_Fortran_COMPILER": "/usr/bin/gfortran-11",
+        "BLAS_LAPACK_DIR": "/opt/intel/mkl",
+        "SLICOT_BUILD_EXAMPLES": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "user-custom-debug-build",
+      "displayName": "User Custom Debug Build",
+      "configurePreset": "user-custom-debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "user-custom-debug-test",
+      "displayName": "User Custom Debug Test",
+      "configurePreset": "user-custom-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

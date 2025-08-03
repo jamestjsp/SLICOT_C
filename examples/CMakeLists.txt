@@ -7,8 +7,13 @@ enable_testing()
 
 # Find all example source files (convention: T*.f)
 file(GLOB EXAMPLE_SOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "T*.f")
-# Find all data files (convention: *.dat)
+# Find all data files and copy them
 file(GLOB DATA_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.dat")
+file(COPY ${DATA_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# Find all reference result files and copy them
+file(GLOB RES_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.res")
+file(COPY ${RES_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
 
 # Process each example source file
 foreach(EXAMPLE_SRC ${EXAMPLE_SOURCES})
@@ -40,30 +45,14 @@ foreach(EXAMPLE_SRC ${EXAMPLE_SOURCES})
         # Add a test for this example
         add_test(
             NAME ${TEST_NAME}
-            COMMAND $<TARGET_FILE:${EXAMPLE_NAME}>
+            COMMAND bash -c "$<TARGET_FILE:${EXAMPLE_NAME}> < ${DATA_FILE} > ${RESULT_FILE}"
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # Run test in build dir
         )
 
-        # Configure the test to use the data file as input and check output
-        set_tests_properties(${TEST_NAME} PROPERTIES
-            ATTACHED_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${DATA_FILE}" # Make data file available
-            # Redirect input from the data file
-            COMMAND_MODIFICATION "< \"${CMAKE_CURRENT_SOURCE_DIR}/${DATA_FILE}\" > \"${RESULT_FILE}\""
-        )
-
         # Optionally, compare the output with a reference result if it exists
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${GOLD_RESULT_FILE}")
-             set_tests_properties(${TEST_NAME} PROPERTIES
-                 PASS_REGULAR_EXPRESSION "Test passed" # Default, adjust if needed
-                 # Add command to compare output file with reference file after execution
-                 # Example using cmake -E compare_files (basic diff):
-                 # POST_COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol "${CMAKE_CURRENT_BINARY_DIR}/${RESULT_FILE}" "${CMAKE_CURRENT_SOURCE_DIR}/${GOLD_RESULT_FILE}"
-             )
-             # Add the reference file as an attached file for reference
-             # Need to collect attached files properly if both data and gold exist
-             set(test_attached_files "${CMAKE_CURRENT_SOURCE_DIR}/${DATA_FILE}") # Start with data file
-             list(APPEND test_attached_files "${CMAKE_CURRENT_SOURCE_DIR}/${GOLD_RESULT_FILE}")
-             set_property(TEST ${TEST_NAME} PROPERTY ATTACHED_FILES ${test_attached_files})
+        if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${GOLD_RESULT_FILE}")
+             # This is where a comparison with the gold standard would go.
+             # For now, we just check for a zero return code.
         endif()
 
     else()

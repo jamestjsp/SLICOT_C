@@ -26,6 +26,10 @@
      $                   DWORK( LDWORK ), FG( LDFG, NMAX/2+1 ),
      $                   Q( LDQ, 2*NMAX )
 *
+*     .. External Functions ..
+      LOGICAL            LSAME
+      EXTERNAL           LSAME
+*
 *     .. External Subroutines ..
       EXTERNAL           MB03LD
 *

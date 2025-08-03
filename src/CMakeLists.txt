@@ -19,11 +19,10 @@ set_target_properties(slicot PROPERTIES
 #     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> # Where headers will be installed
 # )
 
-# Link with BLAS and LAPACK
+# Link with BLAS and LAPACK using the targets determined in parent scope
 target_link_libraries(slicot
     PUBLIC
-        ${LAPACK_LIBRARIES}
-        ${BLAS_LIBRARIES}
+        ${SLICOT_LINK_TARGETS}
 )
 
 # Install the library target
@@ -40,8 +39,9 @@ if(SLICOT_BUILD_C_WRAPPERS)
     # Glob all headers from the main include directory
     file(GLOB C_WRAPPER_HEADERS "${CMAKE_SOURCE_DIR}/include/*.h")
 
-    # Install the headers into include/slicot
+    # Install the headers into include/ directly (not include/slicot) 
+    # to match the #include directives used in the wrapper files
     install(FILES ${C_WRAPPER_HEADERS}
-            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/slicot
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
             COMPONENT Headers)
 endif()

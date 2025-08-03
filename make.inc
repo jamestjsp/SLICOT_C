@@ -8,8 +8,9 @@
 ####################################################################
 #
 #  The root directory for the SLICOT files
+#  Adjust this path to match your SLICOT installation directory
 #
-HOME = c:\slicot
+HOME = .
 PLAT = _win64
 #
 #  Modify the FORTRAN and OPTS definitions to refer to the

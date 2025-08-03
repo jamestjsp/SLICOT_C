@@ -36,7 +36,8 @@ LOADOPTS = $(SLICOTLIB) $(LPKAUXLIB) $(LAPACKLIB) $(BLASLIB)
 #  machine-specific, optimized BLAS library should be used whenever
 #  possible.)
 #
-BLASLIB      = ../libs/blas.a
-LAPACKLIB    = ../libs/lapack.a
-LPKAUXLIB    = ../lpkaux.a
-SLICOTLIB    = ../slicot.a
+# Default: use system-installed BLAS/LAPACK (adjust paths as needed)
+BLASLIB      = -lblas
+LAPACKLIB    = -llapack
+LPKAUXLIB    = ./lpkaux.a
+SLICOTLIB    = ./slicot.a

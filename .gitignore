@@ -1,19 +1,69 @@
-# ignore build directory
+# Build directories
 build/
-
-# vcpkg
-/build/
+install/
 /vcpkg_installed/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+*.vcxproj*
+*.sln
+
+# User-specific CMake presets
 CMakeUserPresets.json
 
-# ignore python cache files
+# Compiled objects
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# Generated executables
+*.exe
+*.out
+
+# IDE files
+.vscode/
+.vs/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Python
 __pycache__/
-
-# ignore python env
+*.py[cod]
+*$py.class
+*.so
+.Python
 env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# ignore temp doc
+# Test results
+*.exa
+Testing/
+
+# Documentation build
+docs/_build/
+docs/build/
 _doc/
 
-# ignore .DS_Store at all levels
+# OS-specific
 .DS_Store
+Thumbs.db
+*.tmp
+
+# Legacy build artifacts
+slicot.a
+lpkaux.a
+slicot.lib
+lpkaux.lib

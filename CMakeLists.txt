@@ -60,6 +60,9 @@ include(CMakePackageConfigHelpers)
 include(CTest)
 include(FetchContent) # Include FetchContent module
 
+# Include SLICOT helper functions
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SLICOTHelpers.cmake)
+
 # Enable testing globally
 enable_testing()
 
@@ -76,11 +79,8 @@ if(SLICOT_BUILD_TESTS)
     FetchContent_MakeAvailable(googletest)
 endif()
 
-# Find BLAS and LAPACK - BLA_VENDOR might be set by presets
-# Default to searching all vendors if not set
-if(NOT DEFINED BLA_VENDOR)
-  set(BLA_VENDOR "All")
-endif()
+# Configure BLAS/LAPACK detection using helper function
+slicot_configure_blas_lapack()
 message(STATUS "Searching for BLAS/LAPACK vendor: ${BLA_VENDOR}")
 
 # Configure paths for BLAS/LAPACK discovery
@@ -227,33 +227,23 @@ else()
 endif()
 
 # Link object libraries after they have been defined
-if(TARGET slicot) # Ensure the main target exists
-    # Link C wrapper objects if enabled and target exists
-    if(SLICOT_BUILD_C_WRAPPERS)
-        if(TARGET slicot_c_wrapper_obj)
-            message(STATUS "Linking slicot library with C wrapper objects from slicot_c_wrapper_obj.")
-            target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:slicot_c_wrapper_obj>)
-              # Properly propagate include directories from the C wrapper object library
-            target_include_directories(slicot PUBLIC 
-                $<INSTALL_INTERFACE:include>
-                $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>  # Use generator expressions for build/install paths
-            )
-        else()
-            message(WARNING "SLICOT_BUILD_C_WRAPPERS is ON but target slicot_c_wrapper_obj was not created. Check src_c_wrapper/CMakeLists.txt.")
-        endif()
-    endif()
+# We can rely on the add_subdirectory() order to ensure targets exist when we get here
 
-    # Link auxiliary objects if enabled and target exists
-    if(SLICOT_LINK_AUX_WRAPPERS)
-        if(TARGET lpkaux)
-            message(STATUS "Linking slicot library with auxiliary wrappers from lpkaux.")
-            target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:lpkaux>)
-        else()
-            message(WARNING "SLICOT_LINK_AUX_WRAPPERS is ON but target lpkaux was not created. Check src_aux/CMakeLists.txt.")
-        endif()
-    endif()
-else()
-    message(WARNING "Main slicot target not found. Linking of object libraries skipped.")
+# Link C wrapper objects if enabled and target exists
+if(SLICOT_BUILD_C_WRAPPERS AND TARGET slicot_c_wrapper_obj)
+    message(STATUS "Linking slicot library with C wrapper objects from slicot_c_wrapper_obj.")
+    target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:slicot_c_wrapper_obj>)
+    # Properly propagate include directories from the C wrapper object library
+    target_include_directories(slicot PUBLIC 
+        $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    )
+endif()
+
+# Link auxiliary objects if enabled and target exists
+if(SLICOT_LINK_AUX_WRAPPERS AND TARGET lpkaux)
+    message(STATUS "Linking slicot library with auxiliary wrappers from lpkaux.")
+    target_link_libraries(slicot PRIVATE $<TARGET_OBJECTS:lpkaux>)
 endif()
 
 # Only build examples if requested
@@ -308,4 +298,5 @@ if(SLICOT_BUILD_EXAMPLES)
     # install(DIRECTORY examples/ DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples ...)
 endif()
 
-message(STATUS "  Build Examples: ${SLICOT_BUILD_EXAMPLES}")
+# Print build configuration summary
+slicot_print_build_summary()

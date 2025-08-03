@@ -132,6 +132,48 @@
         "lhs": "${hostSystemName}",
         "rhs": "Darwin"
       }
+    },
+    {
+      "name": "linux-x64-debug",
+      "displayName": "Linux x64 Debug",
+      "description": "Configure for Linux with gcc/gfortran toolchain (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/linux-x64-debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_Fortran_COMPILER": "gfortran",
+        "BLA_VENDOR": "Generic",
+        "SLICOT_USE_VCPKG": "OFF"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-x64-release",
+      "displayName": "Linux x64 Release",
+      "description": "Configure for Linux with gcc/gfortran toolchain (Release)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-x64-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/linux-x64-release",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_Fortran_COMPILER": "gfortran",
+        "BLA_VENDOR": "Generic",
+        "SLICOT_USE_VCPKG": "OFF"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
     }
   ],
   "buildPresets": [
@@ -170,6 +212,18 @@
       "displayName": "Build macOS x64 Release",
       "configurePreset": "macos-x64-release",
       "description": "Build Release configuration for macOS x64"
+    },
+    {
+      "name": "linux-x64-debug-build",
+      "displayName": "Build Linux x64 Debug",
+      "configurePreset": "linux-x64-debug",
+      "description": "Build Debug configuration for Linux x64"
+    },
+    {
+      "name": "linux-x64-release-build",
+      "displayName": "Build Linux x64 Release",
+      "configurePreset": "linux-x64-release",
+      "description": "Build Release configuration for Linux x64"
     }
   ],
   "testPresets": [
@@ -232,6 +286,28 @@
       "name": "macos-x64-release-test",
       "displayName": "Test macOS x64 Release",
       "configurePreset": "macos-x64-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "linux-x64-debug-test",
+      "displayName": "Test Linux x64 Debug",
+      "configurePreset": "linux-x64-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "linux-x64-release-test",
+      "displayName": "Test Linux x64 Release",
+      "configurePreset": "linux-x64-release",
       "output": {
         "outputOnFailure": true
       },
