@@ -171,7 +171,7 @@
          size_t d_rows = np; size_t d_cols = m; size_t d_size = d_rows * d_cols;
          size_t ak_rows = n; size_t ak_cols = n; size_t ak_size = ak_rows * ak_cols;
          size_t bk_rows = n; size_t bk_cols = nmeas; size_t bk_size = bk_rows * bk_cols;
-         size_t ck_rows = n; size_t ck_cols = ncon; size_t ck_size = ck_rows * ck_cols;
+         size_t ck_rows = ncon; size_t ck_cols = n; size_t ck_size = ck_rows * ck_cols;
          size_t dk_rows = ncon; size_t dk_cols = nmeas; size_t dk_size = dk_rows * dk_cols;
          size_t x_rows = n; size_t x_cols = n; size_t x_size = x_rows * x_cols;
          size_t z_rows = n; size_t z_cols = n; size_t z_size = z_rows * z_cols;
