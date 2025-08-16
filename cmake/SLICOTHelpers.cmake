@@ -48,22 +48,22 @@ function(slicot_print_build_summary)
     message(STATUS "")
 endfunction()
 
-# Function to configure compiler-specific flags for SLICOT
+# Function to apply additional target-specific compiler flags for SLICOT
+# Note: Platform and compiler-specific flags are now primarily handled via CMake presets
 function(slicot_configure_compiler_flags target)
-    if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-        target_compile_options(${target} PRIVATE
-            $<$<COMPILE_LANGUAGE:Fortran>:-fallow-argument-mismatch>
-            $<$<COMPILE_LANGUAGE:Fortran>:-fno-second-underscore>
-        )
-    elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
-        if(WIN32)
+    # Apply any additional target-specific flags if needed
+    # Most compiler flags are now set globally via CMAKE_Fortran_FLAGS in presets
+    # This function is kept for future extensibility
+    
+    # Example: Add debug-specific flags that might not be in presets
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
             target_compile_options(${target} PRIVATE
-                $<$<COMPILE_LANGUAGE:Fortran>:/iface:nomixed_str_len_arg>
-            )
-        else()
-            target_compile_options(${target} PRIVATE
-                $<$<COMPILE_LANGUAGE:Fortran>:-nomixed-str-len-arg>
+                $<$<COMPILE_LANGUAGE:Fortran>:-Wall>
+                $<$<COMPILE_LANGUAGE:Fortran>:-Wextra>
             )
         endif()
     endif()
+    
+    message(STATUS "Applied additional compiler flags to target: ${target}")
 endfunction()

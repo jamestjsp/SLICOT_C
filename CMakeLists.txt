@@ -37,21 +37,9 @@ else()
     set(BUILD_SHARED_LIBS OFF)
 endif()
 
-# Add ILP64 flags if requested
+# ILP64 support is now handled through CMake presets
 if(SLICOT_USE_ILP64)
-  message(STATUS "ILP64 build requested.")
-  if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    set(ILP64_FLAGS "-fdefault-integer-8")
-    message(STATUS "Using gfortran ILP64 flag: ${ILP64_FLAGS}")
-  elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel" OR CMAKE_Fortran_COMPILER_ID MATCHES "IntelLLVM")
-    set(ILP64_FLAGS "-i8")
-    message(STATUS "Using Intel Fortran ILP64 flag: ${ILP64_FLAGS}")
-  else()
-    message(WARNING "ILP64 requested, but compiler flags are unknown for ${CMAKE_Fortran_COMPILER_ID}. Manual configuration may be required.")
-    set(ILP64_FLAGS "")
-  endif()
-  # Add flags globally - apply to slicot and examples
-  add_compile_options(${ILP64_FLAGS})
+  message(STATUS "ILP64 build requested - using preset-defined compiler flags.")
 endif()
 
 # Include standard modules
@@ -187,27 +175,9 @@ else()
     message(FATAL_ERROR "Could not determine BLAS/LAPACK link information after find_package.")
 endif()
 
-# Compilation settings
-if (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    # Add flags for GNU Fortran compiler
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fallow-argument-mismatch")
-    # Ensure lowercase symbols with trailing underscore - gfortran default is usually lowercase with single underscore
-    # Control underscore behavior - ensure single underscore
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fno-second-underscore")
-elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Intel" OR CMAKE_Fortran_COMPILER_ID MATCHES "IntelLLVM")
-    # Intel Fortran compiler flags
-    # String handling for Intel - ensures string lengths at end of argument list
-    if(WIN32)
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} /iface:nomixed_str_len_arg")
-    else()
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -nomixed-str-len-arg")
-    endif()
-elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Flang")
-    # Flang compiler flags
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fcase-lower -fno-underscoring")
-    # Re-add single trailing underscore
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fsecond-underscore")
-endif()
+# Compiler-specific settings are now handled through CMake presets
+# Global flags can be overridden by CMAKE_Fortran_FLAGS set in presets
+message(STATUS "Using compiler flags from preset configuration")
 
 # Add subdirectories
 if(SLICOT_LINK_AUX_WRAPPERS) # Conditionally include src_aux based on the option

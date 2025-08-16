@@ -15,6 +15,7 @@
         "CMAKE_Fortran_COMPILER": "ifx",
         "CMAKE_LINKER": "link.exe",
         "CMAKE_RC_COMPILER": "rc.exe",
+        "CMAKE_Fortran_FLAGS": "/iface:nomixed_str_len_arg",
         "BLA_VENDOR": "Intel10_64lp",
         "SLICOT_USE_VCPKG": "OFF"
       },
@@ -38,6 +39,7 @@
         "CMAKE_Fortran_COMPILER": "ifx",
         "CMAKE_LINKER": "link.exe",
         "CMAKE_RC_COMPILER": "rc.exe",
+        "CMAKE_Fortran_FLAGS": "/iface:nomixed_str_len_arg",
         "BLA_VENDOR": "Intel10_64lp",
         "SLICOT_USE_VCPKG": "OFF"
       },
@@ -61,6 +63,7 @@
         "CMAKE_Fortran_COMPILER": "gfortran",
         "CMAKE_LINKER": "ld",
         "CMAKE_RC_COMPILER": "windres",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
         "SLICOT_USE_VCPKG": "ON"
       },
       "condition": {
@@ -83,6 +86,7 @@
         "CMAKE_Fortran_COMPILER": "gfortran",
         "CMAKE_LINKER": "ld",
         "CMAKE_RC_COMPILER": "windres",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
         "SLICOT_USE_VCPKG": "ON"
       },
       "condition": {
@@ -103,6 +107,7 @@
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_Fortran_COMPILER": "gfortran",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
         "BLA_VENDOR": "Apple",
         "SLICOT_USE_VCPKG": "OFF"
       },
@@ -124,6 +129,7 @@
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_Fortran_COMPILER": "gfortran",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
         "BLA_VENDOR": "Apple",
         "SLICOT_USE_VCPKG": "OFF"
       },
@@ -145,6 +151,7 @@
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
         "CMAKE_Fortran_COMPILER": "gfortran",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
         "BLA_VENDOR": "Generic",
         "SLICOT_USE_VCPKG": "OFF"
       },
@@ -166,8 +173,105 @@
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
         "CMAKE_Fortran_COMPILER": "gfortran",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
         "BLA_VENDOR": "Generic",
         "SLICOT_USE_VCPKG": "OFF"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "windows-x64-debug-intel-ilp64",
+      "displayName": "Windows x64 Debug ILP64 (Intel toolchain)",
+      "description": "Configure for Windows with Intel compilers (Debug) with 64-bit integers. Run setvars.bat before using this preset.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-x64-debug-intel-ilp64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/windows-x64-debug-intel-ilp64",
+        "CMAKE_C_COMPILER": "icx",
+        "CMAKE_CXX_COMPILER": "icx",
+        "CMAKE_Fortran_COMPILER": "ifx",
+        "CMAKE_LINKER": "link.exe",
+        "CMAKE_RC_COMPILER": "rc.exe",
+        "CMAKE_Fortran_FLAGS": "/iface:nomixed_str_len_arg /i8",
+        "BLA_VENDOR": "Intel10_64ilp",
+        "SLICOT_USE_VCPKG": "OFF",
+        "SLICOT_USE_ILP64": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-x64-release-intel-ilp64",
+      "displayName": "Windows x64 Release ILP64 (Intel toolchain)",
+      "description": "Configure for Windows with Intel compilers (Release) with 64-bit integers. Run setvars.bat before using this preset.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-x64-release-intel-ilp64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/windows-x64-release-intel-ilp64",
+        "CMAKE_C_COMPILER": "icx",
+        "CMAKE_CXX_COMPILER": "icx",
+        "CMAKE_Fortran_COMPILER": "ifx",
+        "CMAKE_LINKER": "link.exe",
+        "CMAKE_RC_COMPILER": "rc.exe",
+        "CMAKE_Fortran_FLAGS": "/iface:nomixed_str_len_arg /i8",
+        "BLA_VENDOR": "Intel10_64ilp",
+        "SLICOT_USE_VCPKG": "OFF",
+        "SLICOT_USE_ILP64": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "linux-x64-debug-ilp64",
+      "displayName": "Linux x64 Debug ILP64",
+      "description": "Configure for Linux with gcc/gfortran toolchain (Debug) with 64-bit integers",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-x64-debug-ilp64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/linux-x64-debug-ilp64",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_Fortran_COMPILER": "gfortran",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore -fdefault-integer-8",
+        "BLA_VENDOR": "Generic",
+        "SLICOT_USE_VCPKG": "OFF",
+        "SLICOT_USE_ILP64": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-x64-release-ilp64",
+      "displayName": "Linux x64 Release ILP64",
+      "description": "Configure for Linux with gcc/gfortran toolchain (Release) with 64-bit integers",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-x64-release-ilp64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/linux-x64-release-ilp64",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_Fortran_COMPILER": "gfortran",
+        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore -fdefault-integer-8",
+        "BLA_VENDOR": "Generic",
+        "SLICOT_USE_VCPKG": "OFF",
+        "SLICOT_USE_ILP64": "ON"
       },
       "condition": {
         "type": "equals",
@@ -224,6 +328,30 @@
       "displayName": "Build Linux x64 Release",
       "configurePreset": "linux-x64-release",
       "description": "Build Release configuration for Linux x64"
+    },
+    {
+      "name": "windows-x64-debug-intel-ilp64-build",
+      "displayName": "Build Windows x64 Debug ILP64 (Intel toolchain)",
+      "configurePreset": "windows-x64-debug-intel-ilp64",
+      "description": "Build Debug configuration for Windows x64 (Intel toolchain) with ILP64."
+    },
+    {
+      "name": "windows-x64-release-intel-ilp64-build",
+      "displayName": "Build Windows x64 Release ILP64 (Intel toolchain)",
+      "configurePreset": "windows-x64-release-intel-ilp64",
+      "description": "Build Release configuration for Windows x64 (Intel toolchain) with ILP64."
+    },
+    {
+      "name": "linux-x64-debug-ilp64-build",
+      "displayName": "Build Linux x64 Debug ILP64",
+      "configurePreset": "linux-x64-debug-ilp64",
+      "description": "Build Debug configuration for Linux x64 with ILP64"
+    },
+    {
+      "name": "linux-x64-release-ilp64-build",
+      "displayName": "Build Linux x64 Release ILP64",
+      "configurePreset": "linux-x64-release-ilp64",
+      "description": "Build Release configuration for Linux x64 with ILP64"
     }
   ],
   "testPresets": [
@@ -308,6 +436,50 @@
       "name": "linux-x64-release-test",
       "displayName": "Test Linux x64 Release",
       "configurePreset": "linux-x64-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "windows-x64-debug-intel-ilp64-test",
+      "displayName": "Test Windows x64 Debug ILP64 (Intel toolchain)",
+      "configurePreset": "windows-x64-debug-intel-ilp64",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "windows-x64-release-intel-ilp64-test",
+      "displayName": "Test Windows x64 Release ILP64 (Intel toolchain)",
+      "configurePreset": "windows-x64-release-intel-ilp64",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "linux-x64-debug-ilp64-test",
+      "displayName": "Test Linux x64 Debug ILP64",
+      "configurePreset": "linux-x64-debug-ilp64",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "linux-x64-release-ilp64-test",
+      "displayName": "Test Linux x64 Release ILP64",
+      "configurePreset": "linux-x64-release-ilp64",
       "output": {
         "outputOnFailure": true
       },

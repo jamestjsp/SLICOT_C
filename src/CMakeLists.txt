@@ -19,6 +19,9 @@ set_target_properties(slicot PROPERTIES
 #     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> # Where headers will be installed
 # )
 
+# Apply compiler-specific flags (additional flags beyond those in presets)
+slicot_configure_compiler_flags(slicot)
+
 # Link with BLAS and LAPACK using the targets determined in parent scope
 target_link_libraries(slicot
     PUBLIC

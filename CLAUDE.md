@@ -19,7 +19,13 @@ SLICOT (Subroutine Library In COntrol Theory) is a numerical library for control
 cmake --preset macos-x64-debug     # For macOS Debug
 cmake --preset macos-x64-release   # For macOS Release
 cmake --preset linux-x64-debug     # For Linux Debug  
-cmake --preset windows-x64-debug   # For Windows Debug
+cmake --preset linux-x64-release   # For Linux Release
+cmake --preset windows-x64-debug-intel   # For Windows Debug (Intel)
+cmake --preset windows-x64-debug-mingw   # For Windows Debug (MinGW)
+
+# ILP64 (64-bit integer) builds
+cmake --preset linux-x64-debug-ilp64     # For Linux Debug ILP64
+cmake --preset windows-x64-debug-intel-ilp64  # For Windows Intel ILP64
 
 # Build
 cmake --build --preset macos-x64-debug-build
@@ -98,6 +104,12 @@ C wrappers follow consistent patterns:
 - Reference results compared against known outputs from HTML documentation and verified against independent simulations when possible
 
 ## Development Workflow
+
+### Modern CMake Preset-Based Build System
+- **Platform-specific compiler flags** are configured via CMake presets in `CMakePresets.json`
+- **No manual compiler detection** needed - choose appropriate preset for your platform/compiler
+- **ILP64 support** available through dedicated preset variants (e.g., `*-ilp64` presets)
+- **Consistent build environments** across different platforms and CI systems
 
 ### Adding New Functionality
 1. **Analyze Documentation**: Review HTML docs, Fortran examples (`examples/*.f`, `*.dat`, `*.res`), and SLICOT standards (`rep96-1.pdf`) for parameter constraints, workspace formulas, and zero-dimension behavior
