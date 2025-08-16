@@ -71,25 +71,42 @@ nmake -f makefile
 ### C Wrapper Pattern
 C wrappers follow consistent patterns:
 - Use `F77_FUNC(fortran_name, FORTRAN_NAME)` for Fortran interop
-- Handle memory allocation/deallocation
-- Transpose matrices between C (row-major) and Fortran (column-major) ordering
-- Perform input validation and error checking
+- **Internal Workspace Allocation**: Wrappers **must allocate and free workspace arrays** (`iwork`, `dwork`, etc.) internally using `malloc`/`free`. Do not expect callers to provide workspace
+- **Row-Major Handling**: Accept `row_major` flag. When true, allocate temporary column-major buffers (`_cm`), transpose C input matrices to column-major before Fortran calls, then transpose results back to row-major after Fortran returns (if `info == 0`)
+- **Leading Dimensions**: For Fortran calls, `LDA` always refers to number of **rows**. For row-major C input, `LDA` refers to number of **columns** (wrapper must calculate Fortran LDA internally)
+- **Zero-Dimension Validation**: Wrapper validation must align with underlying Fortran routine behavior. Many SLICOT routines handle zero dimensions as valid quick-exit cases (`INFO=0`). Don't flag as C-level errors if Fortran accepts them
+- **NULL Pointer Handling**: For zero-sized arrays, `NULL` pointers are often acceptable if Fortran routine doesn't reference the array. Check SLICOT documentation for specific behavior
 - Use `SLICOT_EXPORT` macros for Windows DLL compatibility
+- Use `CHECK_ALLOC` macro after `malloc` and implement `goto cleanup` for error handling
 
 ### Test Structure
 - Each C wrapper has corresponding `*_test.cpp` file
-- Tests use GoogleTest framework
-- Test data often loaded from CSV files in `tests/data/`
-- Reference results compared against known outputs from HTML documentation
+- Tests use GoogleTest framework with `ColMajor` and `RowMajor` fixtures
+- **Test Data Sources**: For small datasets (~10 samples), embed data directly in test fixture. For larger datasets, create CSV file in `tests/data/` and use `load_test_data_from_csv` utility
+- **CSV Data Loading**: Use correct function signature:
+  ```cpp
+  bool load_test_data_from_csv(
+      const std::string& filepath,
+      const std::vector<std::string>& input_cols,
+      const std::vector<std::string>& output_cols,
+      std::vector<double>& u,
+      std::vector<double>& y,
+      int& num_samples);
+  ```
+- **Numerical Tolerance**: Use realistic tolerances for `EXPECT_NEAR`. Start with `1e-3` but adjust to `5e-3` or higher if algorithm shows natural numerical variations. Trust computed results over documentation if consistently different
+- **Zero-Dimension Testing**: Include specific test cases for zero-dimension inputs (e.g., `N=0`, `M=0`, `NSMP=0`) to verify wrapper validation aligns with Fortran behavior
+- Reference results compared against known outputs from HTML documentation and verified against independent simulations when possible
 
 ## Development Workflow
 
 ### Adding New Functionality
-1. Fortran routines go in `src/` following SLICOT naming conventions
-2. C wrapper goes in `src_c_wrapper/` with corresponding header in `include/`
-3. Add sources to `cmake/slicot_sources.cmake`
-4. Create unit test in `tests/` with test data
-5. Update build files if needed
+1. **Analyze Documentation**: Review HTML docs, Fortran examples (`examples/*.f`, `*.dat`, `*.res`), and SLICOT standards (`rep96-1.pdf`) for parameter constraints, workspace formulas, and zero-dimension behavior
+2. **Parameter Validation Design**: Ensure C wrapper validation aligns with (and is not stricter than) underlying Fortran routine behavior, especially for edge cases like `N=0`
+3. Fortran routines go in `src/` following SLICOT naming conventions
+4. C wrapper goes in `src_c_wrapper/` with corresponding header in `include/` (use lowercase filenames)
+5. Add sources to `cmake/slicot_sources.cmake`
+6. Create unit test in `tests/` with test data, including zero-dimension test cases
+7. Update build files if needed
 
 ### Running Single Test
 ```bash
@@ -126,6 +143,54 @@ cmake --build --preset macos-x64-debug-build
 - `include/slicot_f77.h` - Fortran interop definitions
 - `include/slicot_utils.h` - Common C wrapper utilities
 - `tests/test_utils.h` - Test helper functions
+
+## Helper Functions Reference
+
+### Matrix Transpose Functions (slicot_utils.h)
+```c
+// Convert from C row-major to Fortran column-major (for Fortran calls)
+void slicot_transpose_to_fortran_with_ld(const void *src, void *dest, int rows, int cols,
+                                        int ld_src, int ld_dest, size_t elem_size);
+
+// Convert from Fortran column-major to C row-major (after Fortran calls)  
+void slicot_transpose_to_c_with_ld(const void *src, void *dest, int rows, int cols,
+                                  int ld_src, int ld_dest, size_t elem_size);
+
+// Basic transpose functions (compatible default leading dimensions)
+void slicot_transpose_to_fortran(const void *src, void *dest, int rows, int cols, size_t elem_size);
+void slicot_transpose_to_c(const void *src, void *dest, int rows, int cols, size_t elem_size);
+```
+
+### Test Data Loading (test_utils.h)
+```cpp
+// CSV data loading function - use exact signature
+bool load_test_data_from_csv(
+    const std::string& filepath,
+    const std::vector<std::string>& input_cols,
+    const std::vector<std::string>& output_cols,
+    std::vector<double>& u,
+    std::vector<double>& y,
+    int& num_samples);
+```
+
+### Essential Macros (slicot_utils.h)
+```c
+#define CHECK_ALLOC(ptr) /* Memory allocation checking - use after malloc */
+#define SLICOT_MEMORY_ERROR -1010 /* Error code for allocation failures */
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define SLICOT_EXPORT /* Platform-specific DLL export/import handling */
+```
+
+### **CRITICAL**: Function Name Corrections
+**DO NOT USE these function names (they do not exist):**
+- `slicot_transpose_from_fortran_with_ld()` ❌
+- `load_csv_data()` or `load_test_csv()` ❌
+
+**ALWAYS USE these correct function names:**
+- `slicot_transpose_to_fortran_with_ld()` ✅ (C row-major → Fortran column-major)
+- `slicot_transpose_to_c_with_ld()` ✅ (Fortran column-major → C row-major)
+- `load_test_data_from_csv()` ✅
 
 ## Known Limitations
 - Some test cases have known failures documented in `tests/Known_Issues.txt`
