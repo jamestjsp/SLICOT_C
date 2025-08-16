@@ -204,6 +204,85 @@ bool load_test_data_from_csv(
 - `slicot_transpose_to_c_with_ld()` ✅ (Fortran column-major → C row-major)
 - `load_test_data_from_csv()` ✅
 
+## SLICOT Data Storage Formats (from rep96-1.pdf)
+
+Understanding SLICOT's data storage conventions is crucial for proper implementation and testing. This section summarizes the key data structure standards from the official SLICOT implementation standards document.
+
+### Matrix Storage Schemes
+
+SLICOT supports multiple matrix storage schemes compatible with LAPACK and BLAS:
+
+#### 1. Conventional Storage
+- **General matrices**: Stored in 2D arrays with column-major ordering (Fortran standard)
+- **Leading dimensions**: `LDA` parameter specifies the number of rows allocated in memory
+- **Submatrices**: Can be accessed by adjusting array pointers and leading dimensions
+- **Example**: For m×n matrix A with leading dimension LDA, element A(i,j) is at A[i-1 + (j-1)*LDA] in C indexing
+
+#### 2. Triangular and Symmetric Matrices
+- **Upper/Lower triangular**: Only relevant triangle is stored and accessed
+- **Symmetric/Hermitian**: Only upper or lower triangle stored (specified by UPLO parameter)
+- **Unit triangular**: Diagonal elements assumed to be 1.0 and not stored
+- **Unused elements**: Array elements outside the relevant triangle need not be set
+
+#### 3. Packed Storage
+- **Purpose**: Memory-efficient storage for symmetric, Hermitian, or triangular matrices
+- **Organization**: Relevant triangle packed by columns into 1D array
+- **Array naming**: Arrays with packed storage have names ending in 'P'
+- **Indexing formulas**:
+  - Upper triangle (UPLO='U'): `aij` stored in `AP[i + j(j-1)/2]` for i ≤ j
+  - Lower triangle (UPLO='L'): `aij` stored in `AP[i + (2n-j)(j-1)/2]` for i ≥ j
+
+#### 4. Band Storage
+- **General band matrices**: Matrix with kl subdiagonals and ku superdiagonals
+- **Storage scheme**: Stored in 2D array with (kl+ku+1) rows and n columns
+- **Array naming**: Arrays with band storage have names ending in 'B'
+- **Element access**: `aij` stored in `AB[ku+1+i-j][j]` for valid i,j ranges
+- **Symmetric/Hermitian bands**: Only upper or lower triangle stored with kd diagonals
+
+#### 5. Special Formats
+- **Tridiagonal matrices**: Stored in 3 separate 1D arrays (diagonal, super-diagonal, sub-diagonal)
+- **Bidiagonal matrices**: Stored in 2 separate 1D arrays (diagonal, off-diagonal)
+- **Householder reflectors**: Special representation for orthogonal/unitary matrices as products of elementary reflectors
+
+### Vector Storage
+- **Standard**: 1D Fortran arrays with natural indexing
+- **Element access**: Vector element vi stored in V[i-1] for C (V(i) for Fortran)
+
+### Polynomial Storage
+
+SLICOT supports polynomial data structures of increasing complexity:
+
+#### Scalar Polynomials
+- **Storage**: 1D array P(M) where P(i+1) contains coefficient of z^i
+- **Degree**: Polynomial of degree n requires M ≥ n+1 array size
+
+#### Vector Polynomials  
+- **Storage**: 2D array P(K,M) for k-length coefficient vectors
+- **Organization**: Columns represent polynomial coefficients, rows represent vector components
+- **Optional degree array**: DEGP(K) can specify individual polynomial degrees per component
+
+#### Matrix Polynomials
+- **Storage**: 3D array P(K,L,M) for k×l coefficient matrices  
+- **Organization**: First two indices for matrix elements, third index for polynomial coefficients
+- **Optional degree array**: DEGP(K,L) can specify individual polynomial degrees per matrix element
+
+### Key Implementation Considerations
+
+1. **Fortran Compatibility**: All storage schemes maintain compatibility with Fortran column-major ordering
+2. **Leading Dimensions**: Always pass leading dimensions explicitly for proper memory access
+3. **Zero-Size Handling**: Many routines accept zero dimensions as valid edge cases
+4. **Memory Alignment**: Consider memory layout when implementing C wrappers with row-major interfaces
+5. **Documentation Reference**: Elements marked '*' in examples need not be set and are not referenced
+
+### Array Dimension Guidelines
+
+- **2D Arrays**: Always specify leading dimension parameter (LD<array-name>)
+- **3D Arrays**: Specify both leading dimensions (LD<array-name>1, LD<array-name>2)  
+- **Assumed-size**: Use '*' for last dimension when size varies or can be zero
+- **Maximum dimensions**: Arrays with more than 3 dimensions not permitted
+
+This standardized approach ensures consistency across all SLICOT routines and maintains compatibility with the broader numerical linear algebra ecosystem (LAPACK, BLAS).
+
 ## Known Limitations
 - Some test cases have known failures documented in `tests/Known_Issues.txt`
 - ILP64 support is experimental
