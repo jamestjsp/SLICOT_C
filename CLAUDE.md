@@ -18,14 +18,10 @@ SLICOT (Subroutine Library In COntrol Theory) is a numerical library for control
 # Configure using preset (choose appropriate for your platform)
 cmake --preset macos-x64-debug     # For macOS Debug
 cmake --preset macos-x64-release   # For macOS Release
-cmake --preset linux-x64-debug     # For Linux Debug  
+cmake --preset linux-x64-debug     # For Linux Debug
 cmake --preset linux-x64-release   # For Linux Release
 cmake --preset windows-x64-debug-intel   # For Windows Debug (Intel)
 cmake --preset windows-x64-debug-mingw   # For Windows Debug (MinGW)
-
-# ILP64 (64-bit integer) builds
-cmake --preset linux-x64-debug-ilp64     # For Linux Debug ILP64
-cmake --preset windows-x64-debug-intel-ilp64  # For Windows Intel ILP64
 
 # Build
 cmake --build --preset macos-x64-debug-build
@@ -51,7 +47,10 @@ nmake -f makefile
 - `SLICOT_BUILD_TESTS=ON/OFF` - Build GoogleTest test suite (default: ON)
 - `SLICOT_BUILD_C_WRAPPERS=ON/OFF` - Build C wrapper layer (default: ON)
 - `SLICOT_BUILD_SHARED_LIBS=ON/OFF` - Build shared libraries (default: ON)
-- `SLICOT_USE_ILP64=ON/OFF` - Use 64-bit integers (default: OFF)
+
+**Note on Integer Size**: SLICOT C wrappers use standard 32-bit integers (C `int`), supporting matrix dimensions up to 2³¹-1 (approximately 2.1 billion). This exceeds all practical control theory applications, where state dimensions rarely exceed 100,000. Memory and computational constraints make larger problems infeasible (e.g., a 2.1B×2.1B matrix requires 32 petabytes of RAM).
+
+**Note on BLAS/LAPACK Threading**: The build system configures Intel MKL to use sequential (single-threaded) mode by default. This prevents thread contention and ensures predictable performance. SLICOT computations are single-threaded, so threaded BLAS provides no benefit and can cause overhead.
 
 ## Architecture
 
@@ -108,7 +107,6 @@ C wrappers follow consistent patterns:
 ### Modern CMake Preset-Based Build System
 - **Platform-specific compiler flags** are configured via CMake presets in `CMakePresets.json`
 - **No manual compiler detection** needed - choose appropriate preset for your platform/compiler
-- **ILP64 support** available through dedicated preset variants (e.g., `*-ilp64` presets)
 - **Consistent build environments** across different platforms and CI systems
 
 ### Adding New Functionality
@@ -285,5 +283,4 @@ This standardized approach ensures consistency across all SLICOT routines and ma
 
 ## Known Limitations
 - Some test cases have known failures documented in `tests/Known_Issues.txt`
-- ILP64 support is experimental
 - Windows shared library builds require careful symbol export handling

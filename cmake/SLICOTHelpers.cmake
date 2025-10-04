@@ -34,7 +34,6 @@ function(slicot_print_build_summary)
     message(STATUS "  Build C Wrappers: ${SLICOT_BUILD_C_WRAPPERS}")
     message(STATUS "  Build Shared Libraries: ${SLICOT_BUILD_SHARED_LIBS}")
     message(STATUS "  Link Aux Wrappers: ${SLICOT_LINK_AUX_WRAPPERS}")
-    message(STATUS "  Use ILP64: ${SLICOT_USE_ILP64}")
     message(STATUS "  Use vcpkg: ${SLICOT_USE_VCPKG}")
     
     if(DEFINED BLA_VENDOR)

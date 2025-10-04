@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.15)
 # ---
 # NOTE: The SLICOT C wrapper generator always places Fortran CHARACTER string length arguments at the end of the argument list.
 # This is portable for all compilers except Intel Fortran (ifort/ifx), which by default passes string lengths immediately after each string.
-# The CMake configuration below sets the Intel Fortran flag -assume noestring_param_xlate to ensure string lengths are passed at the end,
+# The CMake configuration below sets the Intel Fortran flag -assume nomixed_str_len_arg to ensure string lengths are passed at the end,
 # making the wrappers portable across compilers. Do not change this unless you know what you are doing.
 # ---
 
@@ -15,7 +15,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(SLICOT_BUILD_SHARED_LIBS "Build shared libraries" ON) # Default to shared for DLLs
 option(SLICOT_BUILD_EXAMPLES "Build the SLICOT example programs and tests" OFF)
 option(SLICOT_BUILD_TESTS "Build the SLICOT C wrapper tests using GoogleTest" ON) # Default to ON
-option(SLICOT_USE_ILP64 "Build with 64-bit integers (ILP64)" OFF) # Add ILP64 option
 option(SLICOT_LINK_AUX_WRAPPERS "Link auxiliary LAPACK wrappers (for incomplete LAPACK)" ON) # Add option for aux wrappers
 option(SLICOT_USE_VCPKG "Use vcpkg for BLAS and LAPACK dependencies" OFF) # Option to use vcpkg
 option(SLICOT_BUILD_C_WRAPPERS "Build C wrapper library for SLICOT" ON) # Option to build C wrappers
@@ -35,11 +34,6 @@ if(SLICOT_BUILD_SHARED_LIBS)
     set(BUILD_SHARED_LIBS ON)
 else()
     set(BUILD_SHARED_LIBS OFF)
-endif()
-
-# ILP64 support is now handled through CMake presets
-if(SLICOT_USE_ILP64)
-  message(STATUS "ILP64 build requested - using preset-defined compiler flags.")
 endif()
 
 # Include standard modules
@@ -141,18 +135,36 @@ else()
     set(CMAKE_PREFIX_PATH "$ENV{MKLROOT}" ${CMAKE_PREFIX_PATH})
     message(STATUS "Found Intel MKL installation at: $ENV{MKLROOT}")
   endif()
-  
+
   # Force Apple Accelerate framework on macOS
   if(APPLE)
     message(STATUS "On macOS, using Apple's Accelerate framework")
     set(BLA_VENDOR "Apple")
   endif()
-  
+
   # Common locations for AMD AOCL
   if(DEFINED ENV{AOCL_ROOT})
     set(CMAKE_PREFIX_PATH "$ENV{AOCL_ROOT}" ${CMAKE_PREFIX_PATH})
     message(STATUS "Found AMD AOCL installation at: $ENV{AOCL_ROOT}")
   endif()
+endif()
+
+# Configure MKL to use LP64 interface with sequential threading
+# This prevents thread contention and ensures 32-bit integer compatibility
+if(BLA_VENDOR MATCHES "Intel")
+    # Set MKL environment variables for consistent behavior
+    set(ENV{MKL_INTERFACE_LAYER} "LP64")
+    set(ENV{MKL_THREADING_LAYER} "SEQUENTIAL")
+    message(STATUS "MKL configured: LP64 interface, SEQUENTIAL threading")
+endif()
+
+# Control BLAS/LAPACK library type to match SLICOT build type
+if(SLICOT_BUILD_SHARED_LIBS)
+    set(BLA_STATIC OFF)
+    message(STATUS "Searching for shared BLAS/LAPACK libraries")
+else()
+    set(BLA_STATIC ON)
+    message(STATUS "Searching for static BLAS/LAPACK libraries")
 endif()
 
 # Try to find BLAS and LAPACK if not already manually set
@@ -162,6 +174,22 @@ endif()
 
 if(NOT LAPACK_FOUND)
   find_package(LAPACK REQUIRED)
+endif()
+
+# Validate BLAS/LAPACK use 32-bit integers (LP64 interface)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.22")
+    if(DEFINED BLA_SIZEOF_INTEGER)
+        if(NOT BLA_SIZEOF_INTEGER EQUAL 4)
+            message(FATAL_ERROR
+                "BLAS/LAPACK use ${BLA_SIZEOF_INTEGER}-byte integers, but SLICOT requires "
+                "4-byte integers (LP64 interface). Please use LP64 BLAS/LAPACK libraries, "
+                "not ILP64 variants. For Intel MKL, use mkl_intel_lp64 not mkl_intel_ilp64.")
+        else()
+            message(STATUS "BLAS/LAPACK integer size validated: ${BLA_SIZEOF_INTEGER} bytes (LP64)")
+        endif()
+    else()
+        message(STATUS "BLAS/LAPACK integer size check not available (CMake < 3.22 or vendor doesn't report)")
+    endif()
 endif()
 
 # Store the found libraries/targets for linking.
