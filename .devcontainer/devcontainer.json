@@ -1,0 +1,108 @@
+{
+  "name": "SLICOT C Wrapper Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // Features to add to the dev container
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true,
+      "username": "vscode",
+      "uid": "automatic",
+      "gid": "automatic"
+    }
+  },
+
+  // Configure VS Code settings
+  "customizations": {
+    "vscode": {
+      // Extensions to install
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cmake-tools",
+        "fortran-lang.linter-gfortran",
+        "ekibun.fortranbreaker",
+        "eamodio.gitlens",
+        "ms-vscode.makefile-tools",
+        "streetsidesoftware.code-spell-checker",
+        "usernamehw.errorlens",
+        "gruntfuggly.todo-tree",
+        "Anthropic.claude-code"
+      ],
+
+      // Workspace settings
+      "settings": {
+        "cmake.configureOnOpen": false,
+        "cmake.buildDirectory": "${workspaceFolder}/build/${buildKitPreset}",
+        "cmake.generator": "Ninja",
+        "cmake.configureSettings": {
+          "SLICOT_BUILD_TESTS": "ON",
+          "SLICOT_BUILD_C_WRAPPERS": "ON",
+          "SLICOT_BUILD_EXAMPLES": "OFF",
+          "SLICOT_BUILD_SHARED_LIBS": "ON"
+        },
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+        "files.associations": {
+          "*.f": "fortran",
+          "*.f77": "fortran",
+          "*.f90": "fortran",
+          "*.for": "fortran"
+        },
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+        "editor.formatOnSave": false,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  // Container user
+  "remoteUser": "vscode",
+
+  // Environment variables
+  "containerEnv": {
+    "CMAKE_GENERATOR": "Ninja",
+    "DEBIAN_FRONTEND": "noninteractive"
+  },
+
+  // Post-create command to initialize the environment
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+
+  // Forward ports if needed (none required for this project)
+  "forwardPorts": [],
+
+  // Mount the workspace folder
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+
+  // Run arguments for the container
+  "runArgs": [
+    "--cap-add=SYS_PTRACE",
+    "--security-opt",
+    "seccomp=unconfined"
+  ],
+
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  // "remoteUser": "root",
+
+  // Lifecycle scripts
+  "onCreateCommand": "echo 'Container created successfully'",
+  "updateContentCommand": "echo 'Content updated'",
+
+  // Mounts for better performance
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-build,target=/workspaces/${localWorkspaceFolderBasename}/build,type=volume",
+    "source=${localWorkspaceFolderBasename}-install,target=/workspaces/${localWorkspaceFolderBasename}/install,type=volume"
+  ]
+}
