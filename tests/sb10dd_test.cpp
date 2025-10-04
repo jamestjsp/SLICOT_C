@@ -118,12 +118,23 @@ protected:
             LDX = std::max(1,N); LDZ = std::max(1,N);
         }
 
-        AK_out.resize((size_t)LDAK * N);
-        BK_out.resize((size_t)LDBK * NMEAS);
-        CK_out.resize((size_t)LDCK * N);
-        DK_out.resize((size_t)LDDK * NMEAS);
-        X_out.resize((size_t)LDX * N);
-        Z_out.resize((size_t)LDZ * N);
+        // For row-major: allocate rows * LD (where LD is the row stride/num columns)
+        // For column-major: allocate LD * cols (where LD is the column length/num rows)
+        if (row_major_c_storage) {
+            AK_out.resize((size_t)N * LDAK);        // N rows x N cols
+            BK_out.resize((size_t)N * LDBK);        // N rows x NMEAS cols
+            CK_out.resize((size_t)NCON * LDCK);     // NCON rows x N cols
+            DK_out.resize((size_t)NCON * LDDK);     // NCON rows x NMEAS cols
+            X_out.resize((size_t)N * LDX);          // N rows x N cols
+            Z_out.resize((size_t)N * LDZ);          // N rows x N cols
+        } else {
+            AK_out.resize((size_t)LDAK * N);
+            BK_out.resize((size_t)LDBK * NMEAS);
+            CK_out.resize((size_t)LDCK * N);
+            DK_out.resize((size_t)LDDK * NMEAS);
+            X_out.resize((size_t)LDX * N);
+            Z_out.resize((size_t)LDZ * N);
+        }
         RCOND_out.resize(8);
     }
 };

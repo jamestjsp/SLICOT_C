@@ -279,21 +279,13 @@
 
      /* --- Copy results back to row-major format if needed --- */
      if (row_major && info == 0) {
-         // Recalculate sizes needed for copy-back
-         size_t ak_rows = n; size_t ak_cols = n; size_t ak_size = ak_rows * ak_cols;
-         size_t bk_rows = n; size_t bk_cols = nmeas; size_t bk_size = bk_rows * bk_cols;
-         size_t ck_rows = ncon; size_t ck_cols = n; size_t ck_size = ck_rows * ck_cols;
-         size_t dk_rows = ncon; size_t dk_cols = nmeas; size_t dk_size = dk_rows * dk_cols;
-         size_t x_rows = n; size_t x_cols = n; size_t x_size = x_rows * x_cols;
-         size_t z_rows = n; size_t z_cols = n; size_t z_size = z_rows * z_cols;
-
-
-         if (ak_size > 0) slicot_transpose_to_c(ak_cm, ak, ak_rows, ak_cols, elem_size);
-         if (bk_size > 0) slicot_transpose_to_c(bk_cm, bk, bk_rows, bk_cols, elem_size);
-         if (ck_size > 0) slicot_transpose_to_c(ck_cm, ck, ck_rows, ck_cols, elem_size);
-         if (dk_size > 0) slicot_transpose_to_c(dk_cm, dk, dk_rows, dk_cols, elem_size);
-         if (x_size > 0) slicot_transpose_symmetric_to_c(x_cm, x, x_rows, 'U', elem_size); // X is symmetric
-         if (z_size > 0) slicot_transpose_symmetric_to_c(z_cm, z, z_rows, 'U', elem_size); // Z is symmetric
+         // Copy back results using same size calculations as allocation
+         if (ak_cm != NULL && ak != NULL) slicot_transpose_to_c(ak_cm, ak, n, n, elem_size);
+         if (bk_cm != NULL && bk != NULL) slicot_transpose_to_c(bk_cm, bk, n, nmeas, elem_size);
+         if (ck_cm != NULL && ck != NULL) slicot_transpose_to_c(ck_cm, ck, ncon, n, elem_size);
+         if (dk_cm != NULL && dk != NULL) slicot_transpose_to_c(dk_cm, dk, ncon, nmeas, elem_size);
+         if (x_cm != NULL && x != NULL) slicot_transpose_symmetric_to_c(x_cm, x, n, 'U', elem_size); // X is symmetric
+         if (z_cm != NULL && z != NULL) slicot_transpose_symmetric_to_c(z_cm, z, n, 'U', elem_size); // Z is symmetric
          // RCOND modified directly
      }
      // In column-major case, output arrays modified in place.

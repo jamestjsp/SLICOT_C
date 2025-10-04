@@ -132,7 +132,7 @@ int slicot_tb04ad(const char* rowcol_in, int n_c, int m_c, int p_c,
     double* a_f_ptr = a_c; // Default to C pointer
     double* b_f_ptr = b_c;
     double* c_f_ptr = c_c;
-    double* d_f_ptr = (double*)d_c_in; // Fortran D is not const if ROWCOL='C'
+    double* d_f_ptr = NULL; // Will be set based on row_major_flag
 
     // Fortran buffer element counts (rows_f * cols_f)
     // These are the total elements Fortran might access in its view of the array
@@ -195,10 +195,12 @@ int slicot_tb04ad(const char* rowcol_in, int n_c, int m_c, int p_c,
         }
 
     } else { // Column Major C
+        // D matrix needs special handling for ROWCOL='C' (workspace)
         if (rowcol_f == 'C' && d_f_buf_elems > 0) {
+            // Always allocate workspace for D when ROWCOL='C'
             d_cm = (double*)malloc(d_f_buf_elems * sizeof(double)); CHECK_ALLOC(d_cm);
             memset(d_cm, 0, d_f_buf_elems * sizeof(double));
-            if (d_c_in != NULL && p_c > 0 && m_c > 0) { 
+            if (d_c_in != NULL && p_c > 0 && m_c > 0) {
                 for (int col_j = 0; col_j < m_c; ++col_j) {
                     for (int row_i = 0; row_i < p_c; ++row_i) {
                         d_cm[row_i + col_j * ldd_f_expected] = d_c_in[row_i + col_j * ldd_c];
@@ -206,17 +208,24 @@ int slicot_tb04ad(const char* rowcol_in, int n_c, int m_c, int p_c,
                 }
             }
             d_f_ptr = d_cm;
-        } else if (d_f_buf_elems > 0 && d_c_in != NULL){ 
-             d_cm = (double*)malloc(d_f_buf_elems * sizeof(double)); CHECK_ALLOC(d_cm);
-             if (p_c > 0 && m_c > 0) { 
-                for(int j=0; j<m_c; ++j) { 
-                    for(int i=0; i<p_c; ++i) {
-                        d_cm[i + j*ldd_f_expected] = d_c_in[i + j*ldd_c];
+        } else if (rowcol_f == 'R' && d_f_buf_elems > 0 && d_c_in != NULL) {
+            // For ROWCOL='R', D can be used in-place or copied if LD mismatch
+            if (ldd_c == ldd_f_expected || (p_c == 0 || m_c == 0)) {
+                // Can use in-place (cast away const as Fortran doesn't modify for 'R')
+                d_f_ptr = (double*)d_c_in;
+            } else {
+                // Need to copy due to LD mismatch
+                d_cm = (double*)malloc(d_f_buf_elems * sizeof(double)); CHECK_ALLOC(d_cm);
+                if (p_c > 0 && m_c > 0) {
+                    for(int j=0; j<m_c; ++j) {
+                        for(int i=0; i<p_c; ++i) {
+                            d_cm[i + j*ldd_f_expected] = d_c_in[i + j*ldd_c];
+                        }
                     }
                 }
-             }
-             d_f_ptr = d_cm;
-        } else { 
+                d_f_ptr = d_cm;
+            }
+        } else {
             d_f_ptr = NULL;
         }
         // Ensure NULL is passed if logical size is 0 and input pointer is NULL
@@ -233,6 +242,13 @@ int slicot_tb04ad(const char* rowcol_in, int n_c, int m_c, int p_c,
     int* index_f_pass = (porm_f > 0 ? index_out : NULL);
     double* dcoeff_f_pass = (porm_f > 0 ? dcoeff_out : NULL);
     double* ucoeff_f_pass = (porm_f > 0 && porp_f > 0 ? ucoeff_out : NULL);
+
+    // Handle edge case: all dimensions zero
+    if (n_c == 0 && m_c == 0 && p_c == 0) {
+        if (nr_out != NULL) *nr_out = 0;
+        info = 0;
+        goto cleanup;
+    }
 
     // 7. Call Fortran function
     F77_FUNC(tb04ad, TB04AD)(&rowcol_f, &n_c, &m_c, &p_c,

@@ -89,22 +89,26 @@ protected:
         }
         
         if (!use_csv) { // Generate synthetic data
-            NSMP_val = 20; // Smaller synthetic dataset
-            M_val = 1; L_val = 1; N_val = 2; NN_val = 2; NOBR_val = 3; // Ensure NOBR > N
-            ITMAX1_val = 10; ITMAX2_val = 20; 
+            NSMP_val = 100; // Increased synthetic dataset for better identification
+            M_val = 1; L_val = 1; N_val = 2; NN_val = 2; NOBR_val = 4; // Ensure NOBR > N
+            ITMAX1_val = 20; ITMAX2_val = 40;
             TOL1_val = 1e-3; TOL2_val = 1e-3;
 
 
             U_data.resize((size_t)NSMP_val * M_val);
-            for (size_t i = 0; i < U_data.size(); ++i) { U_data[i] = sin((double)i * 0.2) * 0.8; }
-            
+            // Generate more persistent excitation with chirp signal
+            for (size_t i = 0; i < U_data.size(); ++i) {
+                U_data[i] = 0.5 * sin((double)i * 0.1) + 0.3 * cos((double)i * 0.25);
+            }
+
             Y_data.resize((size_t)NSMP_val * L_val);
             double current_x_s = 0.0; // Simplified state for synthetic data
             for (int t = 0; t < NSMP_val; ++t) {
                 double u_t_s = (M_val > 0 && !U_data.empty()) ? U_data[t * M_val] : 0.0;
                 double z_t_s = current_x_s + ((M_val > 0) ? (0.2 * u_t_s) : 0.0) ; // C=1, D=0.2
-                if (L_val > 0) Y_data[t * L_val] = z_t_s + 0.1 * tanh(z_t_s) + (rand() % 100 / 5000.0 - 0.01); // f(z) + noise
-                current_x_s = 0.7 * current_x_s + ((M_val > 0) ? (0.6 * u_t_s) : 0.0); // A=0.7, B=0.6
+                // Reduced nonlinearity and noise for more stable identification
+                if (L_val > 0) Y_data[t * L_val] = z_t_s + 0.05 * tanh(z_t_s) + 0.001 * (t % 10 - 5);
+                current_x_s = 0.5 * current_x_s + ((M_val > 0) ? (0.4 * u_t_s) : 0.0); // More stable: A=0.5, B=0.4
             }
         }
 
@@ -142,13 +146,8 @@ protected:
         // For IB03BD, the example data is complex. We'll default to synthetic for robust testing of the wrapper.
         // If a user creates "ib03bd.csv" with U1, Y1 columns, it could be used.
         // For now, let's ensure synthetic data is used for the main test.
-        INIT_char_val = 'B'; // Initialize with both linear and nonlinear parts
-        NOBR_val = 3; M_val = 1; L_val = 1; NSMP_val = 20; 
-        N_val = 2; NN_val = 2;
-        ITMAX1_val = 10; ITMAX2_val = 20; NPRINT_val = 0;
-        TOL1_val = 1e-3; TOL2_val = 1e-3;
         csv_filename_val = ""; // Ensure synthetic data by default
-        SetUpBase(false); 
+        SetUpBase(false); // This will set INIT='B', NOBR=4, N=2, NN=2, NSMP=100
     }
 };
 

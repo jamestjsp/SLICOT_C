@@ -277,7 +277,19 @@ int slicot_ib03ad(
                   MAX( MAX( l1_val + nx_calc, nsmp_ll*l_ll + l1_val), l2_val ) );
 
     ldwork_calc = (int)MAX(lw1, MAX(lw2_val, MAX(lw3, lw4)));
-    ldwork_calc = MAX(1, ldwork_calc); // Ensure at least 1, though formulas likely give > 1.
+
+    // Ensure minimum workspace when dimensions are zero
+    // Fortran routine requires minimum workspace even for edge cases
+    if (ldwork_calc < 1) {
+        if (init_upper == 'S' || init_upper == 'N') {
+            // For INIT='S' or 'N', minimum workspace depends on optimization parameters
+            ldwork_calc = MAX(30, nsmp_ll * l_ll + 2);
+        } else {
+            // For INIT='L' or 'B', minimum workspace for linear estimation
+            ldwork_calc = MAX(1, 2 * (m_ll + l_ll) * nobr_ll);
+        }
+    }
+    ldwork_calc = MAX(1, ldwork_calc);
 
     if (ldwork_calc > 0) {
         dwork_alloc = (double*)malloc((size_t)ldwork_calc * sizeof(double));

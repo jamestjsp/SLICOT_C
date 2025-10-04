@@ -167,7 +167,9 @@ protected:
         C_res_cm_test_buffer.resize( (size_t)p * n); 
         if (porm_val > 0) INDEX_res.resize(porm_val); else INDEX_res.clear(); 
         if (porm_val > 0 && kmax_coeffs_exp > 0) DCOEFF_res_flat.resize( (size_t)porm_val * kmax_coeffs_exp); else DCOEFF_res_flat.clear();
-        if (porm_val > 0 && porp_val > 0 && kmax_coeffs_exp > 0) UCOEFF_res_flat.resize( (size_t)porm_val * porp_val * kmax_coeffs_exp); else UCOEFF_res_flat.clear();
+        // UCOEFF must be dimensioned (porm, porp, N+1) per Fortran requirements, even though only kdcoef slices are used
+        int ucoeff_third_dim = n + 1;  // Fortran requires N+1, not just kdcoef
+        if (porm_val > 0 && porp_val > 0 && ucoeff_third_dim > 0) UCOEFF_res_flat.resize( (size_t)porm_val * porp_val * ucoeff_third_dim); else UCOEFF_res_flat.clear();
     }
 
     void copy_inputs_for_test(std::vector<double>& a_test, std::vector<double>& b_test,
@@ -216,15 +218,17 @@ TEST_F(Tb04adTest, DocExampleColMajor) {
     A_res_cm_test_buffer = A_in_cm;
     B_res_cm_test_buffer = B_in_cm;
     C_res_cm_test_buffer = C_in_cm;
-    std::vector<double> d_test_const = D_in_cm; 
-    
+    std::vector<double> d_test_const = D_in_cm;
+
     calculate_c_lds(false);
 
     int porm_val_setup = (rowcol == 'R' ? p : m);
     int porp_val_setup = (rowcol == 'R' ? m : p);
     if (porm_val_setup > 0) INDEX_res.resize(porm_val_setup); else INDEX_res.clear();
     if (porm_val_setup > 0 && kmax_coeffs_exp > 0) DCOEFF_res_flat.resize((size_t)porm_val_setup * kmax_coeffs_exp); else DCOEFF_res_flat.clear();
-    if (porm_val_setup > 0 && porp_val_setup > 0 && kmax_coeffs_exp > 0) UCOEFF_res_flat.resize((size_t)porm_val_setup * porp_val_setup * kmax_coeffs_exp); else UCOEFF_res_flat.clear();
+    // UCOEFF must be dimensioned (porm, porp, N+1) per Fortran requirements
+    int ucoeff_third_dim_setup = n + 1;
+    if (porm_val_setup > 0 && porp_val_setup > 0 && ucoeff_third_dim_setup > 0) UCOEFF_res_flat.resize((size_t)porm_val_setup * porp_val_setup * ucoeff_third_dim_setup); else UCOEFF_res_flat.clear();
 
 
     int info = slicot_tb04ad(&rowcol, n, m, p,
@@ -268,8 +272,9 @@ TEST_F(Tb04adTest, DocExampleColMajor) {
     }
 
 
-    if (!UCOEFF_exp_flat.empty()) { 
-        ASSERT_EQ(UCOEFF_res_flat.size(), UCOEFF_exp_flat.size());
+    if (!UCOEFF_exp_flat.empty()) {
+        // UCOEFF_res_flat is sized (porm, porp, N+1) but only (porm, porp, kdcoef) elements are meaningful
+        ASSERT_GE(UCOEFF_res_flat.size(), UCOEFF_exp_flat.size()) << "UCOEFF_res_flat too small";
         for (size_t i = 0; i < UCOEFF_exp_flat.size(); ++i) {
             EXPECT_NEAR(UCOEFF_res_flat[i], UCOEFF_exp_flat[i], check_tol) << "UCOEFF mismatch at index " << i;
         }
@@ -287,7 +292,9 @@ TEST_F(Tb04adTest, DocExampleRowMajor) {
     int porp_val_setup = (rowcol == 'R' ? m : p);
     if (porm_val_setup > 0) INDEX_res.resize(porm_val_setup); else INDEX_res.clear();
     if (porm_val_setup > 0 && kmax_coeffs_exp > 0) DCOEFF_res_flat.resize((size_t)porm_val_setup * kmax_coeffs_exp); else DCOEFF_res_flat.clear();
-    if (porm_val_setup > 0 && porp_val_setup > 0 && kmax_coeffs_exp > 0) UCOEFF_res_flat.resize((size_t)porm_val_setup * porp_val_setup * kmax_coeffs_exp); else UCOEFF_res_flat.clear();
+    // UCOEFF must be dimensioned (porm, porp, N+1) per Fortran requirements
+    int ucoeff_third_dim_setup = n + 1;
+    if (porm_val_setup > 0 && porp_val_setup > 0 && ucoeff_third_dim_setup > 0) UCOEFF_res_flat.resize((size_t)porm_val_setup * porp_val_setup * ucoeff_third_dim_setup); else UCOEFF_res_flat.clear();
 
 
     int info = slicot_tb04ad(&rowcol, n, m, p,
@@ -339,7 +346,8 @@ TEST_F(Tb04adTest, DocExampleRowMajor) {
     }
 
     if (!UCOEFF_exp_flat.empty()) {
-        ASSERT_EQ(UCOEFF_res_flat.size(), UCOEFF_exp_flat.size());
+        // UCOEFF_res_flat is sized (porm, porp, N+1) but only (porm, porp, kdcoef) elements are meaningful
+        ASSERT_GE(UCOEFF_res_flat.size(), UCOEFF_exp_flat.size()) << "UCOEFF_res_flat too small";
         for (size_t i = 0; i < UCOEFF_exp_flat.size(); ++i) {
             EXPECT_NEAR(UCOEFF_res_flat[i], UCOEFF_exp_flat[i], check_tol) << "UCOEFF mismatch at index " << i;
         }
@@ -418,7 +426,7 @@ TEST_F(Tb04adTest, ZeroDimensions) {
 TEST_F(Tb04adTest, AllZeroDimensions) {
     int n_az=0, m_az=0, p_az=0;
     char rc_az = 'R'; // porm=0, porp=0
-    int nr_az;
+    int nr_az = -999; // Initialize to detect if Fortran modifies it
     
     std::vector<int> dummy_idx_az(1); 
     std::vector<double> dummy_dcoeff_az(1);
