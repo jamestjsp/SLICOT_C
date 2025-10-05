@@ -124,7 +124,7 @@ set(SLICOT_C_WRAPPER_SOURCES
     ab13bd.c   ab13dd.c   ab13ed.c   ab13fd.c   ab13md.c   ag08bd.c
     mb02ed.c   mb03rd.c   mb03vd.c   mb03vy.c   mb03wd.c   mb05md.c
     mb05nd.c   mc01td.c   sb01bd.c   sb02md.c   sb02mt.c   sb02od.c
-    sb03md.c   sb03od.c   sb04md.c   sb04qd.c   sb10ad.c   sb10dd.c
+    sb03md.c   sb03od.c   sb04md.c   sb04nd.c   sb04qd.c   sb10ad.c   sb10dd.c
     sb10fd.c   sb10hd.c   sb10jd.c   sb10yd.c   sg02ad.c   sg03ad.c
     sg03bd.c   tb01id.c   tb01pd.c   tb03ad.c   tb04ad.c   tb05ad.c
     tc01od.c   tc04ad.c   td04ad.c   tf01md.c   tf01rd.c   tg01ad.c
