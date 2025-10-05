@@ -30,10 +30,6 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     liblapack-dev \
     libblas-dev \
-    # Python for scripts and utilities
-    python3 \
-    python3-pip \
-    python3-venv \
     # Utilities
     wget \
     curl \
@@ -60,6 +56,9 @@ RUN apt-get update && apt-get install -y \
     strace \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv CLI for Python tooling management
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 UV_INSTALL_DIR=/usr/local/bin sh
+
 # Set up compiler alternatives to use gcc-13/g++-13/gfortran-13 by default
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 \
     && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100 \
@@ -80,13 +79,6 @@ ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
 ENV CC=gcc
 ENV CXX=g++
 ENV FC=gfortran
-
-# Install Python packages (optional but useful for data analysis/visualization)
-RUN pip3 install --no-cache-dir --break-system-packages \
-    numpy \
-    scipy \
-    matplotlib \
-    pandas
 
 # Set the working directory
 WORKDIR /workspaces

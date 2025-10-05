@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tee:*)",
+      "Bash(echo:*)",
+      "Bash(do echo \"=== $file ===\" echo \"Header:\" grep -A 8 \"SLICOT_EXPORT\" /Users/josephj/Workspace/SLICOT_C/include/$file.h)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(do echo \"== $file ==\" grep -A 3 \"SLICOT_EXPORT\" include/$file.h)",
+      "Bash(awk:*)",
+      "Bash(xargs:*)",
+      "Bash(do echo \"=== Checking $file ===\" grep \"int slicot_$file\" /Users/josephj/Workspace/SLICOT_C/include/$file.h)",
+      "Bash(do echo \"=== Checking $file ===\")",
+      "Read(//private/tmp/**)",
+      "WebSearch",
+      "Bash(tree:*)",
+      "Bash(ctest:*)",
+      "Bash(cmake:*)",
+      "Bash(./tests/slicot_c_wrapper_tests:*)",
+      "Bash(/workspaces/SLICOT_C/build/linux-x64-debug/bin/slicot_c_wrapper_tests:*)",
+      "Bash(valgrind:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

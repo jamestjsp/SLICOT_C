@@ -29,6 +29,70 @@ git config --global --add safe.directory "$WORKSPACE_DIR"
 echo -e "${GREEN}Git safe directory configured.${NC}"
 echo ""
 
+# Ensure uv CLI is available
+echo -e "${YELLOW}Ensuring uv CLI is installed...${NC}"
+if ! command -v uv >/dev/null 2>&1; then
+    if curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --yes; then
+        echo -e "${GREEN}uv installed successfully.${NC}"
+    else
+        echo -e "${YELLOW}uv installation failed.${NC}"
+    fi
+else
+    echo -e "${GREEN}uv already installed.${NC}"
+fi
+
+# Make sure the local bin directory is on PATH for the current session and future shells
+if [ -d "$HOME/.local/bin" ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+    touch "$HOME/.bashrc"
+    if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+    fi
+fi
+echo ""
+
+# Initialize and sync uv project environment
+echo -e "${YELLOW}Syncing uv project environment...${NC}"
+if command -v uv >/dev/null 2>&1; then
+    if [ ! -f "pyproject.toml" ]; then
+        echo -e "${BLUE}pyproject.toml not found; initializing minimal uv project...${NC}"
+        uv init --bare --no-readme --no-pin-python --name slicot-c-tooling . || true
+    fi
+
+    if uv sync --frozen; then
+        echo -e "${GREEN}uv environment synchronized.${NC}"
+    else
+        echo -e "${YELLOW}uv sync failed; continuing without project environment.${NC}"
+    fi
+else
+    echo -e "${YELLOW}Skipping uv sync because uv is unavailable.${NC}"
+fi
+echo ""
+
+# Ensure the project virtual environment binaries are on PATH
+if [ -d ".venv/bin" ]; then
+    VENV_BIN_DIR="$(pwd)/.venv/bin"
+    export PATH="$VENV_BIN_DIR:$PATH"
+    touch "$HOME/.bashrc"
+    if ! grep -q "export PATH=\"$VENV_BIN_DIR:\$PATH\"" "$HOME/.bashrc"; then
+        echo "export PATH=\"$VENV_BIN_DIR:\$PATH\"" >> "$HOME/.bashrc"
+    fi
+fi
+echo ""
+
+# Verify fortls availability via uv-managed environment
+echo -e "${YELLOW}Verifying fortls language server...${NC}"
+if command -v uv >/dev/null 2>&1; then
+    if uv run -- fortls --version; then
+        echo -e "${GREEN}fortls is ready for use.${NC}"
+    else
+        echo -e "${YELLOW}fortls verification failed; ensure the uv environment is configured correctly.${NC}"
+    fi
+else
+    echo -e "${YELLOW}Skipping fortls verification because uv is unavailable.${NC}"
+fi
+echo ""
+
 # Install Claude Code CLI
 echo -e "${YELLOW}Installing Claude Code CLI...${NC}"
 if npm install -g @anthropic-ai/claude-code 2>/dev/null; then

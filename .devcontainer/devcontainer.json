@@ -29,16 +29,10 @@
       // Extensions to install
       "extensions": [
         "ms-vscode.cpptools",
-        "ms-vscode.cpptools-extension-pack",
         "ms-vscode.cmake-tools",
-        "fortran-lang.linter-gfortran",
-        "ekibun.fortranbreaker",
         "eamodio.gitlens",
-        "ms-vscode.makefile-tools",
-        "streetsidesoftware.code-spell-checker",
-        "usernamehw.errorlens",
-        "gruntfuggly.todo-tree",
-        "Anthropic.claude-code"
+        "Anthropic.claude-code",
+        "fortran-lang.linter-gfortran"
       ],
 
       // Workspace settings
