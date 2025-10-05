@@ -73,6 +73,8 @@ int slicot_ib03ad(
 
     int n_val = *n_ptr; // Dereference for local use and validation
     int lx_val = *lx_ptr;
+    const int original_n = n_val;
+    const int original_lx = lx_val;
 
 
     // 2. Input parameter validation
@@ -326,17 +328,39 @@ int slicot_ib03ad(
 
 
     // 7. Call Fortran function
-    F77_FUNC(ib03ad, IB03AD)(&init_upper, &alg_upper, &stor_upper,
-                             &nobr, &m, &l, &nsmp,
-                             n_ptr, /* Pass pointer for N */
-                             &nn, &itmax1, &itmax2, &nprint,
-                             u_f_ptr, &ldu_f,
-                             y_f_ptr, &ldy_f,
-                             x, lx_ptr, /* Pass pointer for LX */
-                             &tol1, &tol2,
-                             iwork_alloc, dwork_alloc, &ldwork_calc,
-                             &local_iwarn, &info,
-                             init_len, alg_len, stor_len);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        F77_FUNC(ib03ad, IB03AD)(&init_upper, &alg_upper, &stor_upper,
+                                 &nobr, &m, &l, &nsmp,
+                                 n_ptr, /* Pass pointer for N */
+                                 &nn, &itmax1, &itmax2, &nprint,
+                                 u_f_ptr, &ldu_f,
+                                 y_f_ptr, &ldy_f,
+                                 x, lx_ptr, /* Pass pointer for LX */
+                                 &tol1, &tol2,
+                                 iwork_alloc, dwork_alloc, &ldwork_calc,
+                                 &local_iwarn, &info,
+                                 init_len, alg_len, stor_len);
+
+        if (info != -23 || dwork_alloc == NULL) {
+            break;
+        }
+
+        double required_ldwork_raw = dwork_alloc[0];
+        int required_ldwork = (int)ceil(required_ldwork_raw);
+        if (!isfinite(required_ldwork_raw) || required_ldwork <= ldwork_calc || required_ldwork <= 0) {
+            required_ldwork = ldwork_calc + 64;
+        }
+
+        free(dwork_alloc);
+        ldwork_calc = required_ldwork;
+        dwork_alloc = (double*)malloc((size_t)ldwork_calc * sizeof(double));
+        CHECK_ALLOC(dwork_alloc);
+
+        info = 0;
+        local_iwarn = 0;
+        *n_ptr = original_n;
+        *lx_ptr = original_lx;
+    }
 
     if (iwarn_ptr != NULL) {
         *iwarn_ptr = local_iwarn;
