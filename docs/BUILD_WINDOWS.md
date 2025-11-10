@@ -62,8 +62,6 @@ cd C:\vcpkg
 # Bootstrap (install) vcpkg
 .\bootstrap-vcpkg.bat
 
-# Install required libraries
-.\vcpkg install openblas:x64-mingw-dynamic lapack:x64-mingw-dynamic
 ```
 
 **Set VCPKG_ROOT environment variable**:
