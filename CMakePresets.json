@@ -64,6 +64,7 @@
         "CMAKE_LINKER": "ld",
         "CMAKE_RC_COMPILER": "windres",
         "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "SLICOT_USE_VCPKG": "ON"
       },
       "condition": {
@@ -87,6 +88,7 @@
         "CMAKE_LINKER": "ld",
         "CMAKE_RC_COMPILER": "windres",
         "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "SLICOT_USE_VCPKG": "ON"
       },
       "condition": {

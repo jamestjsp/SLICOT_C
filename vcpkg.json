@@ -1,9 +1,4 @@
 {
-  "name": "slicot",
-  "version": "5.9",
-  "description": "Subroutine Library in Control Theory",
-  "homepage": "https://github.com/SLICOT/SLICOT-Reference",
-  "license": "GPL-2.0-or-later",
   "dependencies": [
     "blas",
     "lapack"

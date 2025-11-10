@@ -16,6 +16,8 @@ option(SLICOT_BUILD_SHARED_LIBS "Build shared libraries" ON) # Default to shared
 option(SLICOT_BUILD_EXAMPLES "Build the SLICOT example programs and tests" OFF)
 option(SLICOT_BUILD_TESTS "Build the SLICOT C wrapper tests using GoogleTest" ON) # Default to ON
 option(SLICOT_LINK_AUX_WRAPPERS "Link auxiliary LAPACK wrappers (for incomplete LAPACK)" ON) # Add option for aux wrappers
+# For vcpkg integration, use CMakePresets.json with CMAKE_TOOLCHAIN_FILE set to $env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
+# See: https://learn.microsoft.com/en-us/vcpkg/get_started/get-started
 option(SLICOT_USE_VCPKG "Use vcpkg for BLAS and LAPACK dependencies" OFF) # Option to use vcpkg
 option(SLICOT_BUILD_C_WRAPPERS "Build C wrapper library for SLICOT" ON) # Option to build C wrappers
 
@@ -68,13 +70,15 @@ message(STATUS "Searching for BLAS/LAPACK vendor: ${BLA_VENDOR}")
 # Configure paths for BLAS/LAPACK discovery
 if(SLICOT_USE_VCPKG)
   message(STATUS "Using vcpkg for BLAS/LAPACK dependencies")
-  # Provide hints to standard FindBLAS/FindLAPACK using vcpkg install path
-  if(DEFINED ENV{VCPKG_ROOT} AND IS_DIRECTORY "$ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}")
-      set(CMAKE_PREFIX_PATH "$ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}" ${CMAKE_PREFIX_PATH})
-      list(APPEND CMAKE_SYSTEM_PREFIX_PATH "$ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}")
-      message(STATUS "Adding vcpkg install prefix to CMAKE_PREFIX_PATH: $ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}")
+  # Check if vcpkg toolchain is already loaded (via CMakePresets.json or command line)
+  if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg.cmake")
+    message(STATUS "vcpkg toolchain file already configured: ${CMAKE_TOOLCHAIN_FILE}")
+  elseif(DEFINED ENV{VCPKG_ROOT})
+    # Set toolchain file if not already set
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "vcpkg toolchain file")
+    message(STATUS "Setting vcpkg toolchain file: ${CMAKE_TOOLCHAIN_FILE}")
   else()
-      message(WARNING "VCPKG_ROOT environment variable not defined or install directory not found. FindBLAS/LAPACK might fail.")
+    message(WARNING "VCPKG_ROOT environment variable not defined. Set CMAKE_TOOLCHAIN_FILE manually or use CMakePresets.json")
   endif()
 else()
   message(STATUS "Using system-installed or user-specified BLAS/LAPACK")
