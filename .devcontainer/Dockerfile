@@ -14,10 +14,15 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && apt-get install -y \
     # Essential build tools
     build-essential \
-    # Compilers (pinned to version 13 for consistency)
-    gcc-13 \
-    g++-13 \
-    gfortran-13 \
+    # LLVM/Clang/Flang compilers (version 20 - latest)
+    llvm-20 \
+    llvm-20-dev \
+    llvm-20-tools \
+    clang-20 \
+    flang-20 \
+    libflang-20-dev \
+    libc++-20-dev \
+    libc++abi-20-dev \
     # Build system tools
     cmake \
     ninja-build \
@@ -42,6 +47,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     # Debugging tools
     gdb \
+    lldb-20 \
     valgrind \
     # Documentation tools (optional)
     doxygen \
@@ -59,16 +65,21 @@ RUN apt-get update && apt-get install -y \
 # Install uv CLI for Python tooling management
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 UV_INSTALL_DIR=/usr/local/bin sh
 
-# Set up compiler alternatives to use gcc-13/g++-13/gfortran-13 by default
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 \
-    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100 \
-    && update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-13 100 \
-    && update-alternatives --install /usr/bin/gcov gcov /usr/bin/gcov-13 100
+# Set up compiler alternatives to use clang-20/clang++-20/flang-20 by default
+RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang-20 100 \
+    && update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-20 100 \
+    && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \
+    && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 100 \
+    && update-alternatives --install /usr/bin/flang flang /usr/bin/flang-20 100 \
+    && update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-20 100 \
+    && ln -sf /usr/bin/clang-20 /usr/bin/gcc \
+    && ln -sf /usr/bin/clang++-20 /usr/bin/g++ \
+    && ln -sf /usr/bin/flang-20 /usr/bin/gfortran
 
 # Verify compiler versions
-RUN gcc --version \
-    && g++ --version \
-    && gfortran --version \
+RUN clang --version \
+    && clang++ --version \
+    && flang --version \
     && cmake --version \
     && ninja --version
 
@@ -76,9 +87,9 @@ RUN gcc --version \
 # Set environment variables for the vscode user
 ARG USERNAME=vscode
 ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
-ENV CC=gcc
-ENV CXX=g++
-ENV FC=gfortran
+ENV CC=clang-20
+ENV CXX=clang++-20
+ENV FC=flang-20
 
 # Set the working directory
 WORKDIR /workspaces

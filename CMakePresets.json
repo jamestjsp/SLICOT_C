@@ -144,16 +144,16 @@
     {
       "name": "linux-x64-debug",
       "displayName": "Linux x64 Debug",
-      "description": "Configure for Linux with gcc/gfortran toolchain (Debug)",
+      "description": "Configure for Linux with clang-20/flang-20 toolchain (Debug)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/linux-x64-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/linux-x64-debug",
-        "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_Fortran_COMPILER": "gfortran",
-        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
+        "CMAKE_C_COMPILER": "clang-20",
+        "CMAKE_CXX_COMPILER": "clang++-20",
+        "CMAKE_Fortran_COMPILER": "flang-20",
+        "CMAKE_Fortran_FLAGS": "",
         "BLA_VENDOR": "Generic",
         "SLICOT_USE_VCPKG": "OFF"
       },
@@ -166,16 +166,16 @@
     {
       "name": "linux-x64-release",
       "displayName": "Linux x64 Release",
-      "description": "Configure for Linux with gcc/gfortran toolchain (Release)",
+      "description": "Configure for Linux with clang-20/flang-20 toolchain (Release)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/linux-x64-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/linux-x64-release",
-        "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_Fortran_COMPILER": "gfortran",
-        "CMAKE_Fortran_FLAGS": "-fallow-argument-mismatch -fno-second-underscore",
+        "CMAKE_C_COMPILER": "clang-20",
+        "CMAKE_CXX_COMPILER": "clang++-20",
+        "CMAKE_Fortran_COMPILER": "flang-20",
+        "CMAKE_Fortran_FLAGS": "",
         "BLA_VENDOR": "Generic",
         "SLICOT_USE_VCPKG": "OFF"
       },
